@@ -1,0 +1,30 @@
+# Nombre del flujo de trabajo
+name: Deploy to Firebase Hosting
+
+# Se ejecuta con cada push a la rama 'main'
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Descarga el código del repositorio
+      - uses: actions/checkout@v4
+
+      # 2. Instala dependencias y compila (SI ES NECESARIO)
+      # Si tu proyecto es solo HTML/CSS/JS simple en la carpeta 'public',
+      # puedes borrar todo el bloque '- name: ...' a continuación.
+      - name: Install dependencies and build
+        run: npm ci && npm run build
+
+      # 3. Despliega en Firebase
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          channelId: live
+          # ¡IMPORTANTE! Reemplaza esto con el ID de tu proyecto
+          projectId: premiertraslados-31ee2
