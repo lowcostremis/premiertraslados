@@ -1,89 +1,360 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
-
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.1.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.1.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.1.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.1.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.1.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.1.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.1.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.1.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.1.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.1.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
-
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
-    </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
-
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premier Traslados</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Estilos para el layout de dos columnas en los modales */
+        .edit-layout {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
         }
-      });
-    </script>
-  </body>
+        .form-column {
+            flex: 2;
+            min-width: 300px;
+        }
+        .map-column {
+            flex: 1;
+            min-width: 250px;
+        }
+        /* Estilos para los permisos */
+        #permisos-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #2c2c2c;
+            border-radius: 4px;
+        }
+        #permisos-container label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Premier Traslados</h1>
+
+        <div id="auth-section">
+            <h2>Acceso al Sistema</h2>
+            <input type="email" id="email" placeholder="Correo electrónico" required>
+            <input type="password" id="password" placeholder="Contraseña" required>
+            <button id="login-btn" type="button">Iniciar Sesión</button>
+            <p>¿No tienes cuenta? <a href="#" id="show-register-link">Regístrate aquí</a></p>
+            <form id="register-form" style="display:none;">
+                <hr>
+                <h3>Crear cuenta nueva</h3>
+                <input type="email" id="register-email" placeholder="Tu correo electrónico" required>
+                <input type="password" id="register-password" placeholder="Contraseña (mínimo 6 caracteres)" required>
+                <button type="submit">Registrar</button>
+                <p id="register-message" class="message"></p>
+            </form>
+        </div>
+
+        <div id="app-content" style="display:none;">
+            <div class="header">
+                <p>Usuario: <b id="user-email-display"></b></p>
+                <button id="logout-btn">Cerrar Sesión</button>
+            </div>
+
+            <div class="tab-buttons">
+                <button class="tab-link" id="btn-reservas" onclick="openTab(event, 'reservas')">Reservas</button>
+                <button class="tab-link" id="btn-mapa" onclick="openTab(event, 'mapa')">Mapa</button>
+                <button class="tab-link" id="btn-clientes" onclick="openTab(event, 'clientes')">Clientes</button>
+                <button class="tab-link" id="btn-pasajeros" onclick="openTab(event, 'pasajeros')">Pasajeros</button>
+                <button class="tab-link" id="btn-moviles" onclick="openTab(event, 'moviles')">Móviles</button>
+                <button class="tab-link" id="btn-choferes" onclick="openTab(event, 'choferes')">Choferes</button>
+                <button class="tab-link" id="btn-sucursales" onclick="openTab(event, 'sucursales')">Sucursales</button>
+                <button class="tab-link" id="btn-zonas" onclick="openTab(event, 'zonas')">Zonas</button>
+                <button class="tab-link" id="btn-usuarios" onclick="openTab(event, 'usuarios')">Usuarios</button>
+            </div>
+
+            <div id="reservas" class="tab-content">
+                <h2>Gestión de Reservas</h2>
+                <button id="btn-nueva-reserva" class="btn-success">+ Nueva Reserva</button>
+                
+                <div class="reservas-nav">
+                    <button class="sub-tab-btn active" data-tab="reservas-para-asignar" onclick="mostrarReservas('reservas-para-asignar')">Para Asignar (-24hs)</button>
+                    <button class="sub-tab-btn" data-tab="pendientes" onclick="mostrarReservas('pendientes')">Pendientes (+24hs)</button>
+                    <button class="sub-tab-btn" data-tab="asignados" onclick="mostrarReservas('asignados')">Asignados</button>
+                    <button class="sub-tab-btn" data-tab="historicas" onclick="mostrarReservas('historicas')">Historial</button>
+                </div>
+
+                <div id="reservasParaAsignarContainer" class="reservas-container">
+                    <h3>Reservas para Asignar (-24hs)</h3>
+                    <div class="table-responsive"><table id="tabla-reservas-para-asignar"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>Pick Up</th><th>Cliente</th><th>Origen</th><th>Destino</th><th>Teléfono</th><th>Pasajero</th><th>Cant.</th><th>Zona</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div>
+                </div>
+                <div id="reservasPendientesContainer" class="reservas-container" style="display:none;">
+                    <h3>Reservas Pendientes (+24hs)</h3>
+                    <div class="table-responsive"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>Pick Up</th><th>Cliente</th><th>Origen</th><th>Destino</th><th>Teléfono</th><th>Pasajero</th><th>Cant.</th><th>Zona</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div>
+                </div>
+                <div id="reservasAsignadasContainer" class="reservas-container" style="display:none;">
+                    <h3>Reservas Asignadas</h3>
+                    <div class="table-responsive"><table id="tabla-asignados"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>Pick Up</th><th>Cliente</th><th>Origen</th><th>Destino</th><th>Teléfono</th><th>Pasajero</th><th>Cant.</th><th>Zona</th><th>Chofer Asignado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div>
+                </div>
+                <div id="reservasHistoricasContainer" class="reservas-container" style="display:none;">
+                    <h3>Historial de Reservas</h3>
+                    <div class="table-responsive"><table id="tabla-historicas"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>Pick Up</th><th>Cliente</th><th>Origen</th><th>Destino</th><th>Teléfono</th><th>Pasajero</th><th>Cant.</th><th>Zona</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div>
+                </div>
+            </div>
+
+            <div id="mapa" class="tab-content" style="display: none;">
+                <h2>Mapa de Reservas</h2>
+                <div class="map-controls">
+                    <div class="map-tabs">
+                        <button id="btn-map-en-curso" class="sub-tab-btn active">Para Asignar</button>
+                        <button id="btn-map-pendientes" class="sub-tab-btn">Pendientes</button>
+                        <button id="btn-map-asignados" class="sub-tab-btn">Asignados</button>
+                    </div>
+                </div>
+                <div id="map-container" style="height: 600px;"></div>
+            </div>
+
+            <div id="usuarios" class="tab-content" style="display: none;">
+                <h2>Gestión de Usuarios</h2>
+                <button id="btn-nuevo-usuario" class="btn-primary">Añadir Usuario</button>
+                <div id="crearUsuarioContainer" style="display:none;">
+                    <form id="crearUsuarioForm">
+                        <h3>Crear Nuevo Usuario</h3>
+                        <div class="form-row">
+                            <input type="text" name="nombre" placeholder="Nombre completo" required>
+                            <input type="email" name="email" placeholder="Email" required>
+                            <input type="password" name="password" placeholder="Contraseña" required>
+                        </div>
+                        <h4>Permisos</h4>
+                        <div id="permisos-container">
+                            <label><input type="checkbox" name="permisos" value="ver_tab_reservas"> Reservas</label>
+                            <label><input type="checkbox" name="permisos" value="ver_tab_mapa"> Mapa</label>
+                            <label><input type="checkbox" name="permisos" value="ver_tab_clientes"> Clientes</label>
+                            <label><input type="checkbox" name="permisos" value="ver_tab_pasajeros"> Pasajeros</label>
+                            <label><input type="checkbox" name="permisos" value="ver_tab_moviles"> Móviles</label>
+                            <label><input type="checkbox" name="permisos" value="ver_tab_choferes"> Choferes</label>
+                            <label><input type="checkbox" name="permisos" value="ver_tab_sucursales"> Sucursales</label>
+                            <label><input type="checkbox" name="permisos" value="ver_tab_zonas"> Zonas</label>
+                            <label><input type="checkbox" name="permisos" value="ver_tab_usuarios"> Gestionar Usuarios</label>
+                        </div>
+                        <button type="submit">Crear Usuario</button>
+                        <p id="mensajeUsuario" class="message"></p>
+                    </form>
+                </div>
+                <div id="listaUsuarios"></div>
+            </div>
+
+            <div id="clientes" class="tab-content" style="display: none;">
+                <h2>Gestión de Clientes</h2>
+                 <button id="btn-nuevo-cliente" class="btn-primary">Añadir Cliente</button>
+                <div id="crearClienteContainer" style="display:none;">
+                    <form id="crearClienteForm">
+                        <h3>Añadir Cliente</h3>
+                        <input type="text" name="nombre" placeholder="Nombre del Cliente" required>
+                        <input type="text" name="cuit" placeholder="CUIT">
+                        <label for="colorCliente">Color:</label>
+                        <input type="color" name="color" value="#333333">
+                        <button type="submit">Agregar Cliente</button>
+                        <p id="mensajeCliente" class="message"></p>
+                    </form>
+                </div>
+                <div id="listaClientes"></div>
+            </div>
+
+            <div id="pasajeros" class="tab-content" style="display: none;">
+                <h2>Gestión de Pasajeros Frecuentes</h2>
+                <button id="btn-nuevo-pasajero" class="btn-primary">Añadir Pasajero</button>
+                <div id="crearPasajeroContainer" style="display: none;">
+                    <form id="crearPasajeroForm">
+                        <h3>Añadir/Actualizar Pasajero por DNI</h3>
+                        <div class="form-row">
+                            <input type="text" name="dni" placeholder="DNI del Pasajero (ID único)" required>
+                            <input type="text" name="apellido_y_nombre" placeholder="Apellido y Nombre" required>
+                        </div>
+                        <div class="form-row">
+                            <input type="tel" name="telefono" placeholder="Teléfono">
+                            <input type="text" name="domicilio" placeholder="Último domicilio conocido">
+                        </div>
+                        <button type="submit">Guardar Pasajero</button>
+                        <p id="mensajePasajero" class="message"></p>
+                    </form>
+                </div>
+                <div id="listaPasajeros"></div>
+            </div>
+             
+            <div id="moviles" class="tab-content" style="display: none;">
+                <h2>Gestión de Móviles</h2>
+                <button id="btn-nuevo-movil" class="btn-primary">Añadir Móvil</button>
+                <div id="crearMovilContainer" style="display:none;">
+                    <form id="crearMovilForm">
+                        <h3>Añadir Móvil</h3>
+                        <div class="form-row">
+                            <input type="text" name="numero" placeholder="Número de Móvil" required>
+                            <input type="text" name="patente" placeholder="Patente" required>
+                            <input type="text" name="marca" placeholder="Marca">
+                            <input type="text" name="modelo" placeholder="Modelo">
+                            <input type="number" name="capacidad_pasajeros" placeholder="Capacidad" value="4" required>
+                        </div>
+                        <div class="form-row">
+                            <input type="text" name="titular" placeholder="Titular">
+                            <input type="text" name="domicilio_titular" placeholder="Domicilio del Titular">
+                            <input type="text" name="dni_titular" placeholder="DNI del Titular">
+                        </div>
+                        <div class="form-row">
+                            <input type="text" name="aseguradora" placeholder="Aseguradora">
+                            <input type="text" name="poliza" placeholder="Póliza">
+                        </div>
+                        <button type="submit">Agregar Móvil</button>
+                        <p id="mensajeMovil" class="message"></p>
+                    </form>
+                </div>
+                <div id="listaMoviles"></div>
+            </div>
+
+            <div id="choferes" class="tab-content" style="display: none;">
+                <h2>Gestión de Choferes</h2>
+                 <button id="btn-nuevo-chofer" class="btn-primary">Añadir Chofer</button>
+                <div id="crearChoferContainer" style="display:none;">
+                    <form id="crearChoferForm">
+                        <h3>Añadir Chofer</h3>
+                        <input type="text" name="nombre" placeholder="Nombre Completo" required>
+                        <input type="text" name="dni" placeholder="DNI" required>
+                        <input type="text" name="telefono" placeholder="Teléfono">
+                        <input type="text" name="telegram_chat_id" placeholder="ID de Chat de Telegram (Opcional)">
+                        <input type="text" name="licencia" placeholder="N° Licencia">
+                        <input type="text" name="domicilio" placeholder="Domicilio">
+                        <label for="movilChofer">Móvil Asignado:</label>
+                        <select name="movil_actual_id" id="movilChofer"><option value="">(Ninguno)</option></select>
+                        <button type="submit">Agregar Chofer</button>
+                        <p id="mensajeChofer" class="message"></p>
+                    </form>
+                </div>
+                <div id="listaChoferes"></div>
+            </div>
+
+            <div id="sucursales" class="tab-content" style="display: none;">
+                <h2>Gestión de Sucursales</h2>
+                <form id="crearSucursalForm">
+                    <h3>Añadir Sucursal</h3>
+                    <input type="number" name="numero" placeholder="Número" required>
+                    <input type="text" name="nombre" placeholder="Nombre" required>
+                    <button type="submit">Agregar Sucursal</button>
+                    <p id="mensajeSucursal" class="message"></p>
+                </form>
+                <div id="listaSucursales"></div>
+            </div>
+            
+            <div id="zonas" class="tab-content" style="display: none;">
+                 <h2>Gestión de Zonas</h2>
+                <form id="crearZonaForm">
+                    <h3>Añadir Zona</h3>
+                    <input type="number" name="numero" placeholder="Número" required>
+                    <input type="text" name="nombre" placeholder="Nombre" required>
+                    <button type="submit">Agregar Zona</button>
+                    <p id="mensajeZona" class="message"></p>
+                </form>
+                <div id="listaZonas"></div>
+            </div>
+        </div>
+
+        <!-- ========= MODALES ========= -->
+        <div id="crearReservaModal" class="modal">
+            <div class="modal-content wide">
+                <span class="close-button" id="close-reserva-modal">&times;</span>
+                <h2>Nueva Reserva</h2>
+                <form id="crearReservaForm">
+                    <div class="edit-layout">
+                        <div class="form-column">
+                            <div class="form-row">
+                                <div><label>Nº Siniestro <input type="text" name="n_siniestro"></label></div>
+                                <div><label>Nº Autorización <input type="text" name="n_autorizacion"></label></div>
+                                <div><label>Cliente</label><select name="cliente" id="reservaCliente"></select></div>
+                            </div>
+                            <div class="form-row">
+                                <div><label>DNI <input type="text" name="dni" placeholder="Buscar pasajero..."></label></div>
+                                <div><label>Apellido y Nombre <input type="text" name="apellido_y_nombre"></label></div>
+                                <div><label>Teléfono <input type="tel" name="telefono"></label></div>
+                            </div>
+                             <div class="form-group">
+                                <label><input type="checkbox" name="guardar_pasajero" checked> Guardar como pasajero frecuente</label>
+                            </div>
+                            <div class="form-row">
+                                <div><label>Fecha <input type="date" name="fecha"></label></div>
+                                <div><label>Hora Turno <input type="time" name="hora"></label></div>
+                                <div><label>Hora Pick Up <input type="time" name="hora_pickup"></label></div>
+                            </div>
+                            <div class="form-group"><label>Dirección de Origen</label><input type="text" name="direccion_origen" id="direccion_origen_input"></div>
+                            <div class="form-group"><label>Dirección de Destino</label><input type="text" name="direccion_destino" id="direccion_destino_input"></div>
+                            <fieldset id="pasajeros-fieldset">
+                                <legend>Pasajeros</legend>
+                                <div class="form-row">
+                                    <div class="checkbox-group">
+                                        <label><input type="checkbox" id="checkAcompanante"> Acompañante</label>
+                                    </div>
+                                    <div id="acompanantes-select-container" style="display:none;">
+                                        <label>Cant:</label>
+                                        <select id="selectAcompanantes">
+                                            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                                        </select>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <label><input type="checkbox" id="checkExclusivo"> Exclusivo</label>
+                                    </div>
+                                </div>
+                            </fieldset>
+                            <div class="form-row">
+                                <div><label>Zona</label><select name="zona" id="reservaZona"></select></div>
+                                <div><label>Base</label><select name="base" id="reservaBase"></select></div>
+                                 <div><label>Asignar Chofer</label><select name="chofer_asignado_id" id="reservaChofer"></select></div>
+                            </div>
+                            <div class="form-row full-width">
+                                 <label>Observaciones <textarea name="observaciones" rows="3"></textarea></label>
+                            </div>
+                        </div>
+                        <div class="map-column">
+                            <div id="crearReservaMapContainer" style="height: 300px; width: 100%; margin-top: 15px;"></div>
+                        </div>
+                    </div>
+                    <button type="submit">Guardar Reserva</button>
+                    <p id="mensajeReserva" class="message"></p>
+                </form>
+            </div>
+        </div>
+        
+        <div id="editModal" class="modal">
+            <div class="modal-content wide">
+                <span class="close-button" id="close-edit-modal">&times;</span>
+                <h2>Editar Registro</h2>
+                <form id="editForm"></form>
+            </div>
+        </div>
+
+        <div id="asignarChoferModal" class="modal">
+            <div class="modal-content">
+                <span class="close-button" id="close-asignar-modal">&times;</span>
+                <h2>Asignar Chofer a Reserva</h2>
+                <form id="asignarChoferForm">
+                    <div class="form-group">
+                        <label for="asignarChoferSelect">Selecciona un chofer disponible:</label>
+                        <select id="asignarChoferSelect" required></select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="submit" class="btn-success">Confirmar Asignación</button>
+                        <button type="button" id="cancelar-asignacion-btn" class="btn-secondary">Cancelar</button>
+                    </div>
+                    <p id="mensajeAsignacion" class="message"></p>
+                </form>
+            </div>
+        </div>
+
+    </div>
+        
+    <!-- SCRIPT DE GOOGLE MAPS ACTUALIZADO -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD33ys3G9-hHG0aw34EQByXecK3c7oEbFo&v=weekly&libraries=places,marker&callback=initMap" async defer></script>
+    
+    <script src="script.js" type="module"></script>
+</body>
 </html>
