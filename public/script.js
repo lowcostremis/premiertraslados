@@ -25,6 +25,16 @@ let unsubscribeReservas;
 let adminListeners = [];
 let lastReservasSnapshot = null;
 
+// -- NUEVAS VARIABLES GLOBALES PARA EL MAPA --
+let marcadoresOrigen = {}; 
+let marcadorDestinoActivo = null; 
+let infoWindowActiva = null; 
+let mapaModal;
+let marcadorOrigenModal = null;
+let marcadorDestinoModal = null;
+let geocoder;
+
+
 // LÓGICA DE AUTENTICACIÓN
 auth.onAuthStateChanged(user => {
     const authSection = document.getElementById('auth-section');
@@ -228,6 +238,9 @@ async function openEditReservaModal(reservaId) {
     document.getElementById('reserva-id').value = reservaId;
     document.getElementById('modal-title').textContent = 'Editar Reserva';
     document.getElementById('reserva-modal').style.display = 'block';
+
+    // --> MODIFICADO: Pasamos las coordenadas existentes al mapa del modal
+    setTimeout(() => initMapaModal(data.origen_coords, data.destino_coords), 100);
 }
 
 async function changeReservaState(reservaId, newState) {
@@ -277,13 +290,19 @@ async function finalizarReserva(reservaId) {
 function attachEventListeners() {
     const modal = document.getElementById('reserva-modal');
     const closeBtn = document.querySelector('.close-btn');
+    
+    // --> MODIFICADO: El listener que abre el modal de NUEVA reserva
     document.getElementById('btn-nueva-reserva').addEventListener('click', () => {
         document.getElementById('reserva-form').reset();
         document.getElementById('modal-title').textContent = 'Nueva Reserva';
         document.getElementById('reserva-id').value = '';
         modal.style.display = 'block';
+        // Usamos un setTimeout para asegurar que el div del mapa sea visible antes de inicializarlo
+        setTimeout(initMapaModal, 100); 
     });
+
     closeBtn.onclick = () => modal.style.display = 'none';
+    // Elimina o comenta esta línea:
     window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; }
     
     document.getElementById('edit-form').addEventListener('submit', handleUpdateItem);
@@ -479,7 +498,7 @@ async function deleteItem(collection, id) {
     }
 }
 
-// NAVEGACIÓN Y MAPS
+// NAVEGACIÓN
 function openTab(evt, tabName) {
     document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none");
     document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active'));
@@ -494,6 +513,8 @@ function showReservasTab(tabName) {
     document.querySelector(`.sub-tab-btn[data-tab="${tabName}"]`).classList.add('active');
 }
 
+// --- FUNCIONES DEL MAPA ---
+
 function initMap() {
     if (map) return;
     map = new google.maps.Map(document.getElementById("map-container"), { 
@@ -501,12 +522,174 @@ function initMap() {
         zoom: 14 
     });
     initAutocomplete();
+    
+    // --> ¡NUEVO! Llamamos a la función para cargar las reservas en el mapa
+    cargarMarcadoresDeReservas(); 
 }
 
 function initAutocomplete() {
-    const origenInput = document.getElementById('origen');
+     const origenInput = document.getElementById('origen');
     const destinoInput = document.getElementById('destino');
     const options = { componentRestrictions: { country: "ar" }, fields: ["formatted_address", "geometry", "name"] };
+    
     autocompleteOrigen = new google.maps.places.Autocomplete(origenInput, options);
     autocompleteDestino = new google.maps.places.Autocomplete(destinoInput, options);
+
+     // --- ¡NUEVO CÓDIGO AÑADIDO! ---
+    // Listener para el campo de Origen
+    autocompleteOrigen.addListener('place_changed', () => {
+        const place = autocompleteOrigen.getPlace();
+        // Verificamos que el lugar seleccionado tenga coordenadas
+        if (place.geometry && place.geometry.location) {
+            // Si el mapa del modal y su marcador existen, los movemos
+            if (mapaModal && marcadorOrigenModal) {
+                mapaModal.setCenter(place.geometry.location);
+                marcadorOrigenModal.setPosition(place.geometry.location);
+                mapaModal.setZoom(15); // Hacemos zoom en la nueva ubicación
+            }
+        }
+    });
+
+    // Listener para el campo de Destino
+    autocompleteDestino.addListener('place_changed', () => {
+        const place = autocompleteDestino.getPlace();
+        if (place.geometry && place.geometry.location) {
+            if (mapaModal && marcadorDestinoModal) {
+                mapaModal.setCenter(place.geometry.location);
+                marcadorDestinoModal.setPosition(place.geometry.location);
+                mapaModal.setZoom(15);
+            }
+        }
+    });
+}
+
+
+// --> ¡NUEVA! Función para cargar marcadores en la pestaña 'Mapa'
+function cargarMarcadoresDeReservas() {
+    Object.values(marcadoresOrigen).forEach(marker => marker.setMap(null));
+    marcadoresOrigen = {};
+
+    db.collection('reservas')
+      .where('estado', 'in', ['En Curso', 'Asignado'])
+      .onSnapshot(snapshot => {
+        
+        Object.values(marcadoresOrigen).forEach(marker => marker.setMap(null));
+        marcadoresOrigen = {};
+
+        snapshot.forEach(doc => {
+            const reserva = { id: doc.id, ...doc.data() };
+
+            if (reserva.origen_coords && reserva.origen_coords.latitude) {
+                
+                const marker = new google.maps.Marker({
+                    position: { lat: reserva.origen_coords.latitude, lng: reserva.origen_coords.longitude },
+                    map: map,
+                    title: `Origen: ${reserva.origen}`,
+                    icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+                });
+
+                marcadoresOrigen[reserva.id] = marker;
+
+                marker.addListener('click', () => {
+                    if (infoWindowActiva) infoWindowActiva.close();
+                    if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null);
+
+                    const cliente = clientesCache[reserva.cliente] || { nombre: 'N/A' };
+                    const chofer = choferesCache.find(c => c.id === reserva.chofer_asignado_id) || { nombre: 'No asignado' };
+
+                    const contenido = `
+                        <div class="info-window">
+                            <h4>Reserva de: ${cliente.nombre}</h4>
+                            <p><strong>Pasajero:</strong> ${reserva.nombre_pasajero || 'N/A'}</p>
+                            <p><strong>Origen:</strong> ${reserva.origen}</p>
+                            <p><strong>Destino:</strong> ${reserva.destino}</p>
+                            <p><strong>Turno:</strong> ${new Date(reserva.fecha_turno + 'T' + reserva.hora_turno).toLocaleString('es-AR')}</p>
+                            <p><strong>Chofer:</strong> ${chofer.nombre}</p>
+                        </div>
+                    `;
+                    
+                    infoWindowActiva = new google.maps.InfoWindow({ content: contenido });
+                    infoWindowActiva.open(map, marker);
+
+                    if (reserva.destino_coords && reserva.destino_coords.latitude) {
+                        marcadorDestinoActivo = new google.maps.Marker({
+                            position: { lat: reserva.destino_coords.latitude, lng: reserva.destino_coords.longitude },
+                            map: map,
+                            title: `Destino: ${reserva.destino}`,
+                            icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                        });
+                    }
+                    
+                    infoWindowActiva.addListener('closeclick', () => {
+                        if (marcadorDestinoActivo) {
+                            marcadorDestinoActivo.setMap(null);
+                            marcadorDestinoActivo = null;
+                        }
+                    });
+                });
+            }
+        });
+    });
+}
+
+// --> ¡NUEVA! Función para inicializar el mapa del modal
+function initMapaModal(origenCoords, destinoCoords) {
+    if (!geocoder) {
+        geocoder = new google.maps.Geocoder();
+    }
+
+    if (!mapaModal) {
+        mapaModal = new google.maps.Map(document.getElementById("mapa-modal-container"), { 
+            center: { lat: -32.95, lng: -60.65 }, 
+            zoom: 13 
+        });
+    }
+
+    if (marcadorOrigenModal) marcadorOrigenModal.setMap(null);
+    if (marcadorDestinoModal) marcadorDestinoModal.setMap(null);
+
+    const posOrigen = (origenCoords && origenCoords.latitude) 
+        ? { lat: origenCoords.latitude, lng: origenCoords.longitude }
+        : mapaModal.getCenter();
+
+    marcadorOrigenModal = new google.maps.Marker({
+        position: posOrigen,
+        map: mapaModal,
+        draggable: true,
+        icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+    });
+
+    const posDestino = (destinoCoords && destinoCoords.latitude) 
+        ? { lat: destinoCoords.latitude, lng: destinoCoords.longitude }
+        : mapaModal.getCenter();
+
+    marcadorDestinoModal = new google.maps.Marker({
+        position: posDestino,
+        map: mapaModal,
+        draggable: true,
+        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+    });
+    
+    marcadorOrigenModal.addListener('dragend', (event) => {
+        actualizarInputDesdeCoordenadas(event.latLng, 'origen');
+    });
+
+    marcadorDestinoModal.addListener('dragend', (event) => {
+        actualizarInputDesdeCoordenadas(event.latLng, 'destino');
+    });
+}
+
+// --> ¡NUEVA! Función para hacer geocodificación inversa
+function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
+    geocoder.geocode({ 'location': latLng }, (results, status) => {
+        if (status === 'OK') {
+            if (results[0]) {
+                document.getElementById(tipoInput).value = results[0].formatted_address;
+            } else {
+                window.alert('No se encontraron resultados');
+            }
+        } else {
+            window.alert('Geocoder falló debido a: ' + status);
+        }
+    });
 }

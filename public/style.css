@@ -113,6 +113,8 @@ button {
 }
 button:hover { opacity: 0.9; }
 .btn-primary { background-color: #28a745; }
+.btn-danger { background-color: #dc3545; }
+.btn-warning { background-color: #ffc107; color: #333; }
 
 /* --- Modal --- */
 .modal {
@@ -130,11 +132,11 @@ button:hover { opacity: 0.9; }
     padding: 2rem;
     border: 1px solid var(--border-color);
     width: 80%;
-    max-width: 900px;
+    max-width: 1200px; /* MODIFICADO: Más ancho */
     border-radius: 8px;
     position: relative;
 }
-.close-btn {
+.close-btn, .close-edit-btn {
     color: #aaa;
     position: absolute;
     top: 15px; right: 25px;
@@ -149,12 +151,37 @@ button:hover { opacity: 0.9; }
     margin-bottom: 1rem;
 }
 
+/* -- NUEVOS ESTILOS PARA EL MODAL CON MAPA -- */
+.modal-layout {
+    display: flex;
+    gap: 1.5rem;
+}
+.modal-form {
+    flex: 1; /* El formulario ocupa una parte */
+}
+.modal-map {
+    flex: 1; /* El mapa ocupa la otra parte */
+    min-height: 400px;
+    background-color: #333;
+    border-radius: 8px;
+}
+
 /* --- Mapa --- */
 #map-container {
     height: 75vh;
     width: 100%;
     border-radius: 8px;
 }
+.info-window {
+    color: #333;
+}
+.info-window h4 {
+    margin-bottom: 0.5rem;
+}
+.info-window p {
+    margin: 0.2rem 0;
+}
+
 
 /* --- Secciones Admin --- */
 .admin-form {

@@ -69,7 +69,43 @@
         </div>
     </div>
 
-    <div id="reserva-modal" class="modal"><div class="modal-content"><span class="close-btn">&times;</span><h2 id="modal-title">Nueva Reserva</h2><form id="reserva-form"><input type="hidden" id="reserva-id"><div class="form-grid"><select id="cliente" name="cliente" required><option value="Default">Default</option></select><input type="text" id="siniestro" name="siniestro" placeholder="N° Siniestro"><input type="text" id="autorizacion" name="autorizacion" placeholder="N° Autorización"><input type="text" id="dni_pasajero" name="dni_pasajero" placeholder="DNI Pasajero"><input type="text" id="nombre_pasajero" name="nombre_pasajero" placeholder="Nombre y Apellido Pasajero"><input type="tel" id="telefono_pasajero" name="telefono_pasajero" placeholder="Teléfono Pasajero"><input type="date" id="fecha_turno" name="fecha_turno" required><input type="time" id="hora_turno" name="hora_turno" required><input type="time" id="hora_pickup" name="hora_pickup" placeholder="Hora PickUp"><input type="text" id="origen" name="origen" placeholder="Domicilio Origen" required><input type="text" id="destino" name="destino" placeholder="Domicilio Destino"><select id="cantidad_pasajeros" name="cantidad_pasajeros"><option value="1">1 Pasajero</option><option value="2">2 Pasajeros</option><option value="3">3 Pasajeros</option><option value="4">4 Pasajeros</option></select><select id="zona" name="zona"><option value="">Seleccionar Zona...</option></select></div><textarea id="observaciones" name="observaciones" placeholder="Observaciones (máx 100 caracteres)" maxlength="100"></textarea><button type="submit" class="btn-primary">Guardar Reserva</button></form></div></div>
+    <div id="reserva-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2 id="modal-title">Nueva Reserva</h2>
+    
+            <div class="modal-layout">
+                <form id="reserva-form" class="modal-form">
+                    <input type="hidden" id="reserva-id">
+                    <div class="form-grid">
+                        <select id="cliente" name="cliente" required><option value="Default">Default</option></select>
+                        <input type="text" id="siniestro" name="siniestro" placeholder="N° Siniestro">
+                        <input type="text" id="autorizacion" name="autorizacion" placeholder="N° Autorización">
+                        <input type="text" id="dni_pasajero" name="dni_pasajero" placeholder="DNI Pasajero">
+                        <input type="text" id="nombre_pasajero" name="nombre_pasajero" placeholder="Nombre y Apellido Pasajero">
+                        <input type="tel" id="telefono_pasajero" name="telefono_pasajero" placeholder="Teléfono Pasajero">
+                        <input type="date" id="fecha_turno" name="fecha_turno" required>
+                        <input type="time" id="hora_turno" name="hora_turno" required>
+                        <input type="time" id="hora_pickup" name="hora_pickup" placeholder="Hora PickUp">
+                        <input type="text" id="origen" name="origen" placeholder="Domicilio Origen" required>
+                        <input type="text" id="destino" name="destino" placeholder="Domicilio Destino">
+                        <select id="cantidad_pasajeros" name="cantidad_pasajeros">
+                            <option value="1">1 Pasajero</option>
+                            <option value="2">2 Pasajeros</option>
+                            <option value="3">3 Pasajeros</option>
+                            <option value="4">4 Pasajeros</option>
+                        </select>
+                        <select id="zona" name="zona"><option value="">Seleccionar Zona...</option></select>
+                    </div>
+                    <textarea id="observaciones" name="observaciones" placeholder="Observaciones (máx 100 caracteres)" maxlength="100"></textarea>
+                    <button type="submit" class="btn-primary">Guardar Reserva</button>
+                </form>
+    
+                <div id="mapa-modal-container" class="modal-map"></div>
+            </div>
+        </div>
+    </div>
+
     <div id="edit-modal" class="modal"><div class="modal-content"><span class="close-edit-btn">&times;</span><h2 id="edit-modal-title">Editar</h2><form id="edit-form"></form></div></div>
 
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD33ys3G9-hHG0aw34EQByXecK3c7oEbFo&libraries=places&callback=initMap" defer></script>
