@@ -1,27 +1,30 @@
 // Importaciones 100% de la v2
 const {onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
-const {defineSecret} = require("firebase-functions/v2/params");
+// const {defineSecret} = require("firebase-functions/v2/params"); // <-- LÍNEA PROBLEMÁTICA ELIMINADA
 const admin = require("firebase-admin");
 const {Client} = require("@googlemaps/google-maps-services-js");
 
 admin.initializeApp();
 const mapsClient = new Client({});
 
-// Definimos el secreto que vamos a usar
-const googleApiKey = defineSecret("GOOGLE_APIKEY");
+// !! SOLUCIÓN TEMPORAL: API Key directamente en el código !!
+const GEOCODING_API_KEY = "AIzaSyD8j5-iicaVEFqeBpCEdFbUXVhkDwsUkwA"; 
 
 // --- FUNCIÓN DE GEOCODIFICACIÓN (v2) ---
 exports.geocodeAddress = onDocumentWritten(
   {
     document: "reservas/{reservaId}",
-    secrets: [googleApiKey],
+    // secrets: [googleApiKey], // <-- LÍNEA ELIMINADA
   },
   async (event) => {
-    const GEOCODING_API_KEY = googleApiKey.value();
-    if (!event.data.after.exists) { return null; }
+    // Si no hay datos después del evento (ej: un borrado), no hacemos nada.
+    if (!event.data.after.exists) {
+      return null;
+    }
     const afterData = event.data.after.data();
     const beforeData = event.data.before.exists ? event.data.before.data() : null;
+
     // Geocodificar Origen
     if (afterData.origen && (!beforeData || afterData.origen !== beforeData.origen)) {
       try {
@@ -33,8 +36,11 @@ exports.geocodeAddress = onDocumentWritten(
           const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
           await event.data.after.ref.update({origen_coords: coords});
         }
-      } catch (error) { console.error("Error geocodificando origen:", error.message); }
+      } catch (error) {
+        console.error("Error geocodificando origen:", error.message);
+      }
     }
+
     // Geocodificar Destino
     if (afterData.destino && (!beforeData || afterData.destino !== beforeData.destino)) {
       try {
@@ -46,7 +52,9 @@ exports.geocodeAddress = onDocumentWritten(
           const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
           await event.data.after.ref.update({destino_coords: coords});
         }
-      } catch (error) { console.error("Error geocodificando destino:", error.message); }
+      } catch (error) {
+        console.error("Error geocodificando destino:", error.message);
+      }
     }
     return null;
   }
