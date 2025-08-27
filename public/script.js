@@ -570,7 +570,7 @@ function cargarMarcadoresDeReservas() {
     marcadoresOrigen = {};
 
     db.collection('reservas')
-      .where('estado', 'in', ['En Curso', 'Asignado'])
+      .where('estado', 'in', ['En Curso', 'Asignado', 'Pendiente'])
       .onSnapshot(snapshot => {
         
         Object.values(marcadoresOrigen).forEach(marker => marker.setMap(null));
