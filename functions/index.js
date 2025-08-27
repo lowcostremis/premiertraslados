@@ -1,25 +1,24 @@
 // Importaciones 100% de la v2
 const {onDocumentWritten} = require("firebase-functions/v2/firestore");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
-const {defineSecret} = require("firebase-functions/v2/params");
+// const {defineSecret} = require("firebase-functions/v2/params"); // <-- LÍNEA PROBLEMÁTICA ELIMINADA
 const admin = require("firebase-admin");
 const {Client} = require("@googlemaps/google-maps-services-js");
 
 admin.initializeApp();
 const mapsClient = new Client({});
 
-// Definimos el secreto que vamos a usar
-const googleApiKey = defineSecret("GOOGLE_APIKEY");
+// !! SOLUCIÓN TEMPORAL: API Key directamente en el código !!
+const GEOCODING_API_KEY = "AIzaSyD8j5-iicaVEFqeBpCEdFbUXVhkDwsUkwA"; 
 
 // --- FUNCIÓN DE GEOCODIFICACIÓN (v2) ---
 exports.geocodeAddress = onDocumentWritten(
   {
     document: "reservas/{reservaId}",
-    secrets: [googleApiKey],
+    // secrets: [googleApiKey], // <-- LÍNEA ELIMINADA
   },
   async (event) => {
-    const GEOCODING_API_KEY = googleApiKey.value();
-
+    // Si no hay datos después del evento (ej: un borrado), no hacemos nada.
     if (!event.data.after.exists) {
       return null;
     }
@@ -67,18 +66,9 @@ exports.crearUsuario = onCall(async (request) => {
   if (!email || !password || !nombre) {
     throw new HttpsError('invalid-argument', 'Faltan datos (email, password, nombre).');
   }
-
   try {
-    const userRecord = await admin.auth().createUser({
-      email: email,
-      password: password,
-      displayName: nombre,
-    });
-    await admin.firestore().collection('users').doc(userRecord.uid).set({
-      nombre: nombre,
-      email: email,
-      rol: 'operador',
-    });
+    const userRecord = await admin.auth().createUser({ email: email, password: password, displayName: nombre });
+    await admin.firestore().collection('users').doc(userRecord.uid).set({ nombre: nombre, email: email, rol: 'operador' });
     return {result: `Usuario ${nombre} creado con éxito.`};
   } catch (error) {
     console.error("Error al crear usuario:", error);
@@ -92,11 +82,7 @@ exports.listUsers = onCall(async (request) => {
     const listUsersResult = await admin.auth().listUsers(1000);
     const users = listUsersResult.users.map((userRecord) => {
       const user = userRecord.toJSON();
-      return {
-        uid: user.uid,
-        email: user.email,
-        nombre: user.displayName,
-      };
+      return { uid: user.uid, email: user.email, nombre: user.displayName };
     });
     return { users };
   } catch (error) {
