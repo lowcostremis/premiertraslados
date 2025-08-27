@@ -1,6 +1,6 @@
 // CONFIGURACIÓN DE FIREBASE
 const firebaseConfig = {
-    apiKey: "AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk",
+    apiKey: "AIzaSyD33ys3G9-hHG0aw34EQByXecK3c7oEbFo",
     authDomain: "premiertraslados-31ee2.firebaseapp.com",
     projectId: "premiertraslados-31ee2",
     storageBucket: "premiertraslados-31ee2.appspot.com",
