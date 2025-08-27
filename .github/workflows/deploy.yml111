@@ -17,11 +17,12 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Dependencies for Functions
-        run: npm --prefix ./functions ci
-
-      - name: Install Firebase Tools
-        run: npm install -g firebase-tools
+      - name: Install Dependencies
+        run: npm --prefix ./functions install
 
       - name: Deploy to Firebase
-        run: firebase deploy --only functions --token "${{ secrets.FIREBASE_TOKEN }}" --non-interactive
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only functions
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
