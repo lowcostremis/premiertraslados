@@ -60,6 +60,39 @@ td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #c
 .menu-contenido a:hover, .menu-contenido button:hover { background-color: #f1f1f1; }
 .menu-contenido.visible { display: block; }
 
+/* --- AÑADIDO: ESTILOS PARA PAGINACIÓN Y BÚSQUEDA --- */
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 20px;
+}
+.pagination-controls button {
+    padding: 8px 16px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.pagination-controls button:hover:not(:disabled) {
+    background-color: #f0f0f0;
+}
+.pagination-controls button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.search-input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
 /* --- Pestaña Mapa --- */
 #map-container { width: 100%; height: calc(100vh - 200px); }
 /* --- TAREA 1: ESTILOS PARA LOS FILTROS DEL MAPA --- */

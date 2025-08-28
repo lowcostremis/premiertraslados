@@ -35,8 +35,8 @@ let mapaModal;
 let marcadorOrigenModal = null;
 let marcadorDestinoModal = null;
 let geocoder;
-// TAREA 1: Variable para el estado del filtro del mapa
 let filtroMapaActual = 'Todos';
+let refrescoAutomaticoIntervalo;
 
 
 // ===================================================================================
@@ -56,7 +56,9 @@ auth.onAuthStateChanged(user => {
         if (unsubscribeReservas) unsubscribeReservas();
         adminListeners.forEach(unsubscribe => unsubscribe());
         adminListeners = [];
-    }
+         // AÑADIDO: Detiene el reloj al cerrar sesión
+        if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
+        }
 });
 
 document.getElementById('login-btn').addEventListener('click', () => {
@@ -76,6 +78,15 @@ function initApp() {
     listenToReservas();
     initializeAdminLists();
     initMap();
+     // AÑADIDO: Inicia el refresco automático cada minuto
+    if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
+    
+    refrescoAutomaticoIntervalo = setInterval(() => {
+        console.log("Refrescando listas de reservas por tiempo...");
+        if (lastReservasSnapshot) {
+            renderAllReservas(lastReservasSnapshot);
+        }
+    }, 60000); // 60000 milisegundos = 1 minuto
 }
 
 // CARGA DE DATOS AUXILIARES
@@ -153,9 +164,6 @@ function renderAllReservas(snapshot) {
     });
 }
 
-// =========================================================================
-// TAREA 2 y 3: RENDERIZADO DE FILA CON NUEVO MENÚ DE ACCIONES
-// =========================================================================
 function renderFilaReserva(tbody, reserva) {
     const cliente = clientesCache[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
     const row = tbody.insertRow();
@@ -307,7 +315,6 @@ async function finalizarReserva(reservaId) {
     }
 }
 
-// TAREA 2: Función para mostrar/ocultar el menú
 function toggleMenu(event) {
     event.stopPropagation();
     document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
@@ -318,9 +325,7 @@ function toggleMenu(event) {
     event.currentTarget.nextElementSibling.classList.toggle('visible');
 }
 
-// TAREA 2: Cierra los menús si se hace clic fuera
 window.onclick = function(event) {
-   // La nueva lógica revisa si el clic ocurrió FUERA del contenedor del menú
     if (!event.target.closest('.acciones-dropdown')) {
         document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
             menu.classList.remove('visible');
@@ -328,7 +333,6 @@ window.onclick = function(event) {
     }
 }
 
-// TAREA 3: NUEVA FUNCIÓN PARA QUITAR ASIGNACIÓN
 async function quitarAsignacion(reservaId) {
     if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
         try {
@@ -385,7 +389,6 @@ async function handleSaveReserva(e) {
     try {
         if (reservaId) { await db.collection('reservas').doc(reservaId).update(reservaData); } else { await db.collection('reservas').add(reservaData); }
         
-        // CORRECCIÓN: Solo guardamos el domicilio de ORIGEN si existe.
         if (reservaData.dni_pasajero && reservaData.origen) {
             const pasajeroRef = db.collection('pasajeros').doc(reservaData.dni_pasajero);
             const pasajeroData = { 
@@ -485,6 +488,9 @@ function renderAdminList(collectionName, containerId, fields, headers, useDocIdA
     adminListeners.push(unsubscribe);
 }
 
+// =========================================================================
+// MEJORA: Formulario de edición de chofer con lista de móviles
+// =========================================================================
 async function editItem(collection, id) {
     let doc;
     if (collection === 'users') {
@@ -494,23 +500,56 @@ async function editItem(collection, id) {
     } else {
         doc = await db.collection(collection).doc(id).get();
     }
-    if (!doc.exists) { alert("Error: No se encontró el item."); return; }
+    if (!doc.exists()) { alert("Error: No se encontró el item."); return; }
     const data = doc.data();
     const form = document.getElementById('edit-form');
     form.innerHTML = '';
     form.dataset.collection = collection;
     form.dataset.id = id;
     const fieldsToEdit = Object.keys(data);
+    
     fieldsToEdit.forEach(field => {
         const label = document.createElement('label');
         label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
-        const input = document.createElement('input');
-        input.name = field;
-        input.value = data[field];
-        if (field === 'uid' || field === 'email' || field === 'creadoEn') input.disabled = true;
         form.appendChild(label);
-        form.appendChild(input);
+
+        // MEJORA: Si el campo es 'movil_actual_id', creamos un <select>
+        if (field === 'movil_actual_id' && collection === 'choferes') {
+            const select = document.createElement('select');
+            select.name = field;
+            
+            // Opción para desasignar
+            let optionsHTML = '<option value="">Desasignar Móvil</option>';
+            
+            // Llenamos con los móviles que tenemos en caché
+            movilesCache.forEach(movil => {
+                const selected = movil.id === data[field] ? 'selected' : '';
+                optionsHTML += `<option value="${movil.id}" ${selected}>N° ${movil.numero} (${movil.patente})</option>`;
+            });
+            
+            select.innerHTML = optionsHTML;
+            form.appendChild(select);
+
+        } else {
+            // Para todos los demás campos, creamos un <input> normal
+            const input = document.createElement('input');
+            input.name = field;
+            input.value = data[field];
+            if (field === 'uid' || field === 'email' || field === 'creadoEn' || field === 'color') {
+                 input.disabled = true;
+            }
+            if (field === 'color') {
+                const colorInput = document.createElement('input');
+                colorInput.type = 'color';
+                colorInput.name = field;
+                colorInput.value = data[field];
+                form.appendChild(colorInput);
+            } else {
+                 form.appendChild(input);
+            }
+        }
     });
+    
     const submitBtn = document.createElement('button');
     submitBtn.type = 'submit';
     submitBtn.textContent = 'Guardar Cambios';
@@ -518,6 +557,7 @@ async function editItem(collection, id) {
     document.getElementById('edit-modal-title').textContent = `Editar ${collection.slice(0, -1)}`;
     document.getElementById('edit-modal').style.display = 'block';
 }
+
 
 async function handleUpdateItem(e) {
     e.preventDefault();
@@ -576,7 +616,6 @@ function showReservasTab(tabName) {
 }
 
 // --- FUNCIONES DEL MAPA ---
-
 function initMap() {
     if (map || !document.getElementById("map-container")) return;
     map = new google.maps.Map(document.getElementById("map-container"), { 
@@ -586,7 +625,7 @@ function initMap() {
 }
 
 function initAutocomplete() {
-     const origenInput = document.getElementById('origen');
+    const origenInput = document.getElementById('origen');
     const destinoInput = document.getElementById('destino');
     const options = { componentRestrictions: { country: "ar" }, fields: ["formatted_address", "geometry", "name"] };
     
@@ -616,7 +655,6 @@ function initAutocomplete() {
     });
 }
 
-// TAREA 1: CARGA DE MARCADORES CON FILTROS Y COLORES
 function cargarMarcadoresDeReservas() {
     if (!map || !lastReservasSnapshot) return;
 
@@ -685,7 +723,6 @@ function cargarMarcadoresDeReservas() {
     });
 }
 
-// TAREA 1: Nueva función para manejar los filtros del mapa
 function filtrarMapa(estado) {
     filtroMapaActual = estado;
     document.querySelectorAll('.map-filter-btn').forEach(btn => btn.classList.remove('active'));

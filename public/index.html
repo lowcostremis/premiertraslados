@@ -23,7 +23,7 @@
 
     <div id="app-content" style="display:none;">
         <header>
-            <h1>Premier Traslados Ejecutivos - Central de Gestión</h1>
+            <h1>Central de Gestión</h1>
             <div class="user-info">
                 <span id="user-email-display"></span>
                 <button id="logout-btn">Cerrar Sesión</button>
@@ -64,7 +64,7 @@
             </div>
             <div id="map-container"></div>
         </div>
-
+        
         <div id="Clientes" class="tab-content" style="display:none;"><h2>Gestión de Clientes</h2><form id="form-clientes" class="admin-form"><input type="text" name="nombre" placeholder="Nombre de la empresa" required><input type="text" name="cuit" placeholder="CUIT"><input type="text" name="domicilio" placeholder="Domicilio"><input type="text" name="telefono" placeholder="Teléfono"><label for="color_cliente">Color:</label><input type="color" name="color" id="color_cliente" value="#ffffff"><button type="submit">Guardar Cliente</button></form><div id="lista-clientes" class="lista-admin"></div></div>
         <div id="Pasajeros" class="tab-content" style="display:none;"><h2>Gestión de Pasajeros</h2><form id="form-pasajeros" class="admin-form"><input type="text" name="dni" placeholder="DNI del Pasajero (obligatorio)" required><input type="text" name="nombre_apellido" placeholder="Nombre y Apellido"><input type="text" name="telefono" placeholder="Teléfono"><input type="text" name="domicilio" placeholder="Domicilio Principal"><button type="submit">Guardar Pasajero</button></form><div id="lista-pasajeros" class="lista-admin"></div></div>
         <div id="Choferes" class="tab-content" style="display:none;"><h2>Gestión de Choferes</h2><form id="form-choferes" class="admin-form"><input type="text" name="dni" placeholder="DNI (obligatorio)" required><input type="text" name="nombre" placeholder="Nombre completo"><input type="text" name="domicilio" placeholder="Domicilio"><input type="text" name="telefono" placeholder="Teléfono"><select name="movil_actual_id"><option value="">Asignar Móvil...</option></select><button type="submit">Guardar Chofer</button></form><div id="lista-choferes" class="lista-admin"></div></div>
@@ -117,7 +117,7 @@
 
     <div id="edit-modal" class="modal"><div class="modal-content"><span class="close-edit-btn">&times;</span><h2 id="edit-modal-title">Editar</h2><form id="edit-form"></form></div></div>
 
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places&callback=initMap" defer></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD33ys3G9-hHG0aw34EQByXecK3c7oEbFo&libraries=places&callback=initMap" defer></script>
     <script src="script.js"></script>
 </body>
 </html>
