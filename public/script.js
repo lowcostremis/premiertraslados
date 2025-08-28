@@ -1,13 +1,11 @@
 // ===================================================================================
-// CONFIGURACIÓN DE FIREBASE - ¡CORREGIDA!
-// Apuntamos al proyecto correcto "premiertraslados-31ee2" 
-// Esta era la causa principal de los errores de permisos y datos.
+// CONFIGURACIÓN DE FIREBASE
 // ===================================================================================
 const firebaseConfig = {
      apiKey: "AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk",
   authDomain: "premiertraslados-31ee2.firebaseapp.com",
   projectId: "premiertraslados-31ee2",
-  storageBucket: "premiertraslados-31ee2.firebasestorage.app",
+  storageBucket: "premiertraslados-31ee2.appspot.com",
   messagingSenderId: "398176651975",
   appId: "1:398176651975:web:ab2bc9ab16da98c77ccce2"
 };
@@ -37,11 +35,12 @@ let mapaModal;
 let marcadorOrigenModal = null;
 let marcadorDestinoModal = null;
 let geocoder;
+// TAREA 1: Variable para el estado del filtro del mapa
+let filtroMapaActual = 'Todos';
 
 
 // ===================================================================================
 // LÓGICA DE AUTENTICACIÓN
-// Esta estructura es correcta. Carga la aplicación solo después de confirmar el login.
 // ===================================================================================
 auth.onAuthStateChanged(user => {
     const authSection = document.getElementById('auth-section');
@@ -50,11 +49,10 @@ auth.onAuthStateChanged(user => {
         authSection.style.display = 'none';
         appContent.style.display = 'block';
         document.getElementById('user-email-display').textContent = user.email;
-        initApp(); // Inicializa la app solo si el usuario está logueado.
+        initApp();
     } else {
         authSection.style.display = 'flex';
         appContent.style.display = 'none';
-        // Limpiamos los listeners para evitar errores cuando se cierra sesión.
         if (unsubscribeReservas) unsubscribeReservas();
         adminListeners.forEach(unsubscribe => unsubscribe());
         adminListeners = [];
@@ -72,15 +70,11 @@ document.getElementById('logout-btn').addEventListener('click', () => auth.signO
 
 // INICIALIZACIÓN DE LA APP
 function initApp() {
-    // Inicializamos Geocoder una sola vez aquí para que esté disponible para todo.
-    if (!geocoder) {
-        geocoder = new google.maps.Geocoder();
-    }
+    if (!geocoder) geocoder = new google.maps.Geocoder();
     loadAuxData();
     attachEventListeners();
     listenToReservas();
     initializeAdminLists();
-    // Inicializamos el mapa principal de la pestaña "Mapa"
     initMap();
 }
 
@@ -127,16 +121,13 @@ function loadAuxData() {
     });
 }
 
-// LÓGICA DE RESERVAS Y EDICIÓN DIRECTA
+// LÓGICA DE RESERVAS
 function listenToReservas() {
     if (unsubscribeReservas) unsubscribeReservas();
     unsubscribeReservas = db.collection('reservas').orderBy("creadoEn", "desc").onSnapshot(snapshot => {
         lastReservasSnapshot = snapshot;
         renderAllReservas(snapshot);
-        // Actualizamos los marcadores del mapa cada vez que cambian las reservas
-        if (map) {
-            cargarMarcadoresDeReservas();
-        }
+        if (map) cargarMarcadoresDeReservas();
     }, err => console.error("Error escuchando reservas:", err));
 }
 
@@ -162,6 +153,9 @@ function renderAllReservas(snapshot) {
     });
 }
 
+// =========================================================================
+// TAREA 2 y 3: RENDERIZADO DE FILA CON NUEVO MENÚ DE ACCIONES
+// =========================================================================
 function renderFilaReserva(tbody, reserva) {
     const cliente = clientesCache[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
     const row = tbody.insertRow();
@@ -179,25 +173,37 @@ function renderFilaReserva(tbody, reserva) {
     }
 
     const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
-    const isEditable = ['tabla-en-curso', 'tabla-pendientes'].includes(tbody.parentElement.id);
+    const isEditable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes';
     const isAsignado = tbody.parentElement.id === 'tabla-asignados';
     const isHistorico = tbody.parentElement.id === 'tabla-historico';
 
     let accionesHTML = '';
     if (isHistorico) {
         const choferAsignado = choferesCache.find(c => c.id === reserva.chofer_asignado_id);
-        accionesHTML = choferAsignado ? choferAsignado.nombre : 'No asignado';
+        accionesHTML = `<td>${choferAsignado ? choferAsignado.nombre : 'No asignado'}</td>`;
     } else {
-        let acciones = `<button onclick="openEditReservaModal('${reserva.id}')">Editar</button>`;
-        if (isEditable) { // Pendientes y En Curso
-            acciones += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Asignar...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
-            acciones += `<button class="btn-warning" onclick="changeReservaState('${reserva.id}', 'Anulado')">Anular</button>`;
+        let menuItems = `<a href="#" onclick="openEditReservaModal('${reserva.id}'); return false;">Editar</a>`;
+
+        if (isEditable) { // En Curso y Pendientes
+            menuItems += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Asignar Chofer...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
+            menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular</a>`;
         } else if (isAsignado) {
-            acciones += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Reasignar...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
-            acciones += `<button onclick="finalizarReserva('${reserva.id}')">Finalizar</button>`;
-            acciones += `<button class="btn-danger" onclick="changeReservaState('${reserva.id}', 'Negativo')">Negativo</button>`;
+            menuItems += `<a href="#" onclick="finalizarReserva('${reserva.id}'); return false;">Finalizar</a>`;
+            menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Negativo'); return false;">Marcar Negativo</a>`;
+            menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular Viaje</a>`;
+            menuItems += `<a href="#" onclick="quitarAsignacion('${reserva.id}'); return false;">Quitar Móvil</a>`;
+            menuItems += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Reasignar...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
         }
-        accionesHTML = acciones;
+        
+        accionesHTML = `
+            <td class="acciones">
+                <div class="acciones-dropdown">
+                    <button class="icono-tres-puntos" onclick="toggleMenu(event)">⋮</button>
+                    <div class="menu-contenido">
+                        ${menuItems}
+                    </div>
+                </div>
+            </td>`;
     }
 
     row.innerHTML = `
@@ -213,8 +219,7 @@ function renderFilaReserva(tbody, reserva) {
         <td class="editable-cell zona-cell"></td>
         <td>${cliente.nombre}</td>
         <td>${reserva.estado || 'Pendiente'}</td>
-        <td class="acciones">${isHistorico ? '' : accionesHTML}</td>
-        ${isHistorico ? `<td>${accionesHTML}</td>` : ''}
+        ${accionesHTML}
     `;
     
     const pickupCell = row.querySelector('.pickup-cell');
@@ -256,8 +261,6 @@ async function openEditReservaModal(reservaId) {
     document.getElementById('reserva-id').value = reservaId;
     document.getElementById('modal-title').textContent = 'Editar Reserva';
     document.getElementById('reserva-modal').style.display = 'block';
-
-    // Pasamos las coordenadas existentes al mapa del modal
     setTimeout(() => initMapaModal(data.origen_coords, data.destino_coords), 100);
 }
 
@@ -304,6 +307,42 @@ async function finalizarReserva(reservaId) {
     }
 }
 
+// TAREA 2: Función para mostrar/ocultar el menú
+function toggleMenu(event) {
+    event.stopPropagation();
+    document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
+        if (menu !== event.currentTarget.nextElementSibling) {
+            menu.classList.remove('visible');
+        }
+    });
+    event.currentTarget.nextElementSibling.classList.toggle('visible');
+}
+
+// TAREA 2: Cierra los menús si se hace clic fuera
+window.onclick = function(event) {
+   // La nueva lógica revisa si el clic ocurrió FUERA del contenedor del menú
+    if (!event.target.closest('.acciones-dropdown')) {
+        document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
+            menu.classList.remove('visible');
+        });
+    }
+}
+
+// TAREA 3: NUEVA FUNCIÓN PARA QUITAR ASIGNACIÓN
+async function quitarAsignacion(reservaId) {
+    if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
+        try {
+            await db.collection('reservas').doc(reservaId).update({
+                estado: 'En Curso',
+                chofer_asignado_id: firebase.firestore.FieldValue.delete()
+            });
+        } catch (error) {
+            console.error("Error al quitar asignación:", error);
+            alert("Hubo un error al actualizar la reserva.");
+        }
+    }
+}
+
 // MANEJO DE EVENTOS
 function attachEventListeners() {
     const modal = document.getElementById('reserva-modal');
@@ -314,8 +353,7 @@ function attachEventListeners() {
         document.getElementById('modal-title').textContent = 'Nueva Reserva';
         document.getElementById('reserva-id').value = '';
         modal.style.display = 'block';
-        // Usamos un setTimeout para asegurar que el div del mapa sea visible antes de inicializarlo
-        setTimeout(initMapaModal, 100); 
+        setTimeout(() => initMapaModal(null, null), 100); 
     });
 
     closeBtn.onclick = () => modal.style.display = 'none';
@@ -346,9 +384,15 @@ async function handleSaveReserva(e) {
     }
     try {
         if (reservaId) { await db.collection('reservas').doc(reservaId).update(reservaData); } else { await db.collection('reservas').add(reservaData); }
-        if (reservaData.dni_pasajero) {
+        
+        // CORRECCIÓN: Solo guardamos el domicilio de ORIGEN si existe.
+        if (reservaData.dni_pasajero && reservaData.origen) {
             const pasajeroRef = db.collection('pasajeros').doc(reservaData.dni_pasajero);
-            const pasajeroData = { nombre_apellido: reservaData.nombre_pasajero, telefono: reservaData.telefono_pasajero, domicilios: firebase.firestore.FieldValue.arrayUnion(reservaData.origen) };
+            const pasajeroData = { 
+                nombre_apellido: reservaData.nombre_pasajero, 
+                telefono: reservaData.telefono_pasajero,
+                domicilios: firebase.firestore.FieldValue.arrayUnion(reservaData.origen) 
+            };
             await pasajeroRef.set(pasajeroData, { merge: true });
         }
         document.getElementById('reserva-modal').style.display = 'none';
@@ -519,7 +563,6 @@ function openTab(evt, tabName) {
     document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active'));
     document.getElementById(tabName).style.display = "block";
     if (evt) evt.currentTarget.classList.add('active');
-    // Si la pestaña que se abre es la del mapa, nos aseguramos que esté inicializado
     if (tabName === 'Mapa' && !map) {
         initMap();
     }
@@ -535,21 +578,16 @@ function showReservasTab(tabName) {
 // --- FUNCIONES DEL MAPA ---
 
 function initMap() {
-    // Evitamos reinicializar el mapa si ya existe.
     if (map || !document.getElementById("map-container")) return;
-    
     map = new google.maps.Map(document.getElementById("map-container"), { 
-        center: { lat: -32.9566, lng: -60.6577 }, // Rosario, Argentina
-        zoom: 14 
+        center: { lat: -32.9566, lng: -60.6577 },
+        zoom: 12 
     });
-    
-    // La carga de marcadores ahora se dispara desde el listener de reservas.
 }
 
 function initAutocomplete() {
      const origenInput = document.getElementById('origen');
     const destinoInput = document.getElementById('destino');
-    // Opciones para limitar la búsqueda a Argentina.
     const options = { componentRestrictions: { country: "ar" }, fields: ["formatted_address", "geometry", "name"] };
     
     autocompleteOrigen = new google.maps.places.Autocomplete(origenInput, options);
@@ -578,39 +616,32 @@ function initAutocomplete() {
     });
 }
 
-
+// TAREA 1: CARGA DE MARCADORES CON FILTROS Y COLORES
 function cargarMarcadoresDeReservas() {
-    // Si el mapa no está listo, no hacemos nada.
-    if (!map) return;
+    if (!map || !lastReservasSnapshot) return;
 
-    // Limpiamos los marcadores existentes para no duplicarlos.
     Object.values(marcadoresOrigen).forEach(marker => marker.setMap(null));
     marcadoresOrigen = {};
-
-    // La consulta a la base de datos ya la hacemos en `listenToReservas`.
-    // Simplemente procesamos los datos que ya tenemos.
-    if (!lastReservasSnapshot) return;
 
     lastReservasSnapshot.forEach(doc => {
         const reserva = { id: doc.id, ...doc.data() };
         
-        // Solo procesamos reservas con estado activo.
         const estadosActivos = ['En Curso', 'Asignado', 'Pendiente'];
-        if (!estadosActivos.includes(reserva.estado)) {
-            return;
-        }
-
-        // Para que se muestre el marcador, la reserva DEBE tener el campo 'origen_coords'.
+        if (!estadosActivos.includes(reserva.estado)) return;
+        if (filtroMapaActual !== 'Todos' && reserva.estado !== filtroMapaActual) return;
+        
         if (reserva.origen_coords && reserva.origen_coords.latitude) {
-            
+            let iconUrl = 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'; // Rojo por defecto
+            if (reserva.estado === 'Asignado') {
+                iconUrl = 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'; // Verde para asignados
+            }
+
             const marker = new google.maps.Marker({
                 position: { lat: reserva.origen_coords.latitude, lng: reserva.origen_coords.longitude },
                 map: map,
-                title: `Origen: ${reserva.origen}`,
-                // Icono sugerido para origen
-                icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png' 
+                title: `Origen: ${reserva.origen} (${reserva.estado})`,
+                icon: iconUrl
             });
-
             marcadoresOrigen[reserva.id] = marker;
 
             marker.addListener('click', () => {
@@ -639,8 +670,7 @@ function cargarMarcadoresDeReservas() {
                         position: { lat: reserva.destino_coords.latitude, lng: reserva.destino_coords.longitude },
                         map: map,
                         title: `Destino: ${reserva.destino}`,
-                        // Icono sugerido para destino
-                        icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png' 
+                        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png' 
                     });
                 }
                 
@@ -655,28 +685,32 @@ function cargarMarcadoresDeReservas() {
     });
 }
 
+// TAREA 1: Nueva función para manejar los filtros del mapa
+function filtrarMapa(estado) {
+    filtroMapaActual = estado;
+    document.querySelectorAll('.map-filter-btn').forEach(btn => btn.classList.remove('active'));
+    const botonActivo = Array.from(document.querySelectorAll('.map-filter-btn')).find(btn => btn.textContent.includes(estado));
+    if(botonActivo) botonActivo.classList.add('active');
+    
+    cargarMarcadoresDeReservas();
+}
+
 function initMapaModal(origenCoords, destinoCoords) {
     const mapaContainer = document.getElementById("mapa-modal-container");
-    // Si el contenedor no existe en el DOM, no hacemos nada.
     if (!mapaContainer) return;
 
-    // Inicializamos el mapa solo si no existe.
     if (!mapaModal) {
         mapaModal = new google.maps.Map(mapaContainer, { 
             center: { lat: -32.95, lng: -60.65 }, 
             zoom: 13 
         });
-        // Inicializamos los autocompletadores la primera vez que se abre el modal
         initAutocomplete();
     }
 
-    // Limpiamos marcadores previos
     if (marcadorOrigenModal) marcadorOrigenModal.setMap(null);
     if (marcadorDestinoModal) marcadorDestinoModal.setMap(null);
 
-    // Posición por defecto si no hay coordenadas guardadas
     const centroPorDefecto = { lat: -32.95, lng: -60.65 };
-
     const posOrigen = (origenCoords && origenCoords.latitude) 
         ? { lat: origenCoords.latitude, lng: origenCoords.longitude }
         : centroPorDefecto;
@@ -685,8 +719,7 @@ function initMapaModal(origenCoords, destinoCoords) {
         position: posOrigen,
         map: mapaModal,
         draggable: true,
-        // Icono sugerido para origen
-        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+        icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
     });
 
     const posDestino = (destinoCoords && destinoCoords.latitude) 
@@ -697,11 +730,9 @@ function initMapaModal(origenCoords, destinoCoords) {
         position: posDestino,
         map: mapaModal,
         draggable: true,
-        // Icono sugerido para destino
-        icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
     });
     
-    // Centramos el mapa entre los dos puntos si ambos existen
     if(origenCoords && destinoCoords) {
         const bounds = new google.maps.LatLngBounds();
         bounds.extend(posOrigen);
@@ -721,10 +752,7 @@ function initMapaModal(origenCoords, destinoCoords) {
 }
 
 function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
-    if (!geocoder) {
-        console.error("Geocoder no inicializado.");
-        return;
-    }
+    if (!geocoder) { console.error("Geocoder no inicializado."); return; }
     geocoder.geocode({ 'location': latLng }, (results, status) => {
         if (status === 'OK') {
             if (results[0]) {
