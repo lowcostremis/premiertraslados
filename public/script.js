@@ -21,11 +21,7 @@ const functions = firebase.functions();
 // ===================================================================================
 
 let historialBody, btnAnterior, btnSiguiente, indicadorPagina;
-<<<<<<< HEAD
 const registrosPorPagina = 100; // <-- MODIFICADO A 100
-=======
-const registrosPorPagina = 15;
->>>>>>> 94f3aa942f495cd1172db21733a5b3d9d82f13fc
 let ultimoDocVisible = null;
 let historialDePaginas = [null];
 let paginaActual = 0;
@@ -103,7 +99,6 @@ function actualizarEstadoBotonesPaginacion(cantidadDocsRecibidos) {
 }
 
 // ===================================================================================
-<<<<<<< HEAD
 // LÓGICA DE PAGINACIÓN PARA PASAJEROS (NUEVO)
 // ===================================================================================
 let pasajerosBody, pasajerosBtnAnterior, pasajerosBtnSiguiente, pasajerosIndicadorPagina;
@@ -171,8 +166,6 @@ async function cargarPasajeros() {
 
 
 // ===================================================================================
-=======
->>>>>>> 94f3aa942f495cd1172db21733a5b3d9d82f13fc
 // VARIABLES GLOBALES Y LÓGICA PRINCIPAL
 // ===================================================================================
 
@@ -743,10 +736,6 @@ async function editItem(collection, id) {
         doc = await db.collection(collection).doc(id).get();
     }
     
-<<<<<<< HEAD
-=======
-    // CORRECCIÓN: Se usa la propiedad '.exists' en lugar del método '.exists()'
->>>>>>> 94f3aa942f495cd1172db21733a5b3d9d82f13fc
     if (!doc.exists) {
         alert("Error: No se encontró el item.");
         return;
@@ -862,15 +851,12 @@ function openTab(evt, tabName) {
         historialDePaginas = [null];
         cargarHistorial();
     }
-<<<<<<< HEAD
 
     if (tabName === 'Pasajeros' && !document.getElementById('lista-pasajeros').hasChildNodes()) {
         pasajerosPaginaActual = 0;
         pasajerosHistorialDePaginas = [null];
         cargarPasajeros();
     }
-=======
->>>>>>> 94f3aa942f495cd1172db21733a5b3d9d82f13fc
 }
 
 function showReservasTab(tabName) {
@@ -1062,10 +1048,7 @@ function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
 
 // INICIALIZACIÓN POR DEFECTO DE LAS PESTAÑAS
 document.addEventListener('DOMContentLoaded', () => {
-<<<<<<< HEAD
     // Historial
-=======
->>>>>>> 94f3aa942f495cd1172db21733a5b3d9d82f13fc
     historialBody = document.getElementById('historial-body');
     btnAnterior = document.getElementById('btn-anterior');
     btnSiguiente = document.getElementById('btn-siguiente');
@@ -1089,7 +1072,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-<<<<<<< HEAD
 
     // Pasajeros (NUEVO)
     pasajerosBody = document.getElementById('lista-pasajeros');
@@ -1115,8 +1097,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-=======
->>>>>>> 94f3aa942f495cd1172db21733a5b3d9d82f13fc
 });
 
 // Esta es la función de entrada principal que llama la API de Google Maps.
@@ -1127,8 +1107,4 @@ function initMap() {
             zoom: 12 
         });
     }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> 94f3aa942f495cd1172db21733a5b3d9d82f13fc
