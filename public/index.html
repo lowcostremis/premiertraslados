@@ -33,6 +33,7 @@
         <nav class="main-nav">
             <button class="tab-link active" onclick="openTab(event, 'Reservas')">Reservas</button>
             <button class="tab-link" onclick="openTab(event, 'Mapa')">Mapa</button>
+            <button class="tab-link" onclick="openTab(event, 'Historico')">Histórico</button>
             <button class="tab-link" onclick="openTab(event, 'Clientes')">Clientes</button>
             <button class="tab-link" onclick="openTab(event, 'Pasajeros')">Pasajeros</button>
             <button class="tab-link" onclick="openTab(event, 'Choferes')">Choferes</button>
@@ -47,13 +48,37 @@
                 <button class="sub-tab-btn active" data-tab="en-curso" onclick="showReservasTab('en-curso')">En Curso</button>
                 <button class="sub-tab-btn" data-tab="pendientes" onclick="showReservasTab('pendientes')">Pendientes</button>
                 <button class="sub-tab-btn" data-tab="asignados" onclick="showReservasTab('asignados')">Asignados</button>
-                <button class="sub-tab-btn" data-tab="historico" onclick="showReservasTab('historico')">Histórico</button>
             </nav>
             <div class="reservas-container" id="reservas-en-curso"><div class="table-wrapper"><table id="tabla-en-curso"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
             <div class="reservas-container" id="reservas-pendientes" style="display:none;"><div class="table-wrapper"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
             <div class="reservas-container" id="reservas-asignados" style="display:none;"><div class="table-wrapper"><table id="tabla-asignados"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
-            <div class="reservas-container" id="reservas-historico" style="display:none;"><div class="table-wrapper"><table id="tabla-historico"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Chofer</th></tr></thead><tbody></tbody></table></div></div>
         </div>
+
+        <div id="Historico" class="tab-content" style="display:none;">
+            <h2>Historial de Viajes</h2>
+            <div class="table-wrapper">
+                <table id="tabla-historico">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Cliente</th>
+                            <th>Origen</th>
+                            <th>Destino</th>
+                            <!-- CORRECCIÓN: Se añade la columna Estado -->
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historial-body">
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination-controls">
+                <button id="btn-anterior" disabled>Anterior</button>
+                <span id="indicador-pagina">Página 1</span>
+                <button id="btn-siguiente">Siguiente</button>
+            </div>
+        </div>
+
 
         <div id="Mapa" class="tab-content" style="display:none;">
             <div id="map-filters">
@@ -105,6 +130,7 @@
                             <option value="4">4 Pasajeros</option>
                         </select>
                         <select id="zona" name="zona"><option value="">Seleccionar Zona...</option></select>
+                        <!-- CORRECCIÓN: Se elimina el campo de precio -->
                     </div>
                     <textarea id="observaciones" name="observaciones" placeholder="Observaciones (máx 100 caracteres)" maxlength="100"></textarea>
                     <button type="submit" class="btn-primary">Guardar Reserva</button>

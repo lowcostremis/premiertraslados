@@ -2,12 +2,12 @@
 // CONFIGURACIÓN DE FIREBASE
 // ===================================================================================
 const firebaseConfig = {
-     apiKey: "AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk",
-  authDomain: "premiertraslados-31ee2.firebaseapp.com",
-  projectId: "premiertraslados-31ee2",
-  storageBucket: "premiertraslados-31ee2.appspot.com",
-  messagingSenderId: "398176651975",
-  appId: "1:398176651975:web:ab2bc9ab16da98c77ccce2"
+    apiKey: "AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk",
+    authDomain: "premiertraslados-31ee2.firebaseapp.com",
+    projectId: "premiertraslados-31ee2",
+    storageBucket: "premiertraslados-31ee2.appspot.com",
+    messagingSenderId: "398176651975",
+    appId: "1:398176651975:web:ab2bc9ab16da98c77ccce2"
 };
 
 // INICIALIZACIÓN DE SERVICIOS
@@ -16,7 +16,92 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const functions = firebase.functions();
 
-// VARIABLES GLOBALES
+// ===================================================================================
+// LÓGICA DE PAGINACIÓN PARA HISTÓRICO
+// ===================================================================================
+
+let historialBody, btnAnterior, btnSiguiente, indicadorPagina;
+const registrosPorPagina = 15;
+let ultimoDocVisible = null;
+let historialDePaginas = [null];
+let paginaActual = 0;
+
+async function cargarHistorial() {
+    if (!historialBody) return;
+    try {
+        historialBody.innerHTML = '<tr><td colspan="5">Cargando historial...</td></tr>';
+        btnAnterior.disabled = true;
+        btnSiguiente.disabled = true;
+
+        let query = db.collection('historico').orderBy('archivadoEn', 'desc');
+
+        const cursor = historialDePaginas[paginaActual];
+        if (cursor) {
+            query = query.startAfter(cursor);
+        }
+
+        query = query.limit(registrosPorPagina);
+
+        const querySnapshot = await query.get();
+        const documentos = querySnapshot.docs;
+
+        if (documentos.length === 0 && paginaActual === 0) {
+            historialBody.innerHTML = '<tr><td colspan="5">No hay viajes en el historial.</td></tr>';
+            actualizarEstadoBotonesPaginacion(0);
+            return;
+        }
+
+        if (documentos.length > 0) {
+            ultimoDocVisible = documentos[documentos.length - 1];
+        }
+        
+        mostrarDatosHistorialEnTabla(documentos);
+        actualizarEstadoBotonesPaginacion(documentos.length);
+
+    } catch (error) {
+        console.error("Error al cargar el historial: ", error);
+        historialBody.innerHTML = '<tr><td colspan="5">Error al cargar los datos.</td></tr>';
+    }
+}
+
+function mostrarDatosHistorialEnTabla(documentos) {
+    historialBody.innerHTML = '';
+    documentos.forEach(doc => {
+        const viaje = doc.data();
+        const fecha = viaje.fecha_turno ? new Date(viaje.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : 'N/A';
+
+        let estiloFila = '';
+        if (viaje.estado === 'Negativo') {
+            estiloFila = 'style="background-color: #FFDE59; color: #333;"';
+        } else if (viaje.estado === 'Anulado') {
+            estiloFila = 'style="text-decoration: line-through;"';
+        }
+
+        const fila = `
+            <tr class="border-b border-gray-700 hover:bg-gray-800" ${estiloFila}>
+                <td class="px-4 py-3">${fecha}</td>
+                <td class="px-4 py-3">${viaje.clienteNombre || 'N/A'}</td>
+                <td class="px-4 py-3">${viaje.origen || 'N/A'}</td>
+                <td class="px-4 py-3">${viaje.destino || 'N/A'}</td>
+                <td class="px-4 py-3">${viaje.estado || 'N/A'}</td>
+            </tr>
+        `;
+        historialBody.innerHTML += fila;
+    });
+}
+
+function actualizarEstadoBotonesPaginacion(cantidadDocsRecibidos) {
+    btnAnterior.disabled = (paginaActual === 0);
+    btnSiguiente.disabled = (cantidadDocsRecibidos < registrosPorPagina);
+    if (indicadorPagina) {
+        indicadorPagina.textContent = `Página ${paginaActual + 1}`;
+    }
+}
+
+// ===================================================================================
+// VARIABLES GLOBALES Y LÓGICA PRINCIPAL
+// ===================================================================================
+
 let map;
 let autocompleteOrigen, autocompleteDestino;
 let clientesCache = {};
@@ -26,22 +111,15 @@ let movilesCache = [];
 let unsubscribeReservas;
 let adminListeners = [];
 let lastReservasSnapshot = null;
-
-// VARIABLES GLOBALES PARA EL MAPA
-let marcadoresOrigen = {};
-let marcadorDestinoActivo = null;
-let infoWindowActiva = null;
-let mapaModal;
-let marcadorOrigenModal = null;
-let marcadorDestinoModal = null;
-let geocoder;
+let mapaModal, marcadorOrigenModal, marcadorDestinoModal, geocoder;
 let filtroMapaActual = 'Todos';
 let refrescoAutomaticoIntervalo;
 
+let marcadoresOrigen = {};
+let marcadorDestinoActivo = null;
+let infoWindowActiva = null;
 
-// ===================================================================================
 // LÓGICA DE AUTENTICACIÓN
-// ===================================================================================
 auth.onAuthStateChanged(user => {
     const authSection = document.getElementById('auth-section');
     const appContent = document.getElementById('app-content');
@@ -56,9 +134,8 @@ auth.onAuthStateChanged(user => {
         if (unsubscribeReservas) unsubscribeReservas();
         adminListeners.forEach(unsubscribe => unsubscribe());
         adminListeners = [];
-         // AÑADIDO: Detiene el reloj al cerrar sesión
         if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
-        }
+    }
 });
 
 document.getElementById('login-btn').addEventListener('click', () => {
@@ -77,16 +154,17 @@ function initApp() {
     attachEventListeners();
     listenToReservas();
     initializeAdminLists();
-    initMap();
-     // AÑADIDO: Inicia el refresco automático cada minuto
-    if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
+    initMap(); 
     
+    if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     refrescoAutomaticoIntervalo = setInterval(() => {
-        console.log("Refrescando listas de reservas por tiempo...");
         if (lastReservasSnapshot) {
             renderAllReservas(lastReservasSnapshot);
         }
-    }, 60000); // 60000 milisegundos = 1 minuto
+    }, 60000);
+
+    openTab(null, 'Reservas');
+    showReservasTab('en-curso');
 }
 
 // CARGA DE DATOS AUXILIARES
@@ -147,7 +225,6 @@ function renderAllReservas(snapshot) {
         'tabla-en-curso': document.querySelector('#tabla-en-curso tbody'),
         'tabla-pendientes': document.querySelector('#tabla-pendientes tbody'),
         'tabla-asignados': document.querySelector('#tabla-asignados tbody'),
-        'tabla-historico': document.querySelector('#tabla-historico tbody'),
     };
     Object.values(bodies).forEach(body => { if(body) body.innerHTML = ''; });
     const ahora = new Date();
@@ -156,11 +233,19 @@ function renderAllReservas(snapshot) {
         const reserva = { id: doc.id, ...doc.data() };
         const fechaTurno = reserva.fecha_turno ? new Date(`${reserva.fecha_turno}T${reserva.hora_turno || '00:00'}`) : null;
         let targetTableId = '';
-        if (['Finalizado', 'Anulado', 'Negativo'].includes(reserva.estado)) targetTableId = 'tabla-historico';
-        else if (reserva.chofer_asignado_id) targetTableId = 'tabla-asignados';
-        else if (fechaTurno && fechaTurno > limite24hs) targetTableId = 'tabla-pendientes';
-        else targetTableId = 'tabla-en-curso';
-        if (targetTableId && bodies[targetTableId]) renderFilaReserva(bodies[targetTableId], reserva);
+        
+        if (['Finalizado', 'Anulado', 'Negativo'].includes(reserva.estado)) {
+        } else if (reserva.chofer_asignado_id) {
+            targetTableId = 'tabla-asignados';
+        } else if (fechaTurno && fechaTurno > limite24hs) {
+            targetTableId = 'tabla-pendientes';
+        } else {
+            targetTableId = 'tabla-en-curso';
+        }
+
+        if (targetTableId && bodies[targetTableId]) {
+            renderFilaReserva(bodies[targetTableId], reserva);
+        }
     });
 }
 
@@ -183,36 +268,30 @@ function renderFilaReserva(tbody, reserva) {
     const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
     const isEditable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes';
     const isAsignado = tbody.parentElement.id === 'tabla-asignados';
-    const isHistorico = tbody.parentElement.id === 'tabla-historico';
-
+    
     let accionesHTML = '';
-    if (isHistorico) {
-        const choferAsignado = choferesCache.find(c => c.id === reserva.chofer_asignado_id);
-        accionesHTML = `<td>${choferAsignado ? choferAsignado.nombre : 'No asignado'}</td>`;
-    } else {
-        let menuItems = `<a href="#" onclick="openEditReservaModal('${reserva.id}'); return false;">Editar</a>`;
+    let menuItems = `<a href="#" onclick="openEditReservaModal('${reserva.id}'); return false;">Editar</a>`;
 
-        if (isEditable) { // En Curso y Pendientes
-            menuItems += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Asignar Chofer...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
-            menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular</a>`;
-        } else if (isAsignado) {
-            menuItems += `<a href="#" onclick="finalizarReserva('${reserva.id}'); return false;">Finalizar</a>`;
-            menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Negativo'); return false;">Marcar Negativo</a>`;
-            menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular Viaje</a>`;
-            menuItems += `<a href="#" onclick="quitarAsignacion('${reserva.id}'); return false;">Quitar Móvil</a>`;
-            menuItems += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Reasignar...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
-        }
-        
-        accionesHTML = `
-            <td class="acciones">
-                <div class="acciones-dropdown">
-                    <button class="icono-tres-puntos" onclick="toggleMenu(event)">⋮</button>
-                    <div class="menu-contenido">
-                        ${menuItems}
-                    </div>
-                </div>
-            </td>`;
+    if (isEditable) {
+        menuItems += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Asignar Chofer...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
+        menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular</a>`;
+    } else if (isAsignado) {
+        menuItems += `<a href="#" onclick="finalizarReserva('${reserva.id}'); return false;">Finalizar</a>`;
+        menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Negativo'); return false;">Marcar Negativo</a>`;
+        menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular Viaje</a>`;
+        menuItems += `<a href="#" onclick="quitarAsignacion('${reserva.id}'); return false;">Quitar Móvil</a>`;
+        menuItems += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Reasignar...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
     }
+    
+    accionesHTML = `
+        <td class="acciones">
+            <div class="acciones-dropdown">
+                <button class="icono-tres-puntos" onclick="toggleMenu(event)">⋮</button>
+                <div class="menu-contenido">
+                    ${menuItems}
+                </div>
+            </div>
+        </td>`;
 
     row.innerHTML = `
         <td>${reserva.autorizacion || ''}</td>
@@ -273,7 +352,12 @@ async function openEditReservaModal(reservaId) {
 }
 
 async function changeReservaState(reservaId, newState) {
-    if (confirm(`¿Estás seguro de que quieres marcar esta reserva como "${newState}"?`)) {
+    const finalStates = ['Anulado', 'Negativo'];
+    if (finalStates.includes(newState)) {
+        if (confirm(`¿Estás seguro de que quieres marcar esta reserva como "${newState}"?`)) {
+            await moverReservaAHistorico(reservaId, newState);
+        }
+    } else {
         try {
             await db.collection('reservas').doc(reservaId).update({ estado: newState });
         } catch (error) {
@@ -311,7 +395,7 @@ async function asignarChofer(reservaId, choferId) {
 
 async function finalizarReserva(reservaId) {
     if (confirm("¿Marcar esta reserva como finalizada?")) {
-        await db.collection('reservas').doc(reservaId).update({ estado: 'Finalizado' }).catch(err => alert("Error: " + err.message));
+        await moverReservaAHistorico(reservaId, 'Finalizado');
     }
 }
 
@@ -347,6 +431,40 @@ async function quitarAsignacion(reservaId) {
     }
 }
 
+async function moverReservaAHistorico(reservaId, estadoFinal) {
+    const reservaRef = db.collection('reservas').doc(reservaId);
+    const historicoRef = db.collection('historico').doc(reservaId);
+
+    try {
+        const doc = await reservaRef.get();
+        if (!doc.exists) {
+            console.error("No se encontró la reserva para archivar.");
+            return;
+        }
+
+        const reservaData = doc.data();
+        
+        reservaData.estado = estadoFinal;
+        reservaData.archivadoEn = firebase.firestore.FieldValue.serverTimestamp();
+        
+        if (clientesCache[reservaData.cliente]) {
+            reservaData.clienteNombre = clientesCache[reservaData.cliente].nombre;
+        } else {
+            reservaData.clienteNombre = 'Default';
+        }
+
+        await db.runTransaction(async (transaction) => {
+            transaction.set(historicoRef, reservaData);
+            transaction.delete(reservaRef);
+        });
+
+    } catch (error) {
+        console.error("Error al mover reserva a histórico:", error);
+        alert("Error al archivar la reserva.");
+    }
+}
+
+
 // MANEJO DE EVENTOS
 function attachEventListeners() {
     const modal = document.getElementById('reserva-modal');
@@ -381,7 +499,22 @@ async function handleSaveReserva(e) {
     e.preventDefault();
     const form = e.target;
     const reservaId = form['reserva-id'].value;
-    const reservaData = { cliente: form.cliente.value, siniestro: form.siniestro.value, autorizacion: form.autorizacion.value, dni_pasajero: form.dni_pasajero.value.trim(), nombre_pasajero: form.nombre_pasajero.value, telefono_pasajero: form.telefono_pasajero.value, fecha_turno: form.fecha_turno.value, hora_turno: form.hora_turno.value, hora_pickup: form.hora_pickup.value, origen: form.origen.value, destino: form.destino.value, cantidad_pasajeros: form.cantidad_pasajeros.value, zona: form.zona.value, observaciones: form.observaciones.value };
+    const reservaData = { 
+        cliente: form.cliente.value, 
+        siniestro: form.siniestro.value, 
+        autorizacion: form.autorizacion.value, 
+        dni_pasajero: form.dni_pasajero.value.trim(), 
+        nombre_pasajero: form.nombre_pasajero.value, 
+        telefono_pasajero: form.telefono_pasajero.value, 
+        fecha_turno: form.fecha_turno.value, 
+        hora_turno: form.hora_turno.value, 
+        hora_pickup: form.hora_pickup.value, 
+        origen: form.origen.value, 
+        destino: form.destino.value, 
+        cantidad_pasajeros: form.cantidad_pasajeros.value, 
+        zona: form.zona.value, 
+        observaciones: form.observaciones.value
+    };
     if(!reservaId) {
         reservaData.estado = 'Pendiente';
         reservaData.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
@@ -488,19 +621,25 @@ function renderAdminList(collectionName, containerId, fields, headers, useDocIdA
     adminListeners.push(unsubscribe);
 }
 
-// =========================================================================
-// MEJORA: Formulario de edición de chofer con lista de móviles
-// =========================================================================
 async function editItem(collection, id) {
     let doc;
     if (collection === 'users') {
         const userDoc = await db.collection('users').doc(id).get();
-        if (!userDoc.exists) { alert("Error: No se encontró el usuario en Firestore."); return; }
-        doc = { id: id, data: () => ({ ...userDoc.data(), uid: id }) };
+        if (!userDoc.exists) {
+            alert("Error: No se encontró el usuario en Firestore.");
+            return;
+        }
+        doc = { id: id, exists: true, data: () => ({ ...userDoc.data(), uid: id }) };
     } else {
         doc = await db.collection(collection).doc(id).get();
     }
-    if (!doc.exists()) { alert("Error: No se encontró el item."); return; }
+    
+    // CORRECCIÓN: Se usa la propiedad '.exists' en lugar del método '.exists()'
+    if (!doc.exists) {
+        alert("Error: No se encontró el item.");
+        return;
+    }
+    
     const data = doc.data();
     const form = document.getElementById('edit-form');
     form.innerHTML = '';
@@ -513,40 +652,30 @@ async function editItem(collection, id) {
         label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
         form.appendChild(label);
 
-        // MEJORA: Si el campo es 'movil_actual_id', creamos un <select>
         if (field === 'movil_actual_id' && collection === 'choferes') {
             const select = document.createElement('select');
             select.name = field;
-            
-            // Opción para desasignar
             let optionsHTML = '<option value="">Desasignar Móvil</option>';
-            
-            // Llenamos con los móviles que tenemos en caché
             movilesCache.forEach(movil => {
                 const selected = movil.id === data[field] ? 'selected' : '';
                 optionsHTML += `<option value="${movil.id}" ${selected}>N° ${movil.numero} (${movil.patente})</option>`;
             });
-            
             select.innerHTML = optionsHTML;
             form.appendChild(select);
-
+        } else if (field === 'color' && data.color !== undefined) {
+            const colorInput = document.createElement('input');
+            colorInput.type = 'color';
+            colorInput.name = field;
+            colorInput.value = data[field];
+            form.appendChild(colorInput);
         } else {
-            // Para todos los demás campos, creamos un <input> normal
             const input = document.createElement('input');
             input.name = field;
             input.value = data[field];
-            if (field === 'uid' || field === 'email' || field === 'creadoEn' || field === 'color') {
+            if (field === 'uid' || field === 'email' || field === 'creadoEn') {
                  input.disabled = true;
             }
-            if (field === 'color') {
-                const colorInput = document.createElement('input');
-                colorInput.type = 'color';
-                colorInput.name = field;
-                colorInput.value = data[field];
-                form.appendChild(colorInput);
-            } else {
-                 form.appendChild(input);
-            }
+            form.appendChild(input);
         }
     });
     
@@ -597,14 +726,21 @@ async function deleteItem(collection, id) {
     }
 }
 
-// NAVEGACIÓN
+// NAVEGACIÓN Y MAPA
 function openTab(evt, tabName) {
     document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none");
     document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active'));
     document.getElementById(tabName).style.display = "block";
     if (evt) evt.currentTarget.classList.add('active');
+    
     if (tabName === 'Mapa' && !map) {
         initMap();
+    }
+    
+    if (tabName === 'Historico') {
+        paginaActual = 0;
+        historialDePaginas = [null];
+        cargarHistorial();
     }
 }
 
@@ -613,15 +749,6 @@ function showReservasTab(tabName) {
     document.getElementById(`reservas-${tabName}`).style.display = 'block';
     document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelector(`.sub-tab-btn[data-tab="${tabName}"]`).classList.add('active');
-}
-
-// --- FUNCIONES DEL MAPA ---
-function initMap() {
-    if (map || !document.getElementById("map-container")) return;
-    map = new google.maps.Map(document.getElementById("map-container"), { 
-        center: { lat: -32.9566, lng: -60.6577 },
-        zoom: 12 
-    });
 }
 
 function initAutocomplete() {
@@ -669,9 +796,9 @@ function cargarMarcadoresDeReservas() {
         if (filtroMapaActual !== 'Todos' && reserva.estado !== filtroMapaActual) return;
         
         if (reserva.origen_coords && reserva.origen_coords.latitude) {
-            let iconUrl = 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'; // Rojo por defecto
+            let iconUrl = 'http://maps.google.com/mapfiles/ms/icons/red-dot.png';
             if (reserva.estado === 'Asignado') {
-                iconUrl = 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'; // Verde para asignados
+                iconUrl = 'http://maps.google.com/mapfiles/ms/icons/green-dot.png';
             }
 
             const marker = new google.maps.Marker({
@@ -695,7 +822,7 @@ function cargarMarcadoresDeReservas() {
                         <p><strong>Pasajero:</strong> ${reserva.nombre_pasajero || 'N/A'}</p>
                         <p><strong>Origen:</strong> ${reserva.origen}</p>
                         <p><strong>Destino:</strong> ${reserva.destino}</p>
-                        <p><strong>Turno:</strong> ${new Date(reserva.fecha_turno + 'T' + reserva.hora_turno).toLocaleString('es-AR')}</p>
+                        <p><strong>Turno:</strong> ${new Date(reserva.fecha_turno + 'T' + (reserva.hora_turno || '00:00')).toLocaleString('es-AR')}</p>
                         <p><strong>Chofer:</strong> ${chofer.nombre}</p>
                     </div>
                 `;
@@ -722,6 +849,7 @@ function cargarMarcadoresDeReservas() {
         }
     });
 }
+
 
 function filtrarMapa(estado) {
     filtroMapaActual = estado;
@@ -805,6 +933,37 @@ function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
 
 // INICIALIZACIÓN POR DEFECTO DE LAS PESTAÑAS
 document.addEventListener('DOMContentLoaded', () => {
-    openTab(null, 'Reservas');
-    showReservasTab('en-curso');
+    historialBody = document.getElementById('historial-body');
+    btnAnterior = document.getElementById('btn-anterior');
+    btnSiguiente = document.getElementById('btn-siguiente');
+    indicadorPagina = document.getElementById('indicador-pagina');
+
+    if (btnSiguiente) {
+        btnSiguiente.addEventListener('click', () => {
+            if (paginaActual === historialDePaginas.length - 1) {
+                historialDePaginas.push(ultimoDocVisible);
+            }
+            paginaActual++;
+            cargarHistorial();
+        });
+    }
+
+    if (btnAnterior) {
+        btnAnterior.addEventListener('click', () => {
+            if (paginaActual > 0) {
+                paginaActual--;
+                cargarHistorial();
+            }
+        });
+    }
 });
+
+// Esta es la función de entrada principal que llama la API de Google Maps.
+function initMap() {
+    if (document.getElementById("map-container")) {
+         map = new google.maps.Map(document.getElementById("map-container"), { 
+            center: { lat: -32.9566, lng: -60.6577 },
+            zoom: 12 
+        });
+    }
+}
