@@ -51,8 +51,29 @@
                 <button class="sub-tab-btn" data-tab="asignados" onclick="showReservasTab('asignados')">Asignados</button>
             </nav>
 
-            <input type="search" id="busqueda-reservas" class="search-input" placeholder="🔎 Buscar en todas las reservas activas...">
-            <div id="resultados-busqueda-reservas" style="display:none;"></div>
+            <input type="search" id="busqueda-reservas" class="search-input" placeholder="🔎 Buscar por pasajero, origen, destino, siniestro...">
+            <div id="resultados-busqueda-reservas" style="display:none;" class="table-wrapper">
+                <table id="tabla-resultados-busqueda">
+                    <thead>
+                        <tr>
+                            <th>Autorización</th>
+                            <th>Siniestro</th>
+                            <th>Fecha</th>
+                            <th>Turno</th>
+                            <th>PickUp</th>
+                            <th>Pasajero</th>
+                            <th>Origen</th>
+                            <th>Destino</th>
+                            <th>Cant.</th>
+                            <th>Zona</th>
+                            <th>Cliente</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
 
             <div class="reservas-container" id="reservas-en-curso"><div class="table-wrapper"><table id="tabla-en-curso"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
             <div class="reservas-container" id="reservas-pendientes" style="display:none;"><div class="table-wrapper"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
@@ -109,7 +130,7 @@
 
             <form id="form-pasajeros" class="admin-form"><input type="text" name="dni" placeholder="DNI del Pasajero (obligatorio)" required><input type="text" name="nombre_apellido" placeholder="Nombre y Apellido"><input type="text" name="telefono" placeholder="Teléfono"><input type="text" name="domicilio" placeholder="Domicilio Principal"><button type="submit">Guardar Pasajero</button></form>
             <div id="lista-pasajeros" class="lista-admin"></div>
-            <div class="pagination-controls">
+            <div class="pagination-controls" id="paginacion-pasajeros">
                 <button id="pasajeros-btn-anterior" disabled>Anterior</button>
                 <span id="pasajeros-indicador-pagina">Página 1</span>
                 <button id="pasajeros-btn-siguiente">Siguiente</button>
