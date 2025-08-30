@@ -575,12 +575,18 @@ window.onclick = function(event) {
 }
 
 async function quitarAsignacion(reservaId) {
-    if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
+     if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
         try {
-            await db.collection('reservas').doc(reservaId).update({
+            const reservaRef = db.collection('reservas').doc(reservaId);
+            
+            // Actualiza el documento: cambia el estado y elimina el campo del chofer.
+            await reservaRef.update({
                 estado: 'En Curso',
                 chofer_asignado_id: firebase.firestore.FieldValue.delete()
             });
+
+            console.log(`Reserva ${reservaId} devuelta a 'En Curso'.`);
+
         } catch (error) {
             console.error("Error al quitar asignación:", error);
             alert("Hubo un error al actualizar la reserva.");
@@ -917,44 +923,113 @@ function initAutocomplete() {
         }
     });
 }
+/**
+ * Crea un icono de marcador SVG personalizado.
+ * @param {string} color - El color de fondo del marcador (ej. '#FF0000').
+ * @param {string} texto - El texto que se mostrará dentro del marcador (ej. '4' o '10:30').
+ * @returns {object} - Un objeto de icono para la API de Google Maps.
+ */
+function crearIconoDeMarcador(color, texto) {
+    const svg = `
+        <svg width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 48C18 48 36 33.375 36 18C36 8.05887 27.9411 0 18 0C8.05887 0 0 8.05887 0 18C0 33.375 18 48 18 48Z" fill="${color}"/>
+            <text x="18" y="21" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${texto}</text>
+        </svg>
+    `;
 
+    return {
+        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+        scaledSize: new google.maps.Size(36, 48),
+        anchor: new google.maps.Point(18, 48) // La punta del marcador
+    };
+}
 function cargarMarcadoresDeReservas() {
-    if (!map || !lastReservasSnapshot) return;
+  if (!map || !lastReservasSnapshot) return;
+
+    // Limpia marcadores anteriores
     Object.values(marcadoresOrigen).forEach(marker => marker.setMap(null));
     marcadoresOrigen = {};
+
+    const ahora = new Date();
+    const limite24hs = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
+
     lastReservasSnapshot.forEach(doc => {
         const reserva = { id: doc.id, ...doc.data() };
-        const estadosActivos = ['En Curso', 'Asignado', 'Pendiente'];
-        if (!estadosActivos.includes(reserva.estado)) return;
-        if (filtroMapaActual !== 'Todos' && reserva.estado !== filtroMapaActual) return;
-        if (reserva.origen_coords && reserva.origen_coords.latitude) {
-            let iconUrl = 'http://maps.google.com/mapfiles/ms/icons/red-dot.png';
-            if (reserva.estado === 'Asignado') {
-                iconUrl = 'http://maps.google.com/mapfiles/ms/icons/green-dot.png';
+        
+        let estadoEfectivo = reserva.estado;
+        const fechaTurno = reserva.fecha_turno ? new Date(`${reserva.fecha_turno}T${reserva.hora_turno || '00:00'}`) : null;
+
+        if (!reserva.chofer_asignado_id && reserva.estado === 'Pendiente') {
+            if (fechaTurno && fechaTurno <= limite24hs) {
+                estadoEfectivo = 'En Curso';
             }
+        }
+        
+        const estadosActivos = ['En Curso', 'Asignado', 'Pendiente'];
+        if (!estadosActivos.includes(estadoEfectivo)) return;
+        if (filtroMapaActual !== 'Todos' && estadoEfectivo !== filtroMapaActual) return;
+
+        if (reserva.origen_coords && reserva.origen_coords.latitude) {
+            
+            let colorMarcador = '#A9A9A9';
+            let textoMarcador = '';
+
+            switch (estadoEfectivo) {
+                case 'En Curso':
+                    colorMarcador = '#F54927'; // <-- CAMBIO DE COLOR: Rojo
+                    const hora = reserva.hora_pickup || reserva.hora_turno;
+                    if (hora) {
+                        textoMarcador = hora.substring(0, 5);
+                    }
+                    break;
+                case 'Asignado':
+                    colorMarcador = '#4DF527'; // <-- CAMBIO DE COLOR: Verde
+                    const chofer = choferesCache.find(c => c.id === reserva.chofer_asignado_id);
+                    if (chofer && chofer.movil_actual_id) {
+                        const movil = movilesCache.find(m => m.id === chofer.movil_actual_id);
+                        if (movil && movil.numero) {
+                            textoMarcador = movil.numero.toString();
+                        }
+                    }
+                    break;
+                case 'Pendiente':
+                    colorMarcador = '#BE27F5'; // <-- CAMBIO DE COLOR: Amarillo
+                    break;
+            }
+
+            const iconoPersonalizado = crearIconoDeMarcador(colorMarcador, textoMarcador);
+
             const marker = new google.maps.Marker({
                 position: { lat: reserva.origen_coords.latitude, lng: reserva.origen_coords.longitude },
                 map: map,
-                title: `Origen: ${reserva.origen} (${reserva.estado})`,
-                icon: iconUrl
+                title: `Origen: ${reserva.origen} (${estadoEfectivo})`,
+                icon: iconoPersonalizado
             });
+
             marcadoresOrigen[reserva.id] = marker;
+
             marker.addListener('click', () => {
                 if (infoWindowActiva) infoWindowActiva.close();
                 if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null);
+
                 const cliente = clientesCache[reserva.cliente] || { nombre: 'N/A' };
-                const chofer = choferesCache.find(c => c.id === reserva.chofer_asignado_id) || { nombre: 'No asignado' };
-                const contenido = `<div class="info-window"><h4>Reserva de: ${cliente.nombre}</h4><p><strong>Pasajero:</strong> ${reserva.nombre_pasajero || 'N/A'}</p><p><strong>Origen:</strong> ${reserva.origen}</p><p><strong>Destino:</strong> ${reserva.destino}</p><p><strong>Turno:</strong> ${new Date(reserva.fecha_turno + 'T' + (reserva.hora_turno || '00:00')).toLocaleString('es-AR')}</p><p><strong>Chofer:</strong> ${chofer.nombre}</p></div>`;
+                const choferInfo = choferesCache.find(c => c.id === reserva.chofer_asignado_id) || { nombre: 'No asignado' };
+                const contenido = `<div class="info-window"><h4>Reserva de: ${cliente.nombre}</h4><p><strong>Pasajero:</strong> ${reserva.nombre_pasajero || 'N/A'}</p><p><strong>Origen:</strong> ${reserva.origen}</p><p><strong>Destino:</strong> ${reserva.destino}</p><p><strong>Turno:</strong> ${new Date(reserva.fecha_turno + 'T' + (reserva.hora_turno || '00:00')).toLocaleString('es-AR')}</p><p><strong>Chofer:</strong> ${choferInfo.nombre}</p></div>`;
+                
                 infoWindowActiva = new google.maps.InfoWindow({ content: contenido });
                 infoWindowActiva.open(map, marker);
+
                 if (reserva.destino_coords && reserva.destino_coords.latitude) {
+                    // --- CAMBIO DE MARCADOR DE DESTINO ---
+                    const iconoDestino = crearIconoDeMarcador('#27DAF5', ''); // Celeste, sin texto
                     marcadorDestinoActivo = new google.maps.Marker({
                         position: { lat: reserva.destino_coords.latitude, lng: reserva.destino_coords.longitude },
                         map: map,
                         title: `Destino: ${reserva.destino}`,
-                        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+                        icon: iconoDestino // Usamos el nuevo ícono personalizado
                     });
                 }
+
                 infoWindowActiva.addListener('closeclick', () => {
                     if (marcadorDestinoActivo) {
                         marcadorDestinoActivo.setMap(null);
@@ -965,7 +1040,6 @@ function cargarMarcadoresDeReservas() {
         }
     });
 }
-
 function filtrarMapa(estado) {
     filtroMapaActual = estado;
     document.querySelectorAll('.map-filter-btn').forEach(btn => btn.classList.remove('active'));
