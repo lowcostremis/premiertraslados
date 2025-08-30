@@ -225,8 +225,9 @@ async function buscarEnPasajeros(texto) {
     }
 }
 
+
 // ===================================================================================
-// LÓGICA PARA RESERVAS
+// LÓGICA PARA RESERVAS Y MAPA
 // ===================================================================================
 let map;
 let autocompleteOrigen, autocompleteDestino;
@@ -243,6 +244,16 @@ let refrescoAutomaticoIntervalo;
 let marcadoresOrigen = {};
 let marcadorDestinoActivo = null;
 let infoWindowActiva = null;
+let mapContextMenu, mapContextMenuItems;
+
+/**
+ * Función auxiliar para ocultar el menú contextual del mapa.
+ */
+function hideMapContextMenu() {
+    if (mapContextMenu) {
+        mapContextMenu.style.display = 'none';
+    }
+}
 
 function listenToReservas() {
     if (unsubscribeReservas) unsubscribeReservas();
@@ -425,6 +436,15 @@ function initApp() {
     initializeAdminLists();
     initMap(); 
     
+    // Inicialización del menú contextual
+    mapContextMenu = document.getElementById('map-context-menu');
+    mapContextMenuItems = document.getElementById('map-context-menu-items');
+
+    // Listener para ocultar el menú al hacer clic en el mapa
+    if (map) {
+        map.addListener('click', hideMapContextMenu);
+    }
+    
     if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     refrescoAutomaticoIntervalo = setInterval(() => {
         if (lastReservasSnapshot) {
@@ -578,15 +598,11 @@ async function quitarAsignacion(reservaId) {
      if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
         try {
             const reservaRef = db.collection('reservas').doc(reservaId);
-            
-            // Actualiza el documento: cambia el estado y elimina el campo del chofer.
             await reservaRef.update({
                 estado: 'En Curso',
                 chofer_asignado_id: firebase.firestore.FieldValue.delete()
             });
-
             console.log(`Reserva ${reservaId} devuelta a 'En Curso'.`);
-
         } catch (error) {
             console.error("Error al quitar asignación:", error);
             alert("Hubo un error al actualizar la reserva.");
@@ -944,9 +960,8 @@ function crearIconoDeMarcador(color, texto) {
     };
 }
 function cargarMarcadoresDeReservas() {
-  if (!map || !lastReservasSnapshot) return;
+    if (!map || !lastReservasSnapshot) return;
 
-    // Limpia marcadores anteriores
     Object.values(marcadoresOrigen).forEach(marker => marker.setMap(null));
     marcadoresOrigen = {};
 
@@ -971,29 +986,24 @@ function cargarMarcadoresDeReservas() {
 
         if (reserva.origen_coords && reserva.origen_coords.latitude) {
             
-            let colorMarcador = '#A9A9A9';
-            let textoMarcador = '';
+            let colorMarcador, textoMarcador = '';
 
             switch (estadoEfectivo) {
                 case 'En Curso':
-                    colorMarcador = '#F54927'; // <-- CAMBIO DE COLOR: Rojo
+                    colorMarcador = '#F54927';
                     const hora = reserva.hora_pickup || reserva.hora_turno;
-                    if (hora) {
-                        textoMarcador = hora.substring(0, 5);
-                    }
+                    if (hora) { textoMarcador = hora.substring(0, 5); }
                     break;
                 case 'Asignado':
-                    colorMarcador = '#4DF527'; // <-- CAMBIO DE COLOR: Verde
+                    colorMarcador = '#4DF527';
                     const chofer = choferesCache.find(c => c.id === reserva.chofer_asignado_id);
                     if (chofer && chofer.movil_actual_id) {
                         const movil = movilesCache.find(m => m.id === chofer.movil_actual_id);
-                        if (movil && movil.numero) {
-                            textoMarcador = movil.numero.toString();
-                        }
+                        if (movil && movil.numero) { textoMarcador = movil.numero.toString(); }
                     }
                     break;
                 case 'Pendiente':
-                    colorMarcador = '#BE27F5'; // <-- CAMBIO DE COLOR: Amarillo
+                    colorMarcador = '#C456F0';
                     break;
             }
 
@@ -1005,7 +1015,6 @@ function cargarMarcadoresDeReservas() {
                 title: `Origen: ${reserva.origen} (${estadoEfectivo})`,
                 icon: iconoPersonalizado
             });
-
             marcadoresOrigen[reserva.id] = marker;
 
             marker.addListener('click', () => {
@@ -1020,13 +1029,12 @@ function cargarMarcadoresDeReservas() {
                 infoWindowActiva.open(map, marker);
 
                 if (reserva.destino_coords && reserva.destino_coords.latitude) {
-                    // --- CAMBIO DE MARCADOR DE DESTINO ---
-                    const iconoDestino = crearIconoDeMarcador('#27DAF5', ''); // Celeste, sin texto
+                    const iconoDestino = crearIconoDeMarcador('#27DAF5', '');
                     marcadorDestinoActivo = new google.maps.Marker({
                         position: { lat: reserva.destino_coords.latitude, lng: reserva.destino_coords.longitude },
                         map: map,
                         title: `Destino: ${reserva.destino}`,
-                        icon: iconoDestino // Usamos el nuevo ícono personalizado
+                        icon: iconoDestino
                     });
                 }
 
@@ -1036,6 +1044,38 @@ function cargarMarcadoresDeReservas() {
                         marcadorDestinoActivo = null;
                     }
                 });
+            });
+            
+            marker.addListener('rightclick', (event) => {
+                event.domEvent.preventDefault();
+                hideMapContextMenu();
+
+                let menuHTML = '';
+                const reservaId = reserva.id;
+
+                if (estadoEfectivo === 'En Curso' || estadoEfectivo === 'Pendiente') {
+                    menuHTML = `
+                        <li><a onclick="openEditReservaModal('${reservaId}'); hideMapContextMenu()">Editar</a></li>
+                        <li><select onchange="asignarChofer('${reservaId}', this.value); hideMapContextMenu()"><option value="">Asignar Chofer...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select></li>
+                        <li><a onclick="changeReservaState('${reservaId}', 'Anulado'); hideMapContextMenu()">Anular</a></li>
+                    `;
+                } else if (estadoEfectivo === 'Asignado') {
+                    menuHTML = `
+                        <li><a onclick="openEditReservaModal('${reservaId}'); hideMapContextMenu()">Editar</a></li>
+                        <li><a onclick="finalizarReserva('${reservaId}'); hideMapContextMenu()">Finalizar</a></li>
+                        <li><a onclick="changeReservaState('${reservaId}', 'Negativo'); hideMapContextMenu()">Marcar Negativo</a></li>
+                        <li><a onclick="quitarAsignacion('${reservaId}'); hideMapContextMenu()">Quitar Móvil</a></li>
+                        <li><a onclick="changeReservaState('${reservaId}', 'Anulado'); hideMapContextMenu()">Anular Viaje</a></li>
+                        <li><select onchange="asignarChofer('${reservaId}', this.value); hideMapContextMenu()"><option value="">Reasignar...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select></li>
+                    `;
+                }
+
+                if (menuHTML) {
+                    mapContextMenuItems.innerHTML = menuHTML;
+                    mapContextMenu.style.left = `${event.domEvent.clientX}px`;
+                    mapContextMenu.style.top = `${event.domEvent.clientY}px`;
+                    mapContextMenu.style.display = 'block';
+                }
             });
         }
     });

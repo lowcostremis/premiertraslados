@@ -116,3 +116,48 @@ td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #c
 #reserva-form textarea { width: 100%; height: 80px; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
 #edit-form { display: flex; flex-direction: column; gap: 10px; }
 #edit-form input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+
+/* --- Menú Contextual del Mapa --- */
+.context-menu {
+    display: none;
+    position: absolute;
+    background-color: white;
+    border: 1px solid #ccc;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+    z-index: 1000;
+    min-width: 180px;
+    border-radius: 5px;
+    padding: 5px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.context-menu ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Estilo para los links y el select dentro del menú */
+.context-menu ul li a, .context-menu ul li select {
+    display: block;
+    padding: 10px 15px;
+    text-decoration: none;
+    color: #333;
+    font-size: 14px;
+    cursor: pointer;
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
+    background: none;
+    text-align: left;
+}
+
+.context-menu ul li a:hover {
+    background-color: #f0f0f0;
+}
+
+.context-menu ul li select {
+    -webkit-appearance: none; /* Quita estilos por defecto en algunos navegadores */
+    -moz-appearance: none;
+    appearance: none;
+}
