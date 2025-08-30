@@ -77,7 +77,6 @@ function mostrarDatosHistorialEnTabla(documentos) {
         
         const fecha = viaje.fecha_turno ? new Date(viaje.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR', { timeZone: 'UTC' }) : 'N/A';
 
-        // Lógica para encontrar el nombre del chofer
         let nombreChofer = 'N/A';
         if (viaje.chofer_asignado_id && choferesCache.length > 0) {
             const chofer = choferesCache.find(c => c.id === viaje.chofer_asignado_id);
@@ -298,7 +297,6 @@ function renderFilaReserva(tbody, reserva) {
     }
     const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
     
-    // Simplificamos esta lógica ya que la tabla de búsqueda no es 'editable' en el mismo sentido
     const isSpecialTable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes' || tbody.parentElement.id === 'tabla-asignados';
     const isEditable = isSpecialTable && (tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes');
     const isAsignado = isSpecialTable && tbody.parentElement.id === 'tabla-asignados';
@@ -379,7 +377,6 @@ async function buscarEnReservas(texto) {
             return;
         }
         hits.forEach(reserva => {
-            // Pasamos el objectID de Algolia como si fuera el id de la reserva para que funcione el modal de edición
             reserva.id = reserva.objectID;
             renderFilaReserva(resultadosTbody, reserva);
         });
@@ -390,10 +387,9 @@ async function buscarEnReservas(texto) {
 }
 
 // ===================================================================================
-// LÓGICA PRINCIPAL Y DE UTILIDADES (el resto del código sin cambios)
+// LÓGICA PRINCIPAL Y DE UTILIDADES
 // ===================================================================================
 
-// LÓGICA DE AUTENTICACIÓN
 auth.onAuthStateChanged(user => {
     const authSection = document.getElementById('auth-section');
     const appContent = document.getElementById('app-content');
@@ -421,7 +417,6 @@ document.getElementById('login-btn').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
-// INICIALIZACIÓN DE LA APP
 function initApp() {
     if (!geocoder) geocoder = new google.maps.Geocoder();
     loadAuxData();
@@ -441,7 +436,6 @@ function initApp() {
     showReservasTab('en-curso');
 }
 
-// CARGA DE DATOS AUXILIARES
 function loadAuxData() {
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
@@ -484,7 +478,7 @@ function loadAuxData() {
                 movilSelect.innerHTML += `<option value="${movil.id}">N° ${movil.numero} (${movil.patente})</option>`;
             });
         } else {
-            console.error("No se encontró el <select> de móviles en el formulario de choferes. El script continuará ejecutándose.");
+            console.error("No se encontró el <select> de móviles en el formulario de choferes.");
         }
     });
 }
