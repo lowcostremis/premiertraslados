@@ -36,7 +36,7 @@ let paginaActual = 0;
 async function cargarHistorial() {
     if (!historialBody) return;
     try {
-        historialBody.innerHTML = '<tr><td colspan="5">Cargando historial...</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="11">Cargando historial...</td></tr>';
         btnAnterior.disabled = true;
         btnSiguiente.disabled = true;
         let query = db.collection('historico').orderBy('archivadoEn', 'desc');
@@ -48,7 +48,7 @@ async function cargarHistorial() {
         const querySnapshot = await query.get();
         const documentos = querySnapshot.docs;
         if (documentos.length === 0 && paginaActual === 0) {
-            historialBody.innerHTML = '<tr><td colspan="5">No hay viajes en el historial.</td></tr>';
+            historialBody.innerHTML = '<tr><td colspan="11">No hay viajes en el historial.</td></tr>';
             actualizarEstadoBotonesPaginacion(0);
             return;
         }
@@ -59,37 +59,59 @@ async function cargarHistorial() {
         actualizarEstadoBotonesPaginacion(documentos.length);
     } catch (error) {
         console.error("Error al cargar el historial: ", error);
-        historialBody.innerHTML = '<tr><td colspan="5">Error al cargar los datos.</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="11">Error al cargar los datos.</td></tr>';
     }
 }
 
 function mostrarDatosHistorialEnTabla(documentos) {
+    if (!historialBody) return;
     historialBody.innerHTML = '';
+
     if (documentos.length === 0) {
-        historialBody.innerHTML = '<tr><td colspan="5">No se encontraron viajes con ese criterio.</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="11">No se encontraron viajes con ese criterio.</td></tr>';
         return;
     }
+
     documentos.forEach(item => {
         const viaje = typeof item.data === 'function' ? item.data() : item;
-        const fecha = viaje.fecha_turno ? new Date(viaje.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : 'N/A';
+        
+        const fecha = viaje.fecha_turno ? new Date(viaje.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR', { timeZone: 'UTC' }) : 'N/A';
+
+        // Lógica para encontrar el nombre del chofer
+        let nombreChofer = 'N/A';
+        if (viaje.chofer_asignado_id && choferesCache.length > 0) {
+            const chofer = choferesCache.find(c => c.id === viaje.chofer_asignado_id);
+            if (chofer) {
+                nombreChofer = chofer.nombre;
+            }
+        }
+
         let estiloFila = '';
         if (viaje.estado === 'Negativo') {
             estiloFila = 'style="background-color: #FFDE59; color: #333;"';
         } else if (viaje.estado === 'Anulado') {
             estiloFila = 'style="text-decoration: line-through;"';
         }
+
         const fila = `
             <tr class="border-b border-gray-700 hover:bg-gray-800" ${estiloFila}>
-                <td class="px-4 py-3">${fecha}</td>
-                <td class="px-4 py-3">${viaje.clienteNombre || 'N/A'}</td>
-                <td class="px-4 py-3">${viaje.origen || 'N/A'}</td>
-                <td class="px-4 py-3">${viaje.destino || 'N/A'}</td>
-                <td class="px-4 py-3">${viaje.estado || 'N/A'}</td>
+                <td>${fecha}</td>
+                <td>${viaje.hora_turno || 'N/A'}</td>
+                <td>${viaje.hora_pickup || 'N/A'}</td>
+                <td>${viaje.nombre_pasajero || 'N/A'}</td>
+                <td>${viaje.autorizacion || 'N/A'}</td>
+                <td>${viaje.siniestro || 'N/A'}</td>
+                <td>${viaje.clienteNombre || 'N/A'}</td>
+                <td>${viaje.origen || 'N/A'}</td>
+                <td>${viaje.destino || 'N/A'}</td>
+                <td>${nombreChofer}</td>
+                <td>${viaje.estado || 'N/A'}</td>
             </tr>
         `;
         historialBody.innerHTML += fila;
     });
 }
+
 
 function actualizarEstadoBotonesPaginacion(cantidadDocsRecibidos) {
     btnAnterior.disabled = (paginaActual === 0);
@@ -110,12 +132,12 @@ async function buscarEnHistorial(texto) {
     }
     try {
         if (paginacionContainer) paginacionContainer.style.display = 'none';
-        historialBody.innerHTML = '<tr><td colspan="5">Buscando...</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="11">Buscando...</td></tr>';
         const { hits } = await historicoSearchIndex.search(texto);
         mostrarDatosHistorialEnTabla(hits);
     } catch (error) {
         console.error("Error buscando en Algolia: ", error);
-        historialBody.innerHTML = '<tr><td colspan="5">Error al realizar la búsqueda.</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="11">Error al realizar la búsqueda.</td></tr>';
         if (paginacionContainer) paginacionContainer.style.display = 'block';
     }
 }
