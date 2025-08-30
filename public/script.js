@@ -15,19 +15,21 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const functions = firebase.functions();
-// INICIALIZACIÓN DE ALGOLIA (Usa tu App ID y la Search-Only API Key)
+
+// --- INICIALIZACIÓN DE ALGOLIA ---
 const searchClient = algoliasearch('GOATTC1A5K', 'c2d6dbf6e25ca6507079dc12c95ddc69');
-// Inicializamos los tres índices que vamos a usar
 const pasajerosSearchIndex = searchClient.initIndex('pasajeros');
 const historicoSearchIndex = searchClient.initIndex('historico');
 const reservasSearchIndex = searchClient.initIndex('reservas');
+// --- FIN INICIALIZACIÓN DE ALGOLIA ---
+
 
 // ===================================================================================
 // LÓGICA DE PAGINACIÓN PARA HISTÓRICO
 // ===================================================================================
 
 let historialBody, btnAnterior, btnSiguiente, indicadorPagina;
-const registrosPorPagina = 100; // <-- MODIFICADO A 100
+const registrosPorPagina = 100;
 let ultimoDocVisible = null;
 let historialDePaginas = [null];
 let paginaActual = 0;
@@ -70,10 +72,21 @@ async function cargarHistorial() {
     }
 }
 
+// ===================================================================
+// INICIO DE MODIFICACIÓN 1: Función de renderizado adaptada para Algolia
+// ===================================================================
 function mostrarDatosHistorialEnTabla(documentos) {
     historialBody.innerHTML = '';
-    documentos.forEach(doc => {
-        const viaje = doc.data();
+
+    if (documentos.length === 0) {
+        historialBody.innerHTML = '<tr><td colspan="5">No se encontraron viajes con ese criterio.</td></tr>';
+        return;
+    }
+
+    documentos.forEach(item => {
+        // Si es un doc de firestore, obtenemos la data. Si es un hit de algolia, ya es la data.
+        const viaje = typeof item.data === 'function' ? item.data() : item;
+        
         const fecha = viaje.fecha_turno ? new Date(viaje.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : 'N/A';
 
         let estiloFila = '';
@@ -95,6 +108,9 @@ function mostrarDatosHistorialEnTabla(documentos) {
         historialBody.innerHTML += fila;
     });
 }
+// ===================================================================
+// FIN DE MODIFICACIÓN 1
+// ===================================================================
 
 function actualizarEstadoBotonesPaginacion(cantidadDocsRecibidos) {
     btnAnterior.disabled = (paginaActual === 0);
@@ -105,7 +121,36 @@ function actualizarEstadoBotonesPaginacion(cantidadDocsRecibidos) {
 }
 
 // ===================================================================================
-// LÓGICA DE PAGINACIÓN PARA PASAJEROS (NUEVO)
+// LÓGICA DE BÚSQUEDA CON ALGOLIA PARA HISTÓRICO (CÓDIGO NUEVO)
+// ===================================================================================
+async function buscarEnHistorial(texto) {
+    const paginacionContainer = document.getElementById('paginacion-historial');
+
+    if (!texto) {
+        if (paginacionContainer) paginacionContainer.style.display = 'block';
+        paginaActual = 0;
+        historialDePaginas = [null];
+        cargarHistorial();
+        return;
+    }
+
+    try {
+        if (paginacionContainer) paginacionContainer.style.display = 'none';
+        historialBody.innerHTML = '<tr><td colspan="5">Buscando...</td></tr>';
+        
+        const { hits } = await historicoSearchIndex.search(texto);
+        
+        mostrarDatosHistorialEnTabla(hits);
+
+    } catch (error) {
+        console.error("Error buscando en Algolia: ", error);
+        historialBody.innerHTML = '<tr><td colspan="5">Error al realizar la búsqueda.</td></tr>';
+        if (paginacionContainer) paginacionContainer.style.display = 'block'; // Muestra de nuevo en caso de error
+    }
+}
+
+// ===================================================================================
+// LÓGICA DE PAGINACIÓN PARA PASAJEROS
 // ===================================================================================
 let pasajerosBody, pasajerosBtnAnterior, pasajerosBtnSiguiente, pasajerosIndicadorPagina;
 const pasajerosPorPagina = 100;
@@ -271,12 +316,10 @@ function loadAuxData() {
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
     });
 
-    // ---- INICIO DE LA CORRECCIÓN ----
     db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         movilesCache = [];
         const movilSelect = document.querySelector("#form-choferes select[name='movil_actual_id']");
         
-        // Se agrega una verificación para evitar el error si no se encuentra el elemento.
         if (movilSelect) {
             movilSelect.innerHTML = '<option value="">Asignar Móvil...</option>';
             snapshot.forEach(doc => {
@@ -547,10 +590,6 @@ async function moverReservaAHistorico(reservaId, estadoFinal) {
 
 // MANEJO DE EVENTOS
 function attachEventListeners() {
-     // ---- INICIO DE LA CORRECCIÓN ----
-    // Esta función ahora verifica que cada elemento exista antes de asignarle un evento.
-    // Si un elemento no existe, lo informará en la consola sin detener la aplicación.
-    
     const safeAddEventListener = (id, event, handler) => {
         const element = document.getElementById(id);
         if (element) {
@@ -560,15 +599,6 @@ function attachEventListeners() {
         }
     };
     
-    const safeAddQueryListener = (selector, event, handler) => {
-        const element = document.querySelector(selector);
-        if (element) {
-            element.addEventListener(event, handler);
-        } else {
-            console.error(`Error de inicialización: No se encontró el elemento con el selector: ${selector}`);
-        }
-    };
-
     const modal = document.getElementById('reserva-modal');
     const closeBtn = document.querySelector('.close-btn');
     if(modal && closeBtn) {
@@ -598,7 +628,6 @@ function attachEventListeners() {
     safeAddEventListener('form-usuarios', 'submit', handleSaveUsuario);
     safeAddEventListener('form-zonas', 'submit', handleSaveZona);
     safeAddEventListener('dni_pasajero', 'blur', handleDniBlur);
-    // ---- FIN DE LA CORRECCIÓN ----
 }
 
 // FUNCIONES PARA GUARDAR DATOS (HANDLERS)
@@ -670,8 +699,6 @@ async function handleDniBlur(e) {
 // RENDERIZADO Y GESTIÓN DE LISTAS DE ADMIN
 function initializeAdminLists() {
     renderAdminList('clientes', 'lista-clientes', ['nombre', 'cuit', 'telefono', 'domicilio'], ['Nombre', 'CUIT', 'Teléfono', 'Domicilio']);
-    // La siguiente línea fue reemplazada por la carga paginada
-    // renderAdminList('pasajeros', 'lista-pasajeros', ['nombre_apellido', 'telefono', 'domicilios'], ['Nombre y Apellido', 'Teléfono', 'Domicilios'], true); 
     renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'telefono', 'domicilio'], ['DNI', 'Nombre', 'Teléfono', 'Domicilio']);
     renderAdminList('moviles', 'lista-moviles', ['numero', 'patente', 'marca', 'modelo', 'capacidad_pasajeros'], ['N° Móvil', 'Patente', 'Marca', 'Modelo', 'Capacidad']);
     renderAdminList('zonas', 'lista-zonas', ['numero', 'descripcion'], ['Número', 'Descripción']);
@@ -696,10 +723,7 @@ async function renderUsersList() {
         });
         tableHTML += `</tbody></table></div>`;
         container.innerHTML = tableHTML;
-    } catch (error) {
-        console.error("Error al llamar a la Cloud Function 'listUsers':", error);
-        container.innerHTML = `<p style="color:red;">Error al cargar la lista de usuarios.</p>`;
-    }
+    } catch (error) { console.error("Error al llamar a la Cloud Function 'listUsers':", error); container.innerHTML = `<p style="color:red;">Error al cargar la lista de usuarios.</p>`; }
 }
 
 function renderAdminList(collectionName, containerId, fields, headers, useDocIdAsField = false) {
@@ -733,32 +757,22 @@ async function editItem(collection, id) {
     let doc;
     if (collection === 'users') {
         const userDoc = await db.collection('users').doc(id).get();
-        if (!userDoc.exists) {
-            alert("Error: No se encontró el usuario en Firestore.");
-            return;
-        }
+        if (!userDoc.exists) { alert("Error: No se encontró el usuario en Firestore."); return; }
         doc = { id: id, exists: true, data: () => ({ ...userDoc.data(), uid: id }) };
     } else {
         doc = await db.collection(collection).doc(id).get();
     }
-    
-    if (!doc.exists) {
-        alert("Error: No se encontró el item.");
-        return;
-    }
-    
+    if (!doc.exists) { alert("Error: No se encontró el item."); return; }
     const data = doc.data();
     const form = document.getElementById('edit-form');
     form.innerHTML = '';
     form.dataset.collection = collection;
     form.dataset.id = id;
     const fieldsToEdit = Object.keys(data);
-    
     fieldsToEdit.forEach(field => {
         const label = document.createElement('label');
         label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
         form.appendChild(label);
-
         if (field === 'movil_actual_id' && collection === 'choferes') {
             const select = document.createElement('select');
             select.name = field;
@@ -785,7 +799,6 @@ async function editItem(collection, id) {
             form.appendChild(input);
         }
     });
-    
     const submitBtn = document.createElement('button');
     submitBtn.type = 'submit';
     submitBtn.textContent = 'Guardar Cambios';
@@ -793,7 +806,6 @@ async function editItem(collection, id) {
     document.getElementById('edit-modal-title').textContent = `Editar ${collection.slice(0, -1)}`;
     document.getElementById('edit-modal').style.display = 'block';
 }
-
 
 async function handleUpdateItem(e) {
     e.preventDefault();
@@ -810,10 +822,7 @@ async function handleUpdateItem(e) {
         await db.collection(collection).doc(id).update(updatedData);
         alert("Item actualizado con éxito.");
         document.getElementById('edit-modal').style.display = 'none';
-    } catch (error) {
-        console.error("Error al actualizar:", error);
-        alert("Error al guardar los cambios.");
-    }
+    } catch (error) { console.error("Error al actualizar:", error); alert("Error al guardar los cambios."); }
 }
 
 async function deleteItem(collection, id) {
@@ -826,14 +835,9 @@ async function deleteItem(collection, id) {
             }
             await db.collection(collection).doc(id).delete();
             alert(`${docName.charAt(0).toUpperCase() + docName.slice(1)} borrado con éxito.`);
-
-            // ---- INICIO DE LA CORRECCIÓN ----
-            // Si la colección es 'pasajeros', recargamos la lista paginada.
             if (collection === 'pasajeros') {
                 cargarPasajeros();
             }
-            // ---- FIN DE LA CORRECCIÓN ----
-
         } catch (error) {
             console.error(`Error al borrar ${docName}:`, error);
             alert(`Error al borrar: ${error.message}`);
@@ -847,17 +851,14 @@ function openTab(evt, tabName) {
     document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active'));
     document.getElementById(tabName).style.display = "block";
     if (evt) evt.currentTarget.classList.add('active');
-    
     if (tabName === 'Mapa' && !map) {
         initMap();
     }
-    
     if (tabName === 'Historico') {
         paginaActual = 0;
         historialDePaginas = [null];
         cargarHistorial();
     }
-
     if (tabName === 'Pasajeros' && !document.getElementById('lista-pasajeros').hasChildNodes()) {
         pasajerosPaginaActual = 0;
         pasajerosHistorialDePaginas = [null];
@@ -876,10 +877,8 @@ function initAutocomplete() {
     const origenInput = document.getElementById('origen');
     const destinoInput = document.getElementById('destino');
     const options = { componentRestrictions: { country: "ar" }, fields: ["formatted_address", "geometry", "name"] };
-    
     autocompleteOrigen = new google.maps.places.Autocomplete(origenInput, options);
     autocompleteDestino = new google.maps.places.Autocomplete(destinoInput, options);
-
     autocompleteOrigen.addListener('place_changed', () => {
         const place = autocompleteOrigen.getPlace();
         if (place.geometry && place.geometry.location) {
@@ -890,7 +889,6 @@ function initAutocomplete() {
             }
         }
     });
-
     autocompleteDestino.addListener('place_changed', () => {
         const place = autocompleteDestino.getPlace();
         if (place.geometry && place.geometry.location) {
@@ -905,23 +903,18 @@ function initAutocomplete() {
 
 function cargarMarcadoresDeReservas() {
     if (!map || !lastReservasSnapshot) return;
-
     Object.values(marcadoresOrigen).forEach(marker => marker.setMap(null));
     marcadoresOrigen = {};
-
     lastReservasSnapshot.forEach(doc => {
         const reserva = { id: doc.id, ...doc.data() };
-        
         const estadosActivos = ['En Curso', 'Asignado', 'Pendiente'];
         if (!estadosActivos.includes(reserva.estado)) return;
         if (filtroMapaActual !== 'Todos' && reserva.estado !== filtroMapaActual) return;
-        
         if (reserva.origen_coords && reserva.origen_coords.latitude) {
             let iconUrl = 'http://maps.google.com/mapfiles/ms/icons/red-dot.png';
             if (reserva.estado === 'Asignado') {
                 iconUrl = 'http://maps.google.com/mapfiles/ms/icons/green-dot.png';
             }
-
             const marker = new google.maps.Marker({
                 position: { lat: reserva.origen_coords.latitude, lng: reserva.origen_coords.longitude },
                 map: map,
@@ -929,28 +922,14 @@ function cargarMarcadoresDeReservas() {
                 icon: iconUrl
             });
             marcadoresOrigen[reserva.id] = marker;
-
             marker.addListener('click', () => {
                 if (infoWindowActiva) infoWindowActiva.close();
                 if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null);
-
                 const cliente = clientesCache[reserva.cliente] || { nombre: 'N/A' };
                 const chofer = choferesCache.find(c => c.id === reserva.chofer_asignado_id) || { nombre: 'No asignado' };
-
-                const contenido = `
-                    <div class="info-window">
-                        <h4>Reserva de: ${cliente.nombre}</h4>
-                        <p><strong>Pasajero:</strong> ${reserva.nombre_pasajero || 'N/A'}</p>
-                        <p><strong>Origen:</strong> ${reserva.origen}</p>
-                        <p><strong>Destino:</strong> ${reserva.destino}</p>
-                        <p><strong>Turno:</strong> ${new Date(reserva.fecha_turno + 'T' + (reserva.hora_turno || '00:00')).toLocaleString('es-AR')}</p>
-                        <p><strong>Chofer:</strong> ${chofer.nombre}</p>
-                    </div>
-                `;
-                
+                const contenido = `<div class="info-window"><h4>Reserva de: ${cliente.nombre}</h4><p><strong>Pasajero:</strong> ${reserva.nombre_pasajero || 'N/A'}</p><p><strong>Origen:</strong> ${reserva.origen}</p><p><strong>Destino:</strong> ${reserva.destino}</p><p><strong>Turno:</strong> ${new Date(reserva.fecha_turno + 'T' + (reserva.hora_turno || '00:00')).toLocaleString('es-AR')}</p><p><strong>Chofer:</strong> ${chofer.nombre}</p></div>`;
                 infoWindowActiva = new google.maps.InfoWindow({ content: contenido });
                 infoWindowActiva.open(map, marker);
-
                 if (reserva.destino_coords && reserva.destino_coords.latitude) {
                     marcadorDestinoActivo = new google.maps.Marker({
                         position: { lat: reserva.destino_coords.latitude, lng: reserva.destino_coords.longitude },
@@ -959,7 +938,6 @@ function cargarMarcadoresDeReservas() {
                         icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png' 
                     });
                 }
-                
                 infoWindowActiva.addListener('closeclick', () => {
                     if (marcadorDestinoActivo) {
                         marcadorDestinoActivo.setMap(null);
@@ -971,20 +949,17 @@ function cargarMarcadoresDeReservas() {
     });
 }
 
-
 function filtrarMapa(estado) {
     filtroMapaActual = estado;
     document.querySelectorAll('.map-filter-btn').forEach(btn => btn.classList.remove('active'));
     const botonActivo = Array.from(document.querySelectorAll('.map-filter-btn')).find(btn => btn.textContent.includes(estado));
     if(botonActivo) botonActivo.classList.add('active');
-    
     cargarMarcadoresDeReservas();
 }
 
 function initMapaModal(origenCoords, destinoCoords) {
     const mapaContainer = document.getElementById("mapa-modal-container");
     if (!mapaContainer) return;
-
     if (!mapaModal) {
         mapaModal = new google.maps.Map(mapaContainer, { 
             center: { lat: -32.95, lng: -60.65 }, 
@@ -992,33 +967,27 @@ function initMapaModal(origenCoords, destinoCoords) {
         });
         initAutocomplete();
     }
-
     if (marcadorOrigenModal) marcadorOrigenModal.setMap(null);
     if (marcadorDestinoModal) marcadorDestinoModal.setMap(null);
-
     const centroPorDefecto = { lat: -32.95, lng: -60.65 };
     const posOrigen = (origenCoords && origenCoords.latitude) 
         ? { lat: origenCoords.latitude, lng: origenCoords.longitude }
         : centroPorDefecto;
-
     marcadorOrigenModal = new google.maps.Marker({
         position: posOrigen,
         map: mapaModal,
         draggable: true,
         icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
     });
-
     const posDestino = (destinoCoords && destinoCoords.latitude) 
         ? { lat: destinoCoords.latitude, lng: destinoCoords.longitude }
         : centroPorDefecto;
-
     marcadorDestinoModal = new google.maps.Marker({
         position: posDestino,
         map: mapaModal,
         draggable: true,
         icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
     });
-    
     if(origenCoords && destinoCoords) {
         const bounds = new google.maps.LatLngBounds();
         bounds.extend(posOrigen);
@@ -1027,11 +996,9 @@ function initMapaModal(origenCoords, destinoCoords) {
     } else {
         mapaModal.setCenter(posOrigen);
     }
-    
     marcadorOrigenModal.addListener('dragend', (event) => {
         actualizarInputDesdeCoordenadas(event.latLng, 'origen');
     });
-
     marcadorDestinoModal.addListener('dragend', (event) => {
         actualizarInputDesdeCoordenadas(event.latLng, 'destino');
     });
@@ -1054,12 +1021,25 @@ function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
 
 // INICIALIZACIÓN POR DEFECTO DE LAS PESTAÑAS
 document.addEventListener('DOMContentLoaded', () => {
+    // ===================================================================
+    // INICIO DE MODIFICACIÓN 2: Conexión de la barra de búsqueda
+    // ===================================================================
+    const searchInput = document.getElementById('search-historial-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const textoBusqueda = e.target.value;
+            buscarEnHistorial(textoBusqueda);
+        });
+    }
+    // ===================================================================
+    // FIN DE MODIFICACIÓN 2
+    // ===================================================================
+
     // Historial
     historialBody = document.getElementById('historial-body');
     btnAnterior = document.getElementById('btn-anterior');
     btnSiguiente = document.getElementById('btn-siguiente');
     indicadorPagina = document.getElementById('indicador-pagina');
-
     if (btnSiguiente) {
         btnSiguiente.addEventListener('click', () => {
             if (paginaActual === historialDePaginas.length - 1) {
@@ -1069,7 +1049,6 @@ document.addEventListener('DOMContentLoaded', () => {
             cargarHistorial();
         });
     }
-
     if (btnAnterior) {
         btnAnterior.addEventListener('click', () => {
             if (paginaActual > 0) {
@@ -1078,13 +1057,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-
-    // Pasajeros (NUEVO)
+    // Pasajeros
     pasajerosBody = document.getElementById('lista-pasajeros');
     pasajerosBtnAnterior = document.getElementById('pasajeros-btn-anterior');
     pasajerosBtnSiguiente = document.getElementById('pasajeros-btn-siguiente');
     pasajerosIndicadorPagina = document.getElementById('pasajeros-indicador-pagina');
-
     if (pasajerosBtnSiguiente) {
         pasajerosBtnSiguiente.addEventListener('click', () => {
             if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) {
@@ -1094,7 +1071,6 @@ document.addEventListener('DOMContentLoaded', () => {
             cargarPasajeros();
         });
     }
-
     if (pasajerosBtnAnterior) {
         pasajerosBtnAnterior.addEventListener('click', () => {
             if (pasajerosPaginaActual > 0) {

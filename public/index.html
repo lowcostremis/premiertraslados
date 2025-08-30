@@ -62,7 +62,8 @@
         <div id="Historico" class="tab-content" style="display:none;">
             <h2>Historial de Viajes</h2>
 
-            <input type="search" id="busqueda-historico" class="search-input" placeholder="🔎 Buscar en historial por cliente, origen, destino...">
+            <input type="search" id="search-historial-input" class="search-input" placeholder="🔎 Buscar en historial por cliente, origen, destino...">
+            
             <div id="resultados-busqueda-historico"></div>
             
             <div class="table-wrapper" id="contenedor-historico-original">
@@ -80,7 +81,8 @@
                     </tbody>
                 </table>
             </div>
-            <div class="pagination-controls" id="paginacion-historico-original">
+
+            <div class="pagination-controls" id="paginacion-historico">
                 <button id="btn-anterior" disabled>Anterior</button>
                 <span id="indicador-pagina">Página 1</span>
                 <button id="btn-siguiente">Siguiente</button>
