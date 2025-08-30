@@ -9,6 +9,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4.23.3/dist/algoliasearch-lite.umd.js"></script>
 </head>
 <body>
 
@@ -49,6 +50,10 @@
                 <button class="sub-tab-btn" data-tab="pendientes" onclick="showReservasTab('pendientes')">Pendientes</button>
                 <button class="sub-tab-btn" data-tab="asignados" onclick="showReservasTab('asignados')">Asignados</button>
             </nav>
+
+            <input type="search" id="busqueda-reservas" class="search-input" placeholder="🔎 Buscar en todas las reservas activas...">
+            <div id="resultados-busqueda-reservas" style="display:none;"></div>
+
             <div class="reservas-container" id="reservas-en-curso"><div class="table-wrapper"><table id="tabla-en-curso"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
             <div class="reservas-container" id="reservas-pendientes" style="display:none;"><div class="table-wrapper"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
             <div class="reservas-container" id="reservas-asignados" style="display:none;"><div class="table-wrapper"><table id="tabla-asignados"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
@@ -56,7 +61,11 @@
 
         <div id="Historico" class="tab-content" style="display:none;">
             <h2>Historial de Viajes</h2>
-            <div class="table-wrapper">
+
+            <input type="search" id="busqueda-historico" class="search-input" placeholder="🔎 Buscar en historial por cliente, origen, destino...">
+            <div id="resultados-busqueda-historico"></div>
+            
+            <div class="table-wrapper" id="contenedor-historico-original">
                 <table id="tabla-historico">
                     <thead>
                         <tr>
@@ -71,13 +80,12 @@
                     </tbody>
                 </table>
             </div>
-            <div class="pagination-controls">
+            <div class="pagination-controls" id="paginacion-historico-original">
                 <button id="btn-anterior" disabled>Anterior</button>
                 <span id="indicador-pagina">Página 1</span>
                 <button id="btn-siguiente">Siguiente</button>
             </div>
         </div>
-
 
         <div id="Mapa" class="tab-content" style="display:none;">
             <div id="map-filters">
@@ -93,6 +101,10 @@
         
         <div id="Pasajeros" class="tab-content" style="display:none;">
             <h2>Gestión de Pasajeros</h2>
+            
+            <input type="search" id="busqueda-pasajeros" class="search-input" placeholder="🔎 Buscar por nombre, DNI, domicilio...">
+            <div id="resultados-busqueda-pasajeros"></div>
+
             <form id="form-pasajeros" class="admin-form"><input type="text" name="dni" placeholder="DNI del Pasajero (obligatorio)" required><input type="text" name="nombre_apellido" placeholder="Nombre y Apellido"><input type="text" name="telefono" placeholder="Teléfono"><input type="text" name="domicilio" placeholder="Domicilio Principal"><button type="submit">Guardar Pasajero</button></form>
             <div id="lista-pasajeros" class="lista-admin"></div>
             <div class="pagination-controls">
@@ -100,7 +112,9 @@
                 <span id="pasajeros-indicador-pagina">Página 1</span>
                 <button id="pasajeros-btn-siguiente">Siguiente</button>
             </div>
-        </div> <div id="Choferes" class="tab-content" style="display:none;"><h2>Gestión de Choferes</h2><form id="form-choferes" class="admin-form"><input type="text" name="dni" placeholder="DNI (obligatorio)" required><input type="text" name="nombre" placeholder="Nombre completo"><input type="text" name="domicilio" placeholder="Domicilio"><input type="text" name="telefono" placeholder="Teléfono"><select name="movil_actual_id"><option value="">Asignar Móvil...</option></select><button type="submit">Guardar Chofer</button></form><div id="lista-choferes" class="lista-admin"></div></div>
+        </div>
+        
+        <div id="Choferes" class="tab-content" style="display:none;"><h2>Gestión de Choferes</h2><form id="form-choferes" class="admin-form"><input type="text" name="dni" placeholder="DNI (obligatorio)" required><input type="text" name="nombre" placeholder="Nombre completo"><input type="text" name="domicilio" placeholder="Domicilio"><input type="text" name="telefono" placeholder="Teléfono"><select name="movil_actual_id"><option value="">Asignar Móvil...</option></select><button type="submit">Guardar Chofer</button></form><div id="lista-choferes" class="lista-admin"></div></div>
         
         <div id="Moviles" class="tab-content" style="display:none;"><h2>Gestión de Móviles</h2><form id="form-moviles" class="admin-form"><input type="text" name="numero" placeholder="N° de Móvil (obligatorio)" required><input type="text" name="patente" placeholder="Patente (obligatorio)" required><input type="text" name="marca" placeholder="Marca"><input type="text" name="modelo" placeholder="Modelo"><input type="number" name="capacidad_pasajeros" placeholder="Capacidad Pasajeros" min="1" max="8"><input type="text" name="titular_nombre" placeholder="Nombre del Titular"><input type="text" name="titular_domicilio" placeholder="Domicilio del Titular"><input type="text" name="titular_telefono" placeholder="Teléfono del Titular"><button type="submit">Guardar Móvil</button></form><div id="lista-moviles" class="lista-admin"></div></div>
         

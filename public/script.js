@@ -15,6 +15,12 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 const functions = firebase.functions();
+// INICIALIZACIÓN DE ALGOLIA (Usa tu App ID y la Search-Only API Key)
+const searchClient = algoliasearch('GOATTC1A5K', 'c2d6dbf6e25ca6507079dc12c95ddc69');
+// Inicializamos los tres índices que vamos a usar
+const pasajerosSearchIndex = searchClient.initIndex('pasajeros');
+const historicoSearchIndex = searchClient.initIndex('historico');
+const reservasSearchIndex = searchClient.initIndex('reservas');
 
 // ===================================================================================
 // LÓGICA DE PAGINACIÓN PARA HISTÓRICO

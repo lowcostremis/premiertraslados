@@ -1,34 +1,65 @@
-// Importaciones 100% de la v2
-const {onDocumentWritten} = require("firebase-functions/v2/firestore");
-const {onCall, HttpsError} = require("firebase-functions/v2/https");
-// const {defineSecret} = require("firebase-functions/v2/params"); // <-- LÍNEA PROBLEMÁTICA ELIMINADA
+// ===================================================================================
+// IMPORTACIONES
+// ===================================================================================
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
-const {Client} = require("@googlemaps/google-maps-services-js");
+const { Client } = require("@googlemaps/google-maps-services-js");
+const algoliasearch = require("algoliasearch");
 
+// ===================================================================================
+// INICIALIZACIÓN DE SERVICIOS
+// ===================================================================================
 admin.initializeApp();
-const mapsClient = new Client({});
 
-// !! SOLUCIÓN TEMPORAL: API Key directamente en el código !!
-const GEOCODING_API_KEY = "AIzaSyD8j5-iicaVEFqeBpCEdFbUXVhkDwsUkwA"; 
+// --- INICIALIZACIÓN DIFERIDA (LAZY INITIALIZATION) ---
+
+// Clientes declarados pero no inicializados
+let algoliaClient;
+let mapsClient;
+
+// Índices de Algolia
+let pasajerosIndex, historicoIndex, reservasIndex;
+
+// API Key para Geocodificación (desde .env si está disponible, si no, usa la hardcodeada)
+const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY || "AIzaSyD8j5-iicaVEFqeBpCEdFbUXVhkDwsUkwA";
+
+// Función para obtener el cliente de Google Maps (se crea solo una vez)
+function getMapsClient() {
+    if (!mapsClient) {
+        mapsClient = new Client({});
+    }
+    return mapsClient;
+}
+
+// Función para obtener los índices de Algolia (se crea solo una vez)
+function getAlgoliaIndices() {
+    if (!algoliaClient) {
+        algoliaClient = algoliasearch(process.env.ALGOLIA_APP_ID, process.env.ALGOLIA_API_KEY);
+        pasajerosIndex = algoliaClient.initIndex('pasajeros');
+        historicoIndex = algoliaClient.initIndex('historico');
+        reservasIndex = algoliaClient.initIndex('reservas');
+    }
+    return { pasajerosIndex, historicoIndex, reservasIndex };
+}
+// --- FIN DE LA INICIALIZACIÓN DIFERIDA ---
+
+
+// ===================================================================================
+// FUNCIONES
+// ===================================================================================
 
 // --- FUNCIÓN DE GEOCODIFICACIÓN (v2) ---
-exports.geocodeAddress = onDocumentWritten(
-  {
-    document: "reservas/{reservaId}",
-    // secrets: [googleApiKey], // <-- LÍNEA ELIMINADA
-  },
-  async (event) => {
-    // Si no hay datos después del evento (ej: un borrado), no hacemos nada.
-    if (!event.data.after.exists) {
-      return null;
-    }
+exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event) => {
+    if (!event.data.after.exists) return null;
+    
+    const client = getMapsClient(); // Obtiene el cliente de Maps
     const afterData = event.data.after.data();
     const beforeData = event.data.before.exists ? event.data.before.data() : null;
 
-    // Geocodificar Origen
     if (afterData.origen && (!beforeData || afterData.origen !== beforeData.origen)) {
       try {
-        const response = await mapsClient.geocode({
+        const response = await client.geocode({
           params: { address: `${afterData.origen}, Argentina`, key: GEOCODING_API_KEY },
         });
         if (response.data.results && response.data.results.length > 0) {
@@ -36,15 +67,12 @@ exports.geocodeAddress = onDocumentWritten(
           const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
           await event.data.after.ref.update({origen_coords: coords});
         }
-      } catch (error) {
-        console.error("Error geocodificando origen:", error.message);
-      }
+      } catch (error) { console.error("Error geocodificando origen:", error.message); }
     }
 
-    // Geocodificar Destino
     if (afterData.destino && (!beforeData || afterData.destino !== beforeData.destino)) {
       try {
-        const response = await mapsClient.geocode({
+        const response = await client.geocode({
           params: { address: `${afterData.destino}, Argentina`, key: GEOCODING_API_KEY },
         });
         if (response.data.results && response.data.results.length > 0) {
@@ -52,13 +80,10 @@ exports.geocodeAddress = onDocumentWritten(
           const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
           await event.data.after.ref.update({destino_coords: coords});
         }
-      } catch (error) {
-        console.error("Error geocodificando destino:", error.message);
-      }
+      } catch (error) { console.error("Error geocodificando destino:", error.message); }
     }
     return null;
-  }
-);
+});
 
 // --- FUNCIÓN PARA CREAR USUARIOS (v2) ---
 exports.crearUsuario = onCall(async (request) => {
@@ -89,4 +114,35 @@ exports.listUsers = onCall(async (request) => {
     console.error("Error listando usuarios:", error);
     throw new HttpsError('internal', 'No se pudo listar los usuarios.', error);
   }
+});
+
+// --- FUNCIONES DE SINCRONIZACIÓN CON ALGOLIA ---
+exports.sincronizarConAlgolia = onDocumentWritten("pasajeros/{pasajeroId}", (event) => {
+    const { pasajerosIndex } = getAlgoliaIndices();
+    const pasajeroId = event.params.pasajeroId;
+    if (!event.data.after.exists) {
+        return pasajerosIndex.deleteObject(pasajeroId);
+    }
+    const record = { objectID: pasajeroId, ...event.data.after.data() };
+    return pasajerosIndex.saveObject(record);
+});
+
+exports.sincronizarHistoricoConAlgolia = onDocumentWritten("historico/{viajeId}", (event) => {
+    const { historicoIndex } = getAlgoliaIndices();
+    const viajeId = event.params.viajeId;
+    if (!event.data.after.exists) {
+        return historicoIndex.deleteObject(viajeId);
+    }
+    const record = { objectID: viajeId, ...event.data.after.data() };
+    return historicoIndex.saveObject(record);
+});
+
+exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{reservaId}", (event) => {
+    const { reservasIndex } = getAlgoliaIndices();
+    const reservaId = event.params.reservaId;
+    if (!event.data.after.exists) {
+        return reservasIndex.deleteObject(reservaId);
+    }
+    const record = { objectID: reservaId, ...event.data.after.data() };
+    return reservasIndex.saveObject(record);
 });
