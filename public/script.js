@@ -246,9 +246,6 @@ let marcadorDestinoActivo = null;
 let infoWindowActiva = null;
 let mapContextMenu, mapContextMenuItems;
 
-/**
- * Función auxiliar para ocultar el menú contextual del mapa.
- */
 function hideMapContextMenu() {
     if (mapContextMenu) {
         mapContextMenu.style.display = 'none';
@@ -294,7 +291,6 @@ function renderFilaReserva(tbody, reserva) {
     const cliente = clientesCache[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
     const row = tbody.insertRow();
     
-    // Lógica de color (sin cambios)
     if (reserva.es_exclusivo) {
         row.style.backgroundColor = '#51ED8D';
         row.style.color = '#333';
@@ -314,16 +310,13 @@ function renderFilaReserva(tbody, reserva) {
         }
     }
     
-    // --- INICIO: LÓGICA MEJORADA PARA LA COLUMNA 'ESTADO' ---
     let estadoCellContent = reserva.estado || 'Pendiente';
     const isAsignadoTable = tbody.parentElement.id === 'tabla-asignados';
 
     if (isAsignadoTable && reserva.chofer_asignado_id) {
         const choferAsignado = choferesCache.find(c => c.id === reserva.chofer_asignado_id);
-        // Muestra el nombre del chofer en lugar de "Asignado"
         estadoCellContent = choferAsignado ? (choferAsignado.nombre || 'Nombre no disp.') : 'Chofer no encontrado';
     }
-    // --- FIN: LÓGICA MEJORADA ---
 
     const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
     
@@ -453,16 +446,9 @@ function initApp() {
     attachEventListeners();
     listenToReservas();
     initializeAdminLists();
-    initMap(); 
     
-    // Inicialización del menú contextual
     mapContextMenu = document.getElementById('map-context-menu');
     mapContextMenuItems = document.getElementById('map-context-menu-items');
-
-    // Listener para ocultar el menú al hacer clic en el mapa
-    if (map) {
-        map.addListener('click', hideMapContextMenu);
-    }
     
     if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     refrescoAutomaticoIntervalo = setInterval(() => {
@@ -485,6 +471,8 @@ function loadAuxData() {
             clientesCache[doc.id] = data;
             clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
         });
+        // Una vez que los clientes están cargados, poblamos el dropdown de exportación
+        setupExportControls();
     });
 
     db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
@@ -527,7 +515,6 @@ async function openEditReservaModal(reservaId) {
     if (!doc.exists) { alert("Error: No se encontró la reserva."); return; }
     const data = doc.data();
     const form = document.getElementById('reserva-form');
-    // Resetear el checkbox y el selector de pasajeros antes de cargar los datos
     form.viaje_exclusivo.checked = false;
     form.cantidad_pasajeros.disabled = false;
     
@@ -546,7 +533,6 @@ async function openEditReservaModal(reservaId) {
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
     
-    // Lógica para el checkbox de exclusivo al editar
     if (data.es_exclusivo) {
         form.viaje_exclusivo.checked = true;
         form.cantidad_pasajeros.value = '4';
@@ -598,35 +584,25 @@ async function updateZona(event, reservaId) {
 
 async function asignarChofer(reservaId, choferId) {
     if (!choferId) return;
-
     try {
-        // Primero, verifica si el chofer ya tiene un viaje exclusivo asignado.
         const qViajeExclusivo = db.collection('reservas')
             .where('chofer_asignado_id', '==', choferId)
             .where('es_exclusivo', '==', true);
-
         const viajeExclusivoSnapshot = await qViajeExclusivo.get();
-
         if (!viajeExclusivoSnapshot.empty) {
-            // El chofer ya tiene un viaje exclusivo, no se le puede asignar nada más.
             alert("El chofer tiene asignado un traslado exclusivo.");
-            // Resetea el dropdown para evitar confusión
             if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
             return;
         }
-
-        // Si el chofer no tiene un viaje exclusivo, se procede a la asignación.
         await db.collection('reservas').doc(reservaId).update({
             chofer_asignado_id: choferId,
             estado: 'Asignado'
         });
-
     } catch (err) {
         console.error("Error al asignar chofer:", err);
         alert("Error: " + err.message);
     }
 }
-
 
 async function finalizarReserva(reservaId) {
     if (confirm("¿Marcar esta reserva como finalizada?")) {
@@ -716,7 +692,6 @@ function attachEventListeners() {
     }
     safeAddEventListener('btn-nueva-reserva', 'click', () => {
         document.getElementById('reserva-form').reset();
-        // Asegurarse de que el checkbox y pasajeros estén en estado inicial
         document.getElementById('viaje_exclusivo').checked = false;
         const pasajerosSelect = document.getElementById('cantidad_pasajeros');
         pasajerosSelect.value = '1';
@@ -737,7 +712,6 @@ function attachEventListeners() {
     safeAddEventListener('form-zonas', 'submit', handleSaveZona);
     safeAddEventListener('dni_pasajero', 'blur', handleDniBlur);
 
-    // Llama a la nueva función del checkbox
     setupExclusiveCheckboxListener();
 }
 
@@ -753,6 +727,60 @@ function setupExclusiveCheckboxListener() {
             } else {
                 pasajerosSelect.disabled = false;
                 pasajerosSelect.value = '1'; 
+            }
+        });
+    }
+}
+
+function setupExportControls() {
+    const btnExportar = document.getElementById('btn-exportar-excel');
+    const selectCliente = document.getElementById('export-cliente');
+
+    if (selectCliente) {
+        selectCliente.innerHTML = '<option value="">Todos los Clientes</option>';
+        for (const id in clientesCache) {
+            selectCliente.innerHTML += `<option value="${id}">${clientesCache[id].nombre}</option>`;
+        }
+    }
+    
+    if (btnExportar) {
+        btnExportar.addEventListener('click', async () => {
+            const fechaDesde = document.getElementById('export-fecha-desde').value;
+            const fechaHasta = document.getElementById('export-fecha-hasta').value;
+            const clienteId = document.getElementById('export-cliente').value;
+
+            if (!fechaDesde || !fechaHasta) {
+                alert("Por favor, selecciona un rango de fechas.");
+                return;
+            }
+
+            btnExportar.textContent = "Generando...";
+            btnExportar.disabled = true;
+
+            try {
+                const exportarHistorico = functions.httpsCallable('exportarHistorico');
+                const result = await exportarHistorico({ fechaDesde, fechaHasta, clienteId });
+
+                if (result.data.csvData) {
+                    const blob = new Blob([result.data.csvData], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", `historico_${fechaDesde}_a_${fechaHasta}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } else {
+                    alert(result.data.message || "No se encontraron datos para exportar.");
+                }
+
+            } catch (error) {
+                console.error("Error al exportar:", error);
+                alert("Ocurrió un error al generar el archivo.");
+            } finally {
+                btnExportar.textContent = "Exportar a Excel";
+                btnExportar.disabled = false;
             }
         });
     }
@@ -981,11 +1009,9 @@ function openTab(evt, tabName) {
     document.getElementById(tabName).style.display = "block";
     if (evt) evt.currentTarget.classList.add('active');
     
-    // CORRECCIÓN: Llamar a initMap desde aquí, pero solo si no está inicializado.
     if (tabName === 'Mapa' && !map) {
         initMap();
     } else if (tabName === 'Mapa' && map) {
-        // Si el mapa ya existe y volvemos a la pestaña, refrescamos los marcadores.
         cargarMarcadoresDeReservas();
     }
 
@@ -1013,35 +1039,35 @@ function initAutocomplete() {
     const origenInput = document.getElementById('origen');
     const destinoInput = document.getElementById('destino');
     const options = { componentRestrictions: { country: "ar" }, fields: ["formatted_address", "geometry", "name"] };
-    autocompleteOrigen = new google.maps.places.Autocomplete(origenInput, options);
-    autocompleteDestino = new google.maps.places.Autocomplete(destinoInput, options);
-    autocompleteOrigen.addListener('place_changed', () => {
-        const place = autocompleteOrigen.getPlace();
-        if (place.geometry && place.geometry.location) {
-            if (mapaModal && marcadorOrigenModal) {
-                mapaModal.setCenter(place.geometry.location);
-                marcadorOrigenModal.setPosition(place.geometry.location);
-                mapaModal.setZoom(15);
+    if(origenInput) autocompleteOrigen = new google.maps.places.Autocomplete(origenInput, options);
+    if(destinoInput) autocompleteDestino = new google.maps.places.Autocomplete(destinoInput, options);
+    
+    if (autocompleteOrigen) {
+        autocompleteOrigen.addListener('place_changed', () => {
+            const place = autocompleteOrigen.getPlace();
+            if (place.geometry && place.geometry.location) {
+                if (mapaModal && marcadorOrigenModal) {
+                    mapaModal.setCenter(place.geometry.location);
+                    marcadorOrigenModal.setPosition(place.geometry.location);
+                    mapaModal.setZoom(15);
+                }
             }
-        }
-    });
-    autocompleteDestino.addListener('place_changed', () => {
-        const place = autocompleteDestino.getPlace();
-        if (place.geometry && place.geometry.location) {
-            if (mapaModal && marcadorDestinoModal) {
-                mapaModal.setCenter(place.geometry.location);
-                marcadorDestinoModal.setPosition(place.geometry.location);
-                mapaModal.setZoom(15);
+        });
+    }
+    if(autocompleteDestino){
+        autocompleteDestino.addListener('place_changed', () => {
+            const place = autocompleteDestino.getPlace();
+            if (place.geometry && place.geometry.location) {
+                if (mapaModal && marcadorDestinoModal) {
+                    mapaModal.setCenter(place.geometry.location);
+                    marcadorDestinoModal.setPosition(place.geometry.location);
+                    mapaModal.setZoom(15);
+                }
             }
-        }
-    });
+        });
+    }
 }
-/**
- * Crea un icono de marcador SVG personalizado.
- * @param {string} color - El color de fondo del marcador (ej. '#FF0000').
- * @param {string} texto - El texto que se mostrará dentro del marcador (ej. '4' o '10:30').
- * @returns {object} - Un objeto de icono para la API de Google Maps.
- */
+
 function crearIconoDeMarcador(color, texto) {
     const svg = `
         <svg width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1053,9 +1079,10 @@ function crearIconoDeMarcador(color, texto) {
     return {
         url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
         scaledSize: new google.maps.Size(36, 48),
-        anchor: new google.maps.Point(18, 48) // La punta del marcador
+        anchor: new google.maps.Point(18, 48)
     };
 }
+
 function cargarMarcadoresDeReservas() {
     if (!map || !lastReservasSnapshot) return;
 
@@ -1086,22 +1113,9 @@ function cargarMarcadoresDeReservas() {
             let colorMarcador, textoMarcador = '';
 
             switch (estadoEfectivo) {
-                case 'En Curso':
-                    colorMarcador = '#F54927';
-                    const hora = reserva.hora_pickup || reserva.hora_turno;
-                    if (hora) { textoMarcador = hora.substring(0, 5); }
-                    break;
-                case 'Asignado':
-                    colorMarcador = '#4DF527';
-                    const chofer = choferesCache.find(c => c.id === reserva.chofer_asignado_id);
-                    if (chofer && chofer.movil_actual_id) {
-                        const movil = movilesCache.find(m => m.id === chofer.movil_actual_id);
-                        if (movil && movil.numero) { textoMarcador = movil.numero.toString(); }
-                    }
-                    break;
-                case 'Pendiente':
-                    colorMarcador = '#C15DE8';
-                    break;
+                case 'En Curso': colorMarcador = '#F54927'; const hora = reserva.hora_pickup || reserva.hora_turno; if (hora) { textoMarcador = hora.substring(0, 5); } break;
+                case 'Asignado': colorMarcador = '#4DF527'; const chofer = choferesCache.find(c => c.id === reserva.chofer_asignado_id); if (chofer && chofer.movil_actual_id) { const movil = movilesCache.find(m => m.id === chofer.movil_actual_id); if (movil && movil.numero) { textoMarcador = movil.numero.toString(); } } break;
+                case 'Pendiente': colorMarcador = '#C15DE8'; break;
             }
 
             const iconoPersonalizado = crearIconoDeMarcador(colorMarcador, textoMarcador);
@@ -1114,7 +1128,6 @@ function cargarMarcadoresDeReservas() {
             });
             marcadoresOrigen[reserva.id] = marker;
 
-            // --- Listener de Clic Izquierdo (Aquí está el cambio) ---
             marker.addListener('click', () => {
                 if (infoWindowActiva) infoWindowActiva.close();
                 if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null);
@@ -1122,12 +1135,10 @@ function cargarMarcadoresDeReservas() {
                 const cliente = clientesCache[reserva.cliente] || { nombre: 'N/A' };
                 const choferInfo = choferesCache.find(c => c.id === reserva.chofer_asignado_id) || { nombre: 'No asignado' };
 
-                // --- INICIO: LÓGICA PARA MOSTRAR OBSERVACIONES ---
                 let observacionesHTML = '';
                 if (reserva.observaciones) {
                     observacionesHTML = `<p style="background-color: #fffbe6; border-left: 4px solid #ffc107; padding: 8px; margin-top: 5px;"><strong>Obs:</strong> ${reserva.observaciones}</p>`;
                 }
-                // --- FIN: LÓGICA PARA MOSTRAR OBSERVACIONES ---
 
                 const contenido = `
                     <div class="info-window">
@@ -1161,7 +1172,6 @@ function cargarMarcadoresDeReservas() {
                 });
             });
             
-            // Listener de Clic Derecho (Sin cambios)
             marker.addListener('rightclick', (event) => {
                 event.domEvent.preventDefault();
                 hideMapContextMenu();
@@ -1207,42 +1217,46 @@ function filtrarMapa(estado) {
 function initMapaModal(origenCoords, destinoCoords) {
     const mapaContainer = document.getElementById("mapa-modal-container");
     if (!mapaContainer) return;
+    
+    const centroPorDefecto = { lat: -32.95, lng: -60.65 };
+
     if (!mapaModal) {
         mapaModal = new google.maps.Map(mapaContainer, {
-            center: { lat: -32.95, lng: -60.65 },
+            center: centroPorDefecto,
             zoom: 13
         });
         initAutocomplete();
     }
+    
     if (marcadorOrigenModal) marcadorOrigenModal.setMap(null);
     if (marcadorDestinoModal) marcadorDestinoModal.setMap(null);
-    const centroPorDefecto = { lat: -32.95, lng: -60.65 };
-    const posOrigen = (origenCoords && origenCoords.latitude) ?
-        { lat: origenCoords.latitude, lng: origenCoords.longitude } :
-        centroPorDefecto;
+    
+    const posOrigen = (origenCoords && origenCoords.latitude) ? { lat: origenCoords.latitude, lng: origenCoords.longitude } : centroPorDefecto;
     marcadorOrigenModal = new google.maps.Marker({
         position: posOrigen,
         map: mapaModal,
         draggable: true,
         icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
     });
-    const posDestino = (destinoCoords && destinoCoords.latitude) ?
-        { lat: destinoCoords.latitude, lng: destinoCoords.longitude } :
-        centroPorDefecto;
+
+    const posDestino = (destinoCoords && destinoCoords.latitude) ? { lat: destinoCoords.latitude, lng: destinoCoords.longitude } : centroPorDefecto;
     marcadorDestinoModal = new google.maps.Marker({
         position: posDestino,
         map: mapaModal,
         draggable: true,
         icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
     });
-    if (origenCoords && destinoCoords) {
+
+    if (origenCoords && origenCoords.latitude && destinoCoords && destinoCoords.latitude) {
         const bounds = new google.maps.LatLngBounds();
         bounds.extend(posOrigen);
         bounds.extend(posDestino);
         mapaModal.fitBounds(bounds);
     } else {
         mapaModal.setCenter(posOrigen);
+        mapaModal.setZoom(13);
     }
+    
     marcadorOrigenModal.addListener('dragend', (event) => {
         actualizarInputDesdeCoordenadas(event.latLng, 'origen');
     });
@@ -1251,8 +1265,9 @@ function initMapaModal(origenCoords, destinoCoords) {
     });
 }
 
+
 function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
-    if (!geocoder) { console.error("Geocoder no inicializado."); return; }
+    if (!geocoder) geocoder = new google.maps.Geocoder();
     geocoder.geocode({ 'location': latLng }, (results, status) => {
         if (status === 'OK') {
             if (results[0]) {
@@ -1267,75 +1282,28 @@ function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Conexión para Búsqueda en Historial
     const searchInput = document.getElementById('search-historial-input');
-    if (searchInput) {
-        searchInput.addEventListener('input', (e) => {
-            buscarEnHistorial(e.target.value);
-        });
-    }
+    if (searchInput) searchInput.addEventListener('input', (e) => buscarEnHistorial(e.target.value));
 
-    // Conexión para Búsqueda en Pasajeros
     const pasajerosSearchInput = document.getElementById('busqueda-pasajeros');
-    if(pasajerosSearchInput) {
-        pasajerosSearchInput.addEventListener('input', (e) => {
-            buscarEnPasajeros(e.target.value);
-        });
-    }
-
-    // Conexión para Búsqueda en Reservas
+    if(pasajerosSearchInput) pasajerosSearchInput.addEventListener('input', (e) => buscarEnPasajeros(e.target.value));
+    
     const reservasSearchInput = document.getElementById('busqueda-reservas');
-    if (reservasSearchInput) {
-        reservasSearchInput.addEventListener('input', (e) => {
-            buscarEnReservas(e.target.value);
-        });
-    }
+    if (reservasSearchInput) reservasSearchInput.addEventListener('input', (e) => buscarEnReservas(e.target.value));
 
-    // Historial
     historialBody = document.getElementById('historial-body');
     btnAnterior = document.getElementById('btn-anterior');
     btnSiguiente = document.getElementById('btn-siguiente');
     indicadorPagina = document.getElementById('indicador-pagina');
-    if (btnSiguiente) {
-        btnSiguiente.addEventListener('click', () => {
-            if (paginaActual === historialDePaginas.length - 1) {
-                historialDePaginas.push(ultimoDocVisible);
-            }
-            paginaActual++;
-            cargarHistorial();
-        });
-    }
-    if (btnAnterior) {
-        btnAnterior.addEventListener('click', () => {
-            if (paginaActual > 0) {
-                paginaActual--;
-                cargarHistorial();
-            }
-        });
-    }
+    if (btnSiguiente) btnSiguiente.addEventListener('click', () => { if (paginaActual === historialDePaginas.length - 1) { historialDePaginas.push(ultimoDocVisible); } paginaActual++; cargarHistorial(); });
+    if (btnAnterior) btnAnterior.addEventListener('click', () => { if (paginaActual > 0) { paginaActual--; cargarHistorial(); } });
     
-    // Pasajeros
     pasajerosBody = document.getElementById('lista-pasajeros');
     pasajerosBtnAnterior = document.getElementById('pasajeros-btn-anterior');
     pasajerosBtnSiguiente = document.getElementById('pasajeros-btn-siguiente');
     pasajerosIndicadorPagina = document.getElementById('pasajeros-indicador-pagina');
-    if (pasajerosBtnSiguiente) {
-        pasajerosBtnSiguiente.addEventListener('click', () => {
-            if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) {
-                pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible);
-            }
-            pasajerosPaginaActual++;
-            cargarPasajeros();
-        });
-    }
-    if (pasajerosBtnAnterior) {
-        pasajerosBtnAnterior.addEventListener('click', () => {
-            if (pasajerosPaginaActual > 0) {
-                pasajerosPaginaActual--;
-                cargarPasajeros();
-            }
-        });
-    }
+    if (pasajerosBtnSiguiente) pasajerosBtnSiguiente.addEventListener('click', () => { if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) { pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible); } pasajerosPaginaActual++; cargarPasajeros(); });
+    if (pasajerosBtnAnterior) pasajerosBtnAnterior.addEventListener('click', () => { if (pasajerosPaginaActual > 0) { pasajerosPaginaActual--; cargarPasajeros(); } });
 });
 
 function initMap() {
@@ -1344,8 +1312,9 @@ function initMap() {
             center: { lat: -32.9566, lng: -60.6577 },
             zoom: 12
         });
-        
-        // El mapa se ha creado, ahora podemos cargar los marcadores
+        if (map) {
+             map.addListener('click', hideMapContextMenu);
+        }
         if (lastReservasSnapshot) {
             cargarMarcadoresDeReservas();
         }

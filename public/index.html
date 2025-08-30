@@ -85,7 +85,16 @@
 
             <input type="search" id="search-historial-input" class="search-input" placeholder="🔎 Buscar en historial por cliente, origen, destino...">
             
-            <div id="resultados-busqueda-historico"></div>
+            <div class="export-controls admin-form">
+                <label>Desde:</label>
+                <input type="date" id="export-fecha-desde" name="export-fecha-desde">
+                <label>Hasta:</label>
+                <input type="date" id="export-fecha-hasta" name="export-fecha-hasta">
+                <select id="export-cliente" name="export-cliente">
+                    <option value="">Todos los Clientes</option>
+                </select>
+                <button id="btn-exportar-excel" class="btn-primary">Exportar a Excel</button>
+            </div>
             
             <div class="table-wrapper" id="contenedor-historico-original">
                 <table id="tabla-historico">
@@ -130,10 +139,7 @@
         
         <div id="Pasajeros" class="tab-content" style="display:none;">
             <h2>Gestión de Pasajeros</h2>
-            
             <input type="search" id="busqueda-pasajeros" class="search-input" placeholder="🔎 Buscar por nombre, DNI, domicilio...">
-            <div id="resultados-busqueda-pasajeros"></div>
-
             <form id="form-pasajeros" class="admin-form"><input type="text" name="dni" placeholder="DNI del Pasajero (obligatorio)" required><input type="text" name="nombre_apellido" placeholder="Nombre y Apellido"><input type="text" name="telefono" placeholder="Teléfono"><input type="text" name="domicilio" placeholder="Domicilio Principal"><button type="submit">Guardar Pasajero</button></form>
             <div id="lista-pasajeros" class="lista-admin"></div>
             <div class="pagination-controls" id="paginacion-pasajeros">
@@ -158,9 +164,8 @@
 
     <div id="reserva-modal" class="modal">
         <div class="modal-content">
-            <span class="close-btn">&times;</span>
+            <span class="close-btn">×</span>
             <h2 id="modal-title">Nueva Reserva</h2>
-    
             <div class="modal-layout">
                 <form id="reserva-form" class="modal-form">
                     <input type="hidden" id="reserva-id">
@@ -183,28 +188,26 @@
                             <option value="4">4 Pasajeros</option>
                         </select>
                         <select id="zona" name="zona"><option value="">Seleccionar Zona...</option></select>
-                        
                         <div style="display: flex; align-items: center; gap: 10px; grid-column: 1 / -1;">
                             <input type="checkbox" id="viaje_exclusivo" name="viaje_exclusivo" style="width: auto;">
                             <label for="viaje_exclusivo" style="margin: 0;">Viaje Exclusivo</label>
                         </div>
-
                     </div>
                     <textarea id="observaciones" name="observaciones" placeholder="Observaciones (máx 100 caracteres)" maxlength="100"></textarea>
                     <button type="submit" class="btn-primary">Guardar Reserva</button>
                 </form>
-    
                 <div id="mapa-modal-container" class="modal-map"></div>
             </div>
         </div>
     </div>
 
-    <div id="edit-modal" class="modal"><div class="modal-content"><span class="close-edit-btn">&times;</span><h2 id="edit-modal-title">Editar</h2><form id="edit-form"></form></div></div>
-
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD33ys3G9-hHG0aw34EQByXecK3c7oEbFo&libraries=places" defer></script>
-    <script src="script.js"></script>
+    <div id="edit-modal" class="modal"><div class="modal-content"><span class="close-edit-btn">×</span><h2 id="edit-modal-title">Editar</h2><form id="edit-form"></form></div></div>
+    
     <div id="map-context-menu" class="context-menu">
         <ul id="map-context-menu-items"></ul>
     </div>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD33ys3G9-hHG0aw34EQByXecK3c7oEbFo&libraries=places" defer></script>
+    <script src="script.js"></script>
 </body>
 </html>
