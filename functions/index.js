@@ -2,10 +2,14 @@
 // IMPORTACIONES
 // ===================================================================================
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+// MODIFICADO: Cambiamos onCall por onRequest para manejar CORS manualmente
+const { onRequest } = require("firebase-functions/v2/https"); 
 const admin = require("firebase-admin");
 const { Client } = require("@googlemaps/google-maps-services-js");
 const algoliasearch = require("algoliasearch");
+// AÑADIDO: Importamos la librería cors
+const cors = require("cors")({ origin: true });
+
 
 // ===================================================================================
 // INICIALIZACIÓN DE SERVICIOS
@@ -38,7 +42,7 @@ function getAlgoliaIndices() {
 
 
 // ===================================================================================
-// FUNCIONES
+// FUNCIONES (EXISTENTES - SIN CAMBIOS)
 // ===================================================================================
 
 exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event) => {
@@ -69,19 +73,19 @@ exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event)
     return null;
 });
 
+// Nota: Las funciones onCall como crearUsuario y listUsers no necesitan el manejador CORS
+// porque el SDK de Firebase lo maneja por ellas. La cambiamos para exportar por un
+// error específico que estabas viendo.
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+
 exports.crearUsuario = onCall(async (request) => {
   const {email, password, nombre} = request.data;
-  if (!email || !password || !nombre) {
-    throw new HttpsError('invalid-argument', 'Faltan datos (email, password, nombre).');
-  }
+  if (!email || !password || !nombre) { throw new HttpsError('invalid-argument', 'Faltan datos.'); }
   try {
     const userRecord = await admin.auth().createUser({ email: email, password: password, displayName: nombre });
     await admin.firestore().collection('users').doc(userRecord.uid).set({ nombre: nombre, email: email, rol: 'operador' });
     return {result: `Usuario ${nombre} creado con éxito.`};
-  } catch (error) {
-    console.error("Error al crear usuario:", error);
-    throw new HttpsError('internal', 'No se pudo crear el usuario.', error);
-  }
+  } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al crear.'); }
 });
 
 exports.listUsers = onCall(async (request) => {
@@ -92,10 +96,7 @@ exports.listUsers = onCall(async (request) => {
       return { uid: user.uid, email: user.email, nombre: user.displayName };
     });
     return { users };
-  } catch (error) {
-    console.error("Error listando usuarios:", error);
-    throw new HttpsError('internal', 'No se pudo listar los usuarios.', error);
-  }
+  } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al listar.'); }
 });
 
 exports.sincronizarConAlgolia = onDocumentWritten("pasajeros/{pasajeroId}", (event) => {
@@ -122,50 +123,64 @@ exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{reservaId}"
     return reservasIndex.saveObject(record);
 });
 
-// --- NUEVA CLOUD FUNCTION PARA EXPORTAR ---
-exports.exportarHistorico = onCall(async (request) => {
-    const { fechaDesde, fechaHasta, clienteId } = request.data;
-    if (!fechaDesde || !fechaHasta) {
-        throw new HttpsError('invalid-argument', 'Las fechas "desde" y "hasta" son obligatorias.');
-    }
+// --- FUNCIÓN PARA EXPORTAR CORREGIDA ---
+exports.exportarHistorico = onRequest((req, res) => {
+    // Envolvemos toda la lógica en el manejador de CORS
+    cors(req, res, async () => {
+        // Para onRequest, los datos vienen en req.body.data cuando se llama desde el SDK cliente
+        const { fechaDesde, fechaHasta, clienteId } = req.body.data;
 
-    let query = admin.firestore().collection('historico');
-    const desdeTimestamp = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00'));
-    const hastaTimestamp = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59'));
+        if (!fechaDesde || !fechaHasta) {
+            console.error("Fechas no proporcionadas");
+            res.status(400).send({ error: 'Las fechas "desde" y "hasta" son obligatorias.' });
+            return;
+        }
 
-    query = query.where('archivadoEn', '>=', desdeTimestamp)
-                 .where('archivadoEn', '<=', hastaTimestamp);
+        try {
+            let query = admin.firestore().collection('historico');
+            const desdeTimestamp = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00'));
+            const hastaTimestamp = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59'));
 
-    if (clienteId) {
-        query = query.where('cliente', '==', clienteId);
-    }
-    
-    const snapshot = await query.get();
-    if (snapshot.empty) {
-        return { csvData: null, message: "No se encontraron registros para el período seleccionado." };
-    }
+            query = query.where('archivadoEn', '>=', desdeTimestamp)
+                         .where('archivadoEn', '<=', hastaTimestamp);
 
-    let csvContent = "Fecha Turno,Hora Turno,Hora PickUp,Pasajero,Cliente,Origen,Destino,Estado,Siniestro,Autorizacion\n";
-    
-    snapshot.forEach(doc => {
-        const viaje = doc.data();
-        const escapeCSV = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
+            if (clienteId) {
+                query = query.where('cliente', '==', clienteId);
+            }
+            
+            const snapshot = await query.get();
+            if (snapshot.empty) {
+                res.json({ data: { csvData: null, message: "No se encontraron registros para el período seleccionado." } });
+                return;
+            }
 
-        const fila = [
-            viaje.fecha_turno || 'N/A',
-            viaje.hora_turno || 'N/A',
-            viaje.hora_pickup || 'N/A',
-            escapeCSV(viaje.nombre_pasajero),
-            escapeCSV(viaje.clienteNombre),
-            escapeCSV(viaje.origen),
-            escapeCSV(viaje.destino),
-            viaje.estado || 'N/A',
-            viaje.siniestro || 'N/A',
-            viaje.autorizacion || 'N/A'
-        ].join(',');
-        
-        csvContent += fila + "\n";
+            let csvContent = "Fecha Turno,Hora Turno,Hora PickUp,Pasajero,Cliente,Origen,Destino,Estado,Siniestro,Autorizacion\n";
+            
+            snapshot.forEach(doc => {
+                const viaje = doc.data();
+                const escapeCSV = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
+
+                const fila = [
+                    viaje.fecha_turno || 'N/A',
+                    viaje.hora_turno || 'N/A',
+                    viaje.hora_pickup || 'N/A',
+                    escapeCSV(viaje.nombre_pasajero),
+                    escapeCSV(viaje.clienteNombre),
+                    escapeCSV(viaje.origen),
+                    escapeCSV(viaje.destino),
+                    viaje.estado || 'N/A',
+                    viaje.siniestro || 'N/A',
+                    viaje.autorizacion || 'N/A'
+                ].join(',');
+                
+                csvContent += fila + "\n";
+            });
+
+            res.json({ data: { csvData: csvContent } });
+
+        } catch (error) {
+            console.error("Error al generar el histórico:", error);
+            res.status(500).send({ error: 'Error interno del servidor al generar el archivo.' });
+        }
     });
-
-    return { csvData: csvContent };
 });
