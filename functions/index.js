@@ -1,14 +1,11 @@
-// index.js
-
 // ===================================================================================
 // IMPORTACIONES
 // ===================================================================================
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
-const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https"); 
+const { onCall, HttpsError } = require("firebase-functions/v2/https"); 
 const admin = require("firebase-admin");
 const { Client } = require("@googlemaps/google-maps-services-js");
 const algoliasearch = require("algoliasearch");
-const cors = require("cors")({ origin: true });
 
 // ===================================================================================
 // INICIALIZACIÓN DE SERVICIOS
@@ -19,6 +16,7 @@ admin.initializeApp();
 let algoliaClient;
 let mapsClient;
 let pasajerosIndex, historicoIndex, reservasIndex;
+
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
 if (!GEOCODING_API_KEY) {
     console.error("La variable de entorno GEOCODING_API_KEY no está configurada.");
@@ -121,8 +119,6 @@ exports.listUsers = onCall(async (request) => {
   } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al listar.'); }
 });
 
-
-// CORRECCIÓN: Lógica de la función restaurada a la versión eficiente
 exports.exportarHistorico = onCall(async (request) => {
     try {
         const { fechaDesde, fechaHasta, clienteId } = request.data;
@@ -131,13 +127,13 @@ exports.exportarHistorico = onCall(async (request) => {
             return { csvData: null, message: "Las fechas 'desde' y 'hasta' son obligatorias." };
         }
 
-        // Construye la consulta a Firestore filtrando por rango de fechas
-        let query = admin.firestore().collection('historico')
-                         .where('archivadoEn', '>=', new Date(fechaDesde + 'T00:00:00'))
-                         .where('archivadoEn', '<=', new Date(fechaHasta + 'T23:59:59'));
+        const fechaInicio = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00Z'));
+        const fechaFin = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59Z'));
 
-        // Si se proporciona un cliente, añade el filtro a la consulta
-        // Esto requiere un ÍNDICE COMPUESTO en Firestore
+        let query = admin.firestore().collection('historico')
+                         .where('archivadoEn', '>=', fechaInicio)
+                         .where('archivadoEn', '<=', fechaFin);
+
         if (clienteId) {
             query = query.where('cliente', '==', clienteId);
         }
@@ -168,12 +164,10 @@ exports.exportarHistorico = onCall(async (request) => {
             csvContent += fila + "\n";
         });
 
-        console.log("CSV generado exitosamente para", snapshot.size, "registros.");
         return { csvData: csvContent };
 
     } catch (error) {
         console.error("Error crítico al generar el histórico:", error);
-        // Este error te dirá si falta un índice en los logs de Firebase Functions
         throw new HttpsError('internal', 'Error interno del servidor al generar el archivo.', error.message);
     }
 });

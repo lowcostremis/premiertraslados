@@ -237,6 +237,7 @@ let zonasCache = [];
 let movilesCache = [];
 let unsubscribeReservas;
 let adminListeners = [];
+let auxDataListeners = []; // <-- CORRECCIÓN: Variable declarada aquí
 let lastReservasSnapshot = null;
 let mapaModal, marcadorOrigenModal, marcadorDestinoModal, geocoder;
 let filtroMapaActual = 'Todos';
@@ -415,6 +416,7 @@ async function buscarEnReservas(texto) {
 // LÓGICA PRINCIPAL Y DE UTILIDADES
 // ===================================================================================
 
+// CORRECCIÓN: Manejador de autenticación actualizado para limpiar todos los listeners
 auth.onAuthStateChanged(user => {
     const authSection = document.getElementById('auth-section');
     const appContent = document.getElementById('app-content');
@@ -426,12 +428,21 @@ auth.onAuthStateChanged(user => {
     } else {
         authSection.style.display = 'flex';
         appContent.style.display = 'none';
+
+        // Desconexión de todos los oyentes
         if (unsubscribeReservas) unsubscribeReservas();
+        
         adminListeners.forEach(unsubscribe => unsubscribe());
         adminListeners = [];
+        
+        // Desconexión de los nuevos oyentes
+        auxDataListeners.forEach(unsubscribe => unsubscribe());
+        auxDataListeners = [];
+        
         if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     }
 });
+
 
 document.getElementById('login-btn').addEventListener('click', () => {
     const email = document.getElementById('email').value;
@@ -462,9 +473,15 @@ function initApp() {
     showReservasTab('en-curso');
 }
 
+// CORRECCIÓN: loadAuxData actualizado para guardar y limpiar los listeners
 function loadAuxData() {
-    db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
+    // Limpiamos oyentes anteriores por si acaso
+    auxDataListeners.forEach(unsubscribe => unsubscribe());
+    auxDataListeners = [];
+
+    const clientesUnsubscribe = db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
+        if (!clienteSelect) return;
         clienteSelect.innerHTML = '<option value="Default">Default</option>';
         clientesCache = {};
         snapshot.forEach(doc => {
@@ -474,15 +491,18 @@ function loadAuxData() {
         });
         setupExportControls();
     }, err => console.error("Error cargando clientes:", err));
+    auxDataListeners.push(clientesUnsubscribe); // Guardamos el oyente
 
-    db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
+    const choferesUnsubscribe = db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
         choferesCache = [];
         snapshot.forEach(doc => choferesCache.push({ id: doc.id, ...doc.data() }));
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
     }, err => console.error("Error cargando choferes:", err));
+    auxDataListeners.push(choferesUnsubscribe); // Guardamos el oyente
 
-    db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
+    const zonasUnsubscribe = db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
         const zonaSelect = document.getElementById('zona');
+        if (!zonaSelect) return;
         zonaSelect.innerHTML = '<option value="">Seleccionar Zona...</option>';
         zonasCache = [];
         snapshot.forEach(doc => {
@@ -492,8 +512,9 @@ function loadAuxData() {
         });
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
     }, err => console.error("Error cargando zonas:", err));
+    auxDataListeners.push(zonasUnsubscribe); // Guardamos el oyente
 
-    db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
+    const movilesUnsubscribe = db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         movilesCache = [];
         const movilSelect = document.querySelector("#form-choferes select[name='movil_actual_id']");
         
@@ -504,11 +525,11 @@ function loadAuxData() {
                 movilesCache.push(movil);
                 movilSelect.innerHTML += `<option value="${movil.id}">N° ${movil.numero} (${movil.patente})</option>`;
             });
-        } else {
-            console.error("No se encontró el <select> de móviles en el formulario de choferes.");
         }
     }, err => console.error("Error cargando moviles:", err));
+    auxDataListeners.push(movilesUnsubscribe); // Guardamos el oyente
 }
+
 
 async function openEditReservaModal(reservaId) {
     const doc = await db.collection('reservas').doc(reservaId).get();
@@ -1006,7 +1027,6 @@ async function deleteItem(collection, id) {
     }
 }
 
-// CORRECCIÓN: Se restaura la lógica original de openTab y initMap
 function openTab(evt, tabName) {
     document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none");
     document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active'));
@@ -1016,7 +1036,7 @@ function openTab(evt, tabName) {
     if(activeLink) activeLink.classList.add('active');
     
     if (tabName === 'Mapa' && !map) {
-        initMap(); // Se vuelve a inicializar el mapa al hacer clic
+        initMap();
     } else if (tabName === 'Mapa' && map) {
         cargarMarcadoresDeReservas();
     }
@@ -1233,7 +1253,7 @@ function filtrarMapa(estado) {
 }
 
 function initMapaModal(origenCoords, destinoCoords) {
-  const mapaContainer = document.getElementById("mapa-modal-container");
+    const mapaContainer = document.getElementById("mapa-modal-container");
     if (!mapaContainer) return;
     
     const centroPorDefecto = { lat: -32.95, lng: -60.65 };
@@ -1254,7 +1274,6 @@ function initMapaModal(origenCoords, destinoCoords) {
         position: posOrigen,
         map: mapaModal,
         draggable: true
-        // CORRECCIÓN: Se eliminó la propiedad 'icon' para usar el marcador por defecto.
     });
 
     const posDestino = (destinoCoords && destinoCoords.latitude) ? { lat: destinoCoords.latitude, lng: destinoCoords.longitude } : centroPorDefecto;
@@ -1262,7 +1281,6 @@ function initMapaModal(origenCoords, destinoCoords) {
         position: posDestino,
         map: mapaModal,
         draggable: true
-        // CORRECCIÓN: Se eliminó la propiedad 'icon' para usar el marcador por defecto.
     });
 
     if (origenCoords && origenCoords.latitude && destinoCoords && destinoCoords.latitude) {
@@ -1285,6 +1303,7 @@ function initMapaModal(origenCoords, destinoCoords) {
         actualizarInputDesdeCoordenadas(event.latLng, 'destino');
     });
 }
+
 
 function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
     if (!geocoder) geocoder = new google.maps.Geocoder();
