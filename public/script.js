@@ -257,7 +257,7 @@ function listenToReservas() {
     unsubscribeReservas = db.collection('reservas').orderBy("creadoEn", "desc").onSnapshot(snapshot => {
         lastReservasSnapshot = snapshot;
         renderAllReservas(snapshot);
-        if (map) cargarMarcadoresDeReservas();
+        if (map) cargarMarcadoresDeReservas(); // Si el mapa ya existe, carga los marcadores
     }, err => console.error("Error escuchando reservas:", err));
 }
 
@@ -623,6 +623,10 @@ window.onclick = function(event) {
         document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
             menu.classList.remove('visible');
         });
+    }
+    // Cierra el menú contextual del mapa si se hace clic en cualquier otro lugar
+    if (mapContextMenu && !event.target.closest('#map-context-menu')) {
+        hideMapContextMenu();
     }
 }
 
@@ -1005,11 +1009,19 @@ function openTab(evt, tabName) {
     document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none");
     document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active'));
     document.getElementById(tabName).style.display = "block";
-    if (evt) evt.currentTarget.classList.add('active');
     
+    // Asigna la clase 'active' al botón correcto
+    const activeLink = evt ? evt.currentTarget : document.querySelector(`.tab-link[onclick*="'${tabName}'"]`);
+    if(activeLink) activeLink.classList.add('active');
+    
+    // Llama a initMap solo si la pestaña es "Mapa" y el mapa no existe
     if (tabName === 'Mapa' && !map) {
-        initMap();
+        // La inicialización ahora la hace el callback de la API de Google
+        // Podemos llamar a cargarMarcadoresDeReservas por si el mapa ya se inicializó
+        // pero la pestaña se abre por primera vez
+        cargarMarcadoresDeReservas();
     } else if (tabName === 'Mapa' && map) {
+        // Si el mapa ya existe y volvemos a la pestaña, recargamos marcadores
         cargarMarcadoresDeReservas();
     }
 
@@ -1276,7 +1288,35 @@ function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
     });
 }
 
+// ===================================================================================
+// INICIALIZACIÓN DEL MAPA Y EVENTOS DEL DOM
+// ===================================================================================
+
+/**
+ * Función de callback global para la API de Google Maps.
+ * Se asigna a 'window' para garantizar que sea accesible globalmente.
+ */
+window.initMap = function() {
+    console.log("Google Maps API cargada, inicializando mapa...");
+    const mapContainer = document.getElementById("map-container");
+    if (mapContainer && !map) {
+        map = new google.maps.Map(mapContainer, {
+            center: { lat: -32.9566, lng: -60.6577 },
+            zoom: 12
+        });
+        map.addListener('click', hideMapContextMenu);
+        
+        // Una vez que el mapa está listo, intentamos cargar los marcadores
+        // por si los datos de Firestore ya llegaron.
+        if (lastReservasSnapshot) {
+            cargarMarcadoresDeReservas();
+        }
+    }
+};
+
+
 document.addEventListener('DOMContentLoaded', () => {
+    // Búsquedas
     const searchInput = document.getElementById('search-historial-input');
     if (searchInput) searchInput.addEventListener('input', (e) => buscarEnHistorial(e.target.value));
 
@@ -1286,6 +1326,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reservasSearchInput = document.getElementById('busqueda-reservas');
     if (reservasSearchInput) reservasSearchInput.addEventListener('input', (e) => buscarEnReservas(e.target.value));
 
+    // Paginación Histórico
     historialBody = document.getElementById('historial-body');
     btnAnterior = document.getElementById('btn-anterior');
     btnSiguiente = document.getElementById('btn-siguiente');
@@ -1293,6 +1334,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnSiguiente) btnSiguiente.addEventListener('click', () => { if (paginaActual === historialDePaginas.length - 1) { historialDePaginas.push(ultimoDocVisible); } paginaActual++; cargarHistorial(); });
     if (btnAnterior) btnAnterior.addEventListener('click', () => { if (paginaActual > 0) { paginaActual--; cargarHistorial(); } });
     
+    // Paginación Pasajeros
     pasajerosBody = document.getElementById('lista-pasajeros');
     pasajerosBtnAnterior = document.getElementById('pasajeros-btn-anterior');
     pasajerosBtnSiguiente = document.getElementById('pasajeros-btn-siguiente');
@@ -1300,18 +1342,3 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pasajerosBtnSiguiente) pasajerosBtnSiguiente.addEventListener('click', () => { if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) { pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible); } pasajerosPaginaActual++; cargarPasajeros(); });
     if (pasajerosBtnAnterior) pasajerosBtnAnterior.addEventListener('click', () => { if (pasajerosPaginaActual > 0) { pasajerosPaginaActual--; cargarPasajeros(); } });
 });
-
-function initMap() {
-    if (document.getElementById("map-container") && !map) {
-        map = new google.maps.Map(document.getElementById("map-container"), {
-            center: { lat: -32.9566, lng: -60.6577 },
-            zoom: 12
-        });
-        if (map) {
-             map.addListener('click', hideMapContextMenu);
-        }
-        if (lastReservasSnapshot) {
-            cargarMarcadoresDeReservas();
-        }
-    }
-}
