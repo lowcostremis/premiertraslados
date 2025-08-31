@@ -441,7 +441,6 @@ document.getElementById('login-btn').addEventListener('click', () => {
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
 function initApp() {
-    if (!geocoder) geocoder = new google.maps.Geocoder();
     loadAuxData();
     attachEventListeners();
     listenToReservas();
@@ -471,7 +470,6 @@ function loadAuxData() {
             clientesCache[doc.id] = data;
             clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
         });
-        // Una vez que los clientes están cargados, poblamos el dropdown de exportación
         setupExportControls();
     });
 
@@ -1038,34 +1036,31 @@ function showReservasTab(tabName) {
 function initAutocomplete() {
     const origenInput = document.getElementById('origen');
     const destinoInput = document.getElementById('destino');
+    if (!origenInput || !destinoInput) return;
     const options = { componentRestrictions: { country: "ar" }, fields: ["formatted_address", "geometry", "name"] };
-    if(origenInput) autocompleteOrigen = new google.maps.places.Autocomplete(origenInput, options);
-    if(destinoInput) autocompleteDestino = new google.maps.places.Autocomplete(destinoInput, options);
+    autocompleteOrigen = new google.maps.places.Autocomplete(origenInput, options);
+    autocompleteDestino = new google.maps.places.Autocomplete(destinoInput, options);
     
-    if (autocompleteOrigen) {
-        autocompleteOrigen.addListener('place_changed', () => {
-            const place = autocompleteOrigen.getPlace();
-            if (place.geometry && place.geometry.location) {
-                if (mapaModal && marcadorOrigenModal) {
-                    mapaModal.setCenter(place.geometry.location);
-                    marcadorOrigenModal.setPosition(place.geometry.location);
-                    mapaModal.setZoom(15);
-                }
+    autocompleteOrigen.addListener('place_changed', () => {
+        const place = autocompleteOrigen.getPlace();
+        if (place.geometry && place.geometry.location) {
+            if (mapaModal && marcadorOrigenModal) {
+                mapaModal.setCenter(place.geometry.location);
+                marcadorOrigenModal.setPosition(place.geometry.location);
+                mapaModal.setZoom(15);
             }
-        });
-    }
-    if(autocompleteDestino){
-        autocompleteDestino.addListener('place_changed', () => {
-            const place = autocompleteDestino.getPlace();
-            if (place.geometry && place.geometry.location) {
-                if (mapaModal && marcadorDestinoModal) {
-                    mapaModal.setCenter(place.geometry.location);
-                    marcadorDestinoModal.setPosition(place.geometry.location);
-                    mapaModal.setZoom(15);
-                }
+        }
+    });
+    autocompleteDestino.addListener('place_changed', () => {
+        const place = autocompleteDestino.getPlace();
+        if (place.geometry && place.geometry.location) {
+            if (mapaModal && marcadorDestinoModal) {
+                mapaModal.setCenter(place.geometry.location);
+                marcadorDestinoModal.setPosition(place.geometry.location);
+                mapaModal.setZoom(15);
             }
-        });
-    }
+        }
+    });
 }
 
 function crearIconoDeMarcador(color, texto) {
@@ -1236,7 +1231,7 @@ function initMapaModal(origenCoords, destinoCoords) {
         position: posOrigen,
         map: mapaModal,
         draggable: true,
-        icon: 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'
+        icon: 'http://googleusercontent.com/maps/google.com/0'
     });
 
     const posDestino = (destinoCoords && destinoCoords.latitude) ? { lat: destinoCoords.latitude, lng: destinoCoords.longitude } : centroPorDefecto;
@@ -1244,7 +1239,7 @@ function initMapaModal(origenCoords, destinoCoords) {
         position: posDestino,
         map: mapaModal,
         draggable: true,
-        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+        icon: 'http://googleusercontent.com/maps/google.com/2'
     });
 
     if (origenCoords && origenCoords.latitude && destinoCoords && destinoCoords.latitude) {
