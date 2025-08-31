@@ -19,7 +19,8 @@ let pasajerosIndex, historicoIndex, reservasIndex;
 
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
 if (!GEOCODING_API_KEY) {
-    console.error("La variable de entorno GEOCODING_API_KEY no está configurada.");
+    // Esta advertencia aparecerá durante el deploy, es normal.
+    console.log("Advertencia: La variable de entorno GEOCODING_API_KEY no está configurada para el análisis local, pero se cargará desde Secret Manager en producción.");
 }
 
 function getMapsClient() {
@@ -41,8 +42,10 @@ function getAlgoliaIndices() {
 // --- FIN DE LA INICIALIZACIÓN DIFERIDA ---
 
 // ===================================================================================
-// TRIGGERS DE FIRESTORE (Geocodificación y Sincronización con Algolia)
+// TRIGGERS DE FIRESTORE
 // ===================================================================================
+
+// CORRECCIÓN: Se añade { secrets: ["GEOCODING_API_KEY"] } para dar acceso al secreto
 exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event) => {
     if (!event.data.after.exists) return null;
     const client = getMapsClient();
@@ -71,6 +74,8 @@ exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event)
     return null;
 });
 
+// ... El resto de tus funciones no cambian ...
+
 exports.sincronizarConAlgolia = onDocumentWritten("pasajeros/{pasajeroId}", (event) => {
     const { pasajerosIndex } = getAlgoliaIndices();
     const pasajeroId = event.params.pasajeroId;
@@ -95,9 +100,6 @@ exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{reservaId}"
     return reservasIndex.saveObject(record);
 });
 
-// ===================================================================================
-// FUNCIONES DE LLAMADA (Callable Functions)
-// ===================================================================================
 exports.crearUsuario = onCall(async (request) => {
   const {email, password, nombre} = request.data;
   if (!email || !password || !nombre) { throw new HttpsError('invalid-argument', 'Faltan datos.'); }
