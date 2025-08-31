@@ -1,4 +1,4 @@
-// ===================================================================================
+    // ===================================================================================
 // CONFIGURACIÓN DE FIREBASE
 // ===================================================================================
 const firebaseConfig = {
@@ -475,7 +475,7 @@ function initApp() {
 
 // CORRECCIÓN: loadAuxData actualizado para guardar y limpiar los listeners
 function loadAuxData() {
-    // Limpiamos oyentes anteriores por si acaso
+      // Limpiamos oyentes anteriores por si acaso
     auxDataListeners.forEach(unsubscribe => unsubscribe());
     auxDataListeners = [];
 
@@ -491,14 +491,15 @@ function loadAuxData() {
         });
         setupExportControls();
     }, err => console.error("Error cargando clientes:", err));
-    auxDataListeners.push(clientesUnsubscribe); // Guardamos el oyente
+    auxDataListeners.push(clientesUnsubscribe);
 
     const choferesUnsubscribe = db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
         choferesCache = [];
         snapshot.forEach(doc => choferesCache.push({ id: doc.id, ...doc.data() }));
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
+        if (map) cargarMarcadoresDeReservas(); // <--- LÍNEA AÑADIDA: Redibuja el mapa cuando los choferes cargan
     }, err => console.error("Error cargando choferes:", err));
-    auxDataListeners.push(choferesUnsubscribe); // Guardamos el oyente
+    auxDataListeners.push(choferesUnsubscribe);
 
     const zonasUnsubscribe = db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
         const zonaSelect = document.getElementById('zona');
@@ -512,7 +513,7 @@ function loadAuxData() {
         });
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
     }, err => console.error("Error cargando zonas:", err));
-    auxDataListeners.push(zonasUnsubscribe); // Guardamos el oyente
+    auxDataListeners.push(zonasUnsubscribe);
 
     const movilesUnsubscribe = db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         movilesCache = [];
@@ -526,8 +527,9 @@ function loadAuxData() {
                 movilSelect.innerHTML += `<option value="${movil.id}">N° ${movil.numero} (${movil.patente})</option>`;
             });
         }
+        if (map) cargarMarcadoresDeReservas(); // <--- LÍNEA AÑADIDA: Redibuja el mapa cuando los móviles cargan
     }, err => console.error("Error cargando moviles:", err));
-    auxDataListeners.push(movilesUnsubscribe); // Guardamos el oyente
+    auxDataListeners.push(movilesUnsubscribe);
 }
 
 
