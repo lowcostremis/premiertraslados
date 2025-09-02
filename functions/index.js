@@ -44,7 +44,6 @@ function getAlgoliaIndices() {
 // ===================================================================================
 // TRIGGERS DE FIRESTORE
 // ===================================================================================
-
 // CORRECCIÓN: Se añade { secrets: ["GEOCODING_API_KEY"] } para dar acceso al secreto
 exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event) => {
     if (!event.data.after.exists) return null;
