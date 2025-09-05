@@ -1,0 +1,18 @@
+C:\>keytool -list -v -keystore "%USERPROFILE%\.android\debug.keystore" -alias androiddebugkey -storepass android -keypass android
+Nombre de Alias: androiddebugkey
+Fecha de Creación: 2 sept 2025
+Tipo de Entrada: PrivateKeyEntry
+Longitud de la Cadena de Certificado: 1
+Certificado[1]:
+Propietario: C=US, O=Android, CN=Android Debug
+Emisor: C=US, O=Android, CN=Android Debug
+Número de serie: 1
+Válido desde: Tue Sep 02 13:20:13 ART 2025 hasta: Thu Aug 26 13:20:13 ART 2055
+Huellas digitales del certificado:
+         SHA1: 3C:81:A6:69:9A:B1:35:93:CC:53:E9:5F:32:CE:79:4B:3B:31:6A:9F
+         SHA256: C0:45:B0:D4:01:19:B0:33:4C:9A:34:EF:37:AA:93:A2:F6:D7:87:6C:35:1B:70:AF:E8:93:81:59:C2:0B:5F:91
+Nombre del algoritmo de firma: SHA256withRSA
+Algoritmo de clave pública de asunto: Clave RSA de 2048 bits
+Versión: 1
+
+C:\>

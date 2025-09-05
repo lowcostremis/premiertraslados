@@ -2,7 +2,7 @@
 // IMPORTACIONES
 // ===================================================================================
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
-const { onCall, HttpsError } = require("firebase-functions/v2/https"); 
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const { Client } = require("@googlemaps/google-maps-services-js");
 const algoliasearch = require("algoliasearch");
@@ -18,10 +18,6 @@ let mapsClient;
 let pasajerosIndex, historicoIndex, reservasIndex;
 
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
-if (!GEOCODING_API_KEY) {
-    // Esta advertencia aparecerá durante el deploy, es normal.
-    console.log("Advertencia: La variable de entorno GEOCODING_API_KEY no está configurada para el análisis local, pero se cargará desde Secret Manager en producción.");
-}
 
 function getMapsClient() {
     if (!mapsClient) {
@@ -42,38 +38,148 @@ function getAlgoliaIndices() {
 // --- FIN DE LA INICIALIZACIÓN DIFERIDA ---
 
 // ===================================================================================
-// TRIGGERS DE FIRESTORE
+// FUNCIONES PARA GESTIÓN DE CHOFERES (CREAR, BORRAR, ACTUALIZAR)
 // ===================================================================================
-// CORRECCIÓN: Se añade { secrets: ["GEOCODING_API_KEY"] } para dar acceso al secreto
+
+exports.crearChoferConAcceso = onCall(async (request) => {
+    // Aquí se podría verificar si el usuario que llama es un administrador
+    const { email, password, nombre, dni, domicilio, telefono, movil_actual_id } = request.data;
+    if (!email || !password || !nombre || !dni) {
+        throw new HttpsError('invalid-argument', 'Faltan datos esenciales (email, password, nombre, dni).');
+    }
+    try {
+        const userRecord = await admin.auth().createUser({
+            email: email,
+            password: password,
+            displayName: nombre,
+            emailVerified: true,
+            disabled: false
+        });
+        const choferData = {
+            auth_uid: userRecord.uid,
+            email: email,
+            nombre: nombre,
+            dni: dni,
+            domicilio: domicilio || '',
+            telefono: telefono || '',
+            movil_actual_id: movil_actual_id || null,
+            creadoEn: admin.firestore.FieldValue.serverTimestamp()
+        };
+        await admin.firestore().collection('choferes').doc(dni).set(choferData);
+        return { message: `¡Éxito! Chofer ${nombre} y su acceso fueron creados.` };
+    } catch (error) {
+        console.error("Error en crearChoferConAcceso:", error);
+        if (error.code === 'auth/email-already-exists') {
+            throw new HttpsError('already-exists', 'El correo electrónico ya está en uso por otro usuario.');
+        }
+        throw new HttpsError('internal', 'Ocurrió un error interno al crear el chofer.');
+    }
+});
+
+exports.borrarChofer = onCall(async (request) => {
+    // Aquí se debería validar que el que llama sea un admin.
+    const { dni, auth_uid } = request.data;
+    if (!dni || !auth_uid) {
+        throw new HttpsError('invalid-argument', 'Faltan datos (dni o auth_uid) para borrar el chofer.');
+    }
+    try {
+        await admin.auth().deleteUser(auth_uid);
+        await admin.firestore().collection('choferes').doc(dni).delete();
+        return { status: 'success', message: 'Chofer borrado completamente.' };
+    } catch (error) {
+        console.error("Error al borrar chofer:", error);
+        if (error.code === 'auth/user-not-found') {
+            await admin.firestore().collection('choferes').doc(dni).delete();
+            return { status: 'success', message: 'El usuario de autenticación no existía, pero el registro de la base de datos fue borrado.' };
+        }
+        throw new HttpsError('internal', 'Ocurrió un error al borrar el chofer.');
+    }
+});
+
+exports.resetearPasswordChofer = onCall(async (request) => {
+    const { auth_uid, nuevaPassword } = request.data;
+    if (!auth_uid || !nuevaPassword) {
+        throw new HttpsError('invalid-argument', 'Faltan el UID del chofer o la nueva contraseña.');
+    }
+    if (nuevaPassword.length < 6) {
+        throw new HttpsError('invalid-argument', 'La contraseña debe tener al menos 6 caracteres.');
+    }
+    try {
+        await admin.auth().updateUser(auth_uid, {
+            password: nuevaPassword
+        });
+        return { message: 'La contraseña del chofer ha sido actualizada con éxito.' };
+    } catch (error) {
+        console.error("Error al resetear contraseña:", error);
+        throw new HttpsError('internal', 'No se pudo actualizar la contraseña.');
+    }
+});
+
+// ===================================================================================
+// FUNCIONES PARA APP DE CHOFERES (GEOLOCALIZACIÓN)
+// ===================================================================================
+
+exports.actualizarUbicacionChofer = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'El usuario debe estar autenticado para actualizar su ubicación.');
+    }
+    const { latitud, longitud } = request.data;
+    if (typeof latitud !== 'number' || typeof longitud !== 'number') {
+        throw new HttpsError('invalid-argument', 'Las coordenadas (latitud y longitud) deben ser números.');
+    }
+    const authUid = request.auth.uid;
+    try {
+        const choferesRef = admin.firestore().collection('choferes');
+        const q = choferesRef.where('auth_uid', '==', authUid).limit(1);
+        const snapshot = await q.get();
+        if (snapshot.empty) {
+            throw new HttpsError('not-found', 'No se encontró un perfil de chofer para este usuario.');
+        }
+        const choferDoc = snapshot.docs[0];
+        await choferDoc.ref.update({
+            coordenadas: new admin.firestore.GeoPoint(latitud, longitud),
+            ultima_actualizacion: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return { status: 'success', message: 'Ubicación actualizada correctamente.' };
+    } catch (error) {
+        console.error("Error al actualizar ubicación:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError('internal', 'Ocurrió un error al guardar la ubicación.');
+    }
+});
+
+// ===================================================================================
+// TRIGGERS DE FIRESTORE (GEOCODIFICACIÓN Y ALGOLIA)
+// ===================================================================================
 exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event) => {
     if (!event.data.after.exists) return null;
     const client = getMapsClient();
     const afterData = event.data.after.data();
     const beforeData = event.data.before.exists ? event.data.before.data() : null;
     if (afterData.origen && (!beforeData || afterData.origen !== beforeData.origen)) {
-      try {
-        const response = await client.geocode({ params: { address: `${afterData.origen}, Argentina`, key: GEOCODING_API_KEY } });
-        if (response.data.results && response.data.results.length > 0) {
-          const location = response.data.results[0].geometry.location;
-          const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
-          await event.data.after.ref.update({origen_coords: coords});
-        }
-      } catch (error) { console.error("Error geocodificando origen:", error.response?.data?.error_message || error.message); }
+        try {
+            const response = await client.geocode({ params: { address: `${afterData.origen}, Argentina`, key: GEOCODING_API_KEY } });
+            if (response.data.results && response.data.results.length > 0) {
+                const location = response.data.results[0].geometry.location;
+                const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
+                await event.data.after.ref.update({ origen_coords: coords });
+            }
+        } catch (error) { console.error("Error geocodificando origen:", error.response?.data?.error_message || error.message); }
     }
     if (afterData.destino && (!beforeData || afterData.destino !== beforeData.destino)) {
-      try {
-        const response = await client.geocode({ params: { address: `${afterData.destino}, Argentina`, key: GEOCODING_API_KEY } });
-        if (response.data.results && response.data.results.length > 0) {
-          const location = response.data.results[0].geometry.location;
-          const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
-          await event.data.after.ref.update({destino_coords: coords});
-        }
-      } catch (error) { console.error("Error geocodificando destino:", error.response?.data?.error_message || error.message); }
+        try {
+            const response = await client.geocode({ params: { address: `${afterData.destino}, Argentina`, key: GEOCODING_API_KEY } });
+            if (response.data.results && response.data.results.length > 0) {
+                const location = response.data.results[0].geometry.location;
+                const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
+                await event.data.after.ref.update({ destino_coords: coords });
+            }
+        } catch (error) { console.error("Error geocodificando destino:", error.response?.data?.error_message || error.message); }
     }
     return null;
 });
-
-// ... El resto de tus funciones no cambian ...
 
 exports.sincronizarConAlgolia = onDocumentWritten("pasajeros/{pasajeroId}", (event) => {
     const { pasajerosIndex } = getAlgoliaIndices();
@@ -99,54 +205,49 @@ exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{reservaId}"
     return reservasIndex.saveObject(record);
 });
 
+// ===================================================================================
+// FUNCIONES DE ADMINISTRACIÓN (USUARIOS, EXPORTACIÓN)
+// ===================================================================================
 exports.crearUsuario = onCall(async (request) => {
-  const {email, password, nombre} = request.data;
-  if (!email || !password || !nombre) { throw new HttpsError('invalid-argument', 'Faltan datos.'); }
-  try {
-    const userRecord = await admin.auth().createUser({ email: email, password: password, displayName: nombre });
-    await admin.firestore().collection('users').doc(userRecord.uid).set({ nombre: nombre, email: email, rol: 'operador' });
-    return {result: `Usuario ${nombre} creado con éxito.`};
-  } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al crear.'); }
+    const { email, password, nombre } = request.data;
+    if (!email || !password || !nombre) { throw new HttpsError('invalid-argument', 'Faltan datos.'); }
+    try {
+        const userRecord = await admin.auth().createUser({ email: email, password: password, displayName: nombre });
+        await admin.firestore().collection('users').doc(userRecord.uid).set({ nombre: nombre, email: email, rol: 'operador' });
+        return { result: `Usuario ${nombre} creado con éxito.` };
+    } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al crear.'); }
 });
 
 exports.listUsers = onCall(async (request) => {
-  try {
-    const listUsersResult = await admin.auth().listUsers(1000);
-    const users = listUsersResult.users.map((userRecord) => {
-      const user = userRecord.toJSON();
-      return { uid: user.uid, email: user.email, nombre: user.displayName };
-    });
-    return { users };
-  } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al listar.'); }
+    try {
+        const listUsersResult = await admin.auth().listUsers(1000);
+        const users = listUsersResult.users.map((userRecord) => {
+            const user = userRecord.toJSON();
+            return { uid: user.uid, email: user.email, nombre: user.displayName };
+        });
+        return { users };
+    } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al listar.'); }
 });
 
 exports.exportarHistorico = onCall(async (request) => {
     try {
         const { fechaDesde, fechaHasta, clienteId } = request.data;
-        
         if (!fechaDesde || !fechaHasta) {
             return { csvData: null, message: "Las fechas 'desde' y 'hasta' son obligatorias." };
         }
-
         const fechaInicio = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00Z'));
         const fechaFin = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59Z'));
-
         let query = admin.firestore().collection('historico')
-                         .where('archivadoEn', '>=', fechaInicio)
-                         .where('archivadoEn', '<=', fechaFin);
-
+            .where('archivadoEn', '>=', fechaInicio)
+            .where('archivadoEn', '<=', fechaFin);
         if (clienteId) {
             query = query.where('cliente', '==', clienteId);
         }
-        
         const snapshot = await query.get();
-
         if (snapshot.empty) {
             return { csvData: null, message: "No se encontraron registros para los filtros aplicados." };
         }
-
         let csvContent = "Fecha Turno,Hora Turno,Hora PickUp,Pasajero,Cliente,Origen,Destino,Estado,Siniestro,Autorizacion\n";
-        
         snapshot.forEach(doc => {
             const viaje = doc.data();
             const escapeCSV = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
@@ -164,9 +265,7 @@ exports.exportarHistorico = onCall(async (request) => {
             ].join(',');
             csvContent += fila + "\n";
         });
-
         return { csvData: csvContent };
-
     } catch (error) {
         console.error("Error crítico al generar el histórico:", error);
         throw new HttpsError('internal', 'Error interno del servidor al generar el archivo.', error.message);

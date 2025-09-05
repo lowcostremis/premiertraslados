@@ -1,4 +1,4 @@
-    // ===================================================================================
+// ===================================================================================
 // CONFIGURACIÓN DE FIREBASE
 // ===================================================================================
 const firebaseConfig = {
@@ -66,17 +66,13 @@ async function cargarHistorial() {
 function mostrarDatosHistorialEnTabla(documentos) {
     if (!historialBody) return;
     historialBody.innerHTML = '';
-
     if (documentos.length === 0) {
         historialBody.innerHTML = '<tr><td colspan="11">No se encontraron viajes con ese criterio.</td></tr>';
         return;
     }
-
     documentos.forEach(item => {
         const viaje = typeof item.data === 'function' ? item.data() : item;
-        
         const fecha = viaje.fecha_turno ? new Date(viaje.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR', { timeZone: 'UTC' }) : 'N/A';
-
         let nombreChofer = 'N/A';
         if (viaje.chofer_asignado_id && choferesCache.length > 0) {
             const chofer = choferesCache.find(c => c.id === viaje.chofer_asignado_id);
@@ -84,14 +80,12 @@ function mostrarDatosHistorialEnTabla(documentos) {
                 nombreChofer = chofer.nombre;
             }
         }
-
         let estiloFila = '';
         if (viaje.estado === 'Negativo') {
             estiloFila = 'style="background-color: #FFDE59; color: #333;"';
         } else if (viaje.estado === 'Anulado') {
             estiloFila = 'style="text-decoration: line-through;"';
         }
-
         const fila = `
             <tr class="border-b border-gray-700 hover:bg-gray-800" ${estiloFila}>
                 <td>${fecha}</td>
@@ -110,7 +104,6 @@ function mostrarDatosHistorialEnTabla(documentos) {
         historialBody.innerHTML += fila;
     });
 }
-
 
 function actualizarEstadoBotonesPaginacion(cantidadDocsRecibidos) {
     btnAnterior.disabled = (paginaActual === 0);
@@ -237,7 +230,7 @@ let zonasCache = [];
 let movilesCache = [];
 let unsubscribeReservas;
 let adminListeners = [];
-let auxDataListeners = []; // <-- CORRECCIÓN: Variable declarada aquí
+let auxDataListeners = [];
 let lastReservasSnapshot = null;
 let mapaModal, marcadorOrigenModal, marcadorDestinoModal, geocoder;
 let filtroMapaActual = 'Todos';
@@ -277,7 +270,7 @@ function renderAllReservas(snapshot) {
         const reserva = { id: doc.id, ...doc.data() };
         const fechaTurno = reserva.fecha_turno ? new Date(`${reserva.fecha_turno}T${reserva.hora_turno || '00:00'}`) : null;
         let targetTableId = '';
-        if (['Finalizado', 'Anulado', 'Negativo'].includes(reserva.estado)) {} else if (reserva.chofer_asignado_id) {
+        if (['Finalizado', 'Anulado', 'Negativo'].includes(reserva.estado)) {} else if (reserva.movil_asignado_id) {
             targetTableId = 'tabla-asignados';
         } else if (fechaTurno && fechaTurno > limite24hs) {
             targetTableId = 'tabla-pendientes';
@@ -316,27 +309,35 @@ function renderFilaReserva(tbody, reserva) {
     let estadoCellContent = reserva.estado || 'Pendiente';
     const isAsignadoTable = tbody.parentElement.id === 'tabla-asignados';
 
-    if (isAsignadoTable && reserva.chofer_asignado_id) {
+    if (isAsignadoTable && reserva.movil_asignado_id) {
+        const movilAsignado = movilesCache.find(m => m.id === reserva.movil_asignado_id);
         const choferAsignado = choferesCache.find(c => c.id === reserva.chofer_asignado_id);
-        estadoCellContent = choferAsignado ? (choferAsignado.nombre || 'Nombre no disp.') : 'Chofer no encontrado';
+        
+        const textoMovil = movilAsignado ? `Móvil ${movilAsignado.numero}` : 'Móvil no encontrado';
+        const textoChofer = choferAsignado ? ` (${choferAsignado.nombre})` : '';
+        
+        estadoCellContent = textoMovil + textoChofer;
     }
 
     const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
-    
     const isSpecialTable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes' || tbody.parentElement.id === 'tabla-asignados';
     const isEditable = isSpecialTable && (tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes');
     const isAsignado = isSpecialTable && tbody.parentElement.id === 'tabla-asignados';
-
+    
     let menuItems = `<a href="#" onclick="openEditReservaModal('${reserva.id || reserva.objectID}'); return false;">Editar</a>`;
     if (isEditable) {
-        menuItems += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Asignar Chofer...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
+        let movilesOptions = movilesCache.map(movil => {
+            const choferDelMovil = choferesCache.find(c => c.movil_actual_id === movil.id);
+            const nombreChofer = choferDelMovil ? ` (${choferDelMovil.nombre})` : ' (Sin chofer)';
+            return `<option value="${movil.id}">N° ${movil.numero}${nombreChofer}</option>`;
+        }).join('');
+        menuItems += `<select onchange="asignarMovil('${reserva.id}', this.value)"><option value="">Asignar Móvil...</option>${movilesOptions}</select>`;
         menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular</a>`;
     } else if (isAsignado) {
         menuItems += `<a href="#" onclick="finalizarReserva('${reserva.id}'); return false;">Finalizar</a>`;
         menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Negativo'); return false;">Marcar Negativo</a>`;
         menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular Viaje</a>`;
         menuItems += `<a href="#" onclick="quitarAsignacion('${reserva.id}'); return false;">Quitar Móvil</a>`;
-        menuItems += `<select onchange="asignarChofer('${reserva.id}', this.value)"><option value="">Reasignar...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select>`;
     }
     const accionesHTML = `
         <td class="acciones">
@@ -416,7 +417,6 @@ async function buscarEnReservas(texto) {
 // LÓGICA PRINCIPAL Y DE UTILIDADES
 // ===================================================================================
 
-// CORRECCIÓN: Manejador de autenticación actualizado para limpiar todos los listeners
 auth.onAuthStateChanged(user => {
     const authSection = document.getElementById('auth-section');
     const appContent = document.getElementById('app-content');
@@ -428,21 +428,14 @@ auth.onAuthStateChanged(user => {
     } else {
         authSection.style.display = 'flex';
         appContent.style.display = 'none';
-
-        // Desconexión de todos los oyentes
         if (unsubscribeReservas) unsubscribeReservas();
-        
         adminListeners.forEach(unsubscribe => unsubscribe());
         adminListeners = [];
-        
-        // Desconexión de los nuevos oyentes
         auxDataListeners.forEach(unsubscribe => unsubscribe());
         auxDataListeners = [];
-        
         if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     }
 });
-
 
 document.getElementById('login-btn').addEventListener('click', () => {
     const email = document.getElementById('email').value;
@@ -458,24 +451,19 @@ function initApp() {
     attachEventListeners();
     listenToReservas();
     initializeAdminLists();
-    
     mapContextMenu = document.getElementById('map-context-menu');
     mapContextMenuItems = document.getElementById('map-context-menu-items');
-    
     if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     refrescoAutomaticoIntervalo = setInterval(() => {
         if (lastReservasSnapshot) {
             renderAllReservas(lastReservasSnapshot);
         }
     }, 60000);
-
     openTab(null, 'Reservas');
     showReservasTab('en-curso');
 }
 
-// CORRECCIÓN: loadAuxData actualizado para guardar y limpiar los listeners
 function loadAuxData() {
-      // Limpiamos oyentes anteriores por si acaso
     auxDataListeners.forEach(unsubscribe => unsubscribe());
     auxDataListeners = [];
 
@@ -497,7 +485,7 @@ function loadAuxData() {
         choferesCache = [];
         snapshot.forEach(doc => choferesCache.push({ id: doc.id, ...doc.data() }));
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
-        if (map) cargarMarcadoresDeReservas(); // <--- LÍNEA AÑADIDA: Redibuja el mapa cuando los choferes cargan
+        if (map) cargarMarcadoresDeReservas();
     }, err => console.error("Error cargando choferes:", err));
     auxDataListeners.push(choferesUnsubscribe);
 
@@ -518,7 +506,6 @@ function loadAuxData() {
     const movilesUnsubscribe = db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         movilesCache = [];
         const movilSelect = document.querySelector("#form-choferes select[name='movil_actual_id']");
-        
         if (movilSelect) {
             movilSelect.innerHTML = '<option value="">Asignar Móvil...</option>';
             snapshot.forEach(doc => {
@@ -527,11 +514,11 @@ function loadAuxData() {
                 movilSelect.innerHTML += `<option value="${movil.id}">N° ${movil.numero} (${movil.patente})</option>`;
             });
         }
-        if (map) cargarMarcadoresDeReservas(); // <--- LÍNEA AÑADIDA: Redibuja el mapa cuando los móviles cargan
+        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
+        if (map) cargarMarcadoresDeReservas();
     }, err => console.error("Error cargando moviles:", err));
     auxDataListeners.push(movilesUnsubscribe);
 }
-
 
 async function openEditReservaModal(reservaId) {
     const doc = await db.collection('reservas').doc(reservaId).get();
@@ -540,7 +527,6 @@ async function openEditReservaModal(reservaId) {
     const form = document.getElementById('reserva-form');
     form.viaje_exclusivo.checked = false;
     form.cantidad_pasajeros.disabled = false;
-    
     form.cliente.value = data.cliente || 'Default';
     form.siniestro.value = data.siniestro || '';
     form.autorizacion.value = data.autorizacion || '';
@@ -555,13 +541,11 @@ async function openEditReservaModal(reservaId) {
     form.cantidad_pasajeros.value = data.cantidad_pasajeros || '1';
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
-    
     if (data.es_exclusivo) {
         form.viaje_exclusivo.checked = true;
         form.cantidad_pasajeros.value = '4';
         form.cantidad_pasajeros.disabled = true;
     }
-
     document.getElementById('reserva-id').value = reservaId;
     document.getElementById('modal-title').textContent = 'Editar Reserva';
     document.getElementById('reserva-modal').style.display = 'block';
@@ -605,25 +589,24 @@ async function updateZona(event, reservaId) {
     try { await db.collection('reservas').doc(reservaId).update({ zona: nuevaZona }); } catch (error) { console.error("Error:", error); }
 }
 
-async function asignarChofer(reservaId, choferId) {
-    if (!choferId) return;
+async function asignarMovil(reservaId, movilId) {
+    if (!movilId) return;
     try {
-        const qViajeExclusivo = db.collection('reservas')
-            .where('chofer_asignado_id', '==', choferId)
-            .where('es_exclusivo', '==', true);
-        const viajeExclusivoSnapshot = await qViajeExclusivo.get();
-        if (!viajeExclusivoSnapshot.empty) {
-            alert("El chofer tiene asignado un traslado exclusivo.");
+        const choferAsignado = choferesCache.find(c => c.movil_actual_id === movilId);
+        if (!choferAsignado) {
+            alert("Error: Este móvil no tiene un chofer vinculado actualmente.");
             if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
             return;
         }
-        await db.collection('reservas').doc(reservaId).update({
-            chofer_asignado_id: choferId,
+        const updateData = {
+            movil_asignado_id: movilId,
+            chofer_asignado_id: choferAsignado.id,
             estado: 'Asignado'
-        });
+        };
+        await db.collection('reservas').doc(reservaId).update(updateData);
     } catch (err) {
-        console.error("Error al asignar chofer:", err);
-        alert("Error: " + err.message);
+        console.error("Error al asignar móvil:", err);
+        alert("Error al asignar el móvil: " + err.message);
     }
 }
 
@@ -652,7 +635,7 @@ window.onclick = function(event) {
     if (mapContextMenu && !event.target.closest('#map-context-menu')) {
         hideMapContextMenu();
     }
-}
+};
 
 async function quitarAsignacion(reservaId) {
      if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
@@ -660,9 +643,9 @@ async function quitarAsignacion(reservaId) {
             const reservaRef = db.collection('reservas').doc(reservaId);
             await reservaRef.update({
                 estado: 'En Curso',
-                chofer_asignado_id: firebase.firestore.FieldValue.delete()
+                chofer_asignado_id: firebase.firestore.FieldValue.delete(),
+                movil_asignado_id: firebase.firestore.FieldValue.delete()
             });
-            console.log(`Reserva ${reservaId} devuelta a 'En Curso'.`);
         } catch (error) {
             console.error("Error al quitar asignación:", error);
             alert("Hubo un error al actualizar la reserva.");
@@ -698,36 +681,30 @@ async function moverReservaAHistorico(reservaId, estadoFinal) {
 }
 
 function attachEventListeners() {
-    const safeAddEventListener = (id, event, handler) => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.addEventListener(event, handler);
-        } else {
-            console.error(`Error de inicialización: No se encontró el elemento con ID: #${id}`);
-        }
-    };
+    const safeAddEventListener = (id, event, handler) => { const element = document.getElementById(id); if (element) { element.addEventListener(event, handler); } else { console.error(`Elemento no encontrado: #${id}`); } };
+    
     const modal = document.getElementById('reserva-modal');
     const closeBtn = document.querySelector('.close-btn');
-    if (modal && closeBtn) {
-        closeBtn.onclick = () => modal.style.display = 'none';
-    }
+    if (modal && closeBtn) closeBtn.onclick = () => modal.style.display = 'none';
+
     const editModal = document.getElementById('edit-modal');
     const closeEditBtn = document.querySelector('.close-edit-btn');
-    if (editModal && closeEditBtn) {
-        closeEditBtn.onclick = () => editModal.style.display = 'none';
-    }
-    safeAddEventListener('btn-nueva-reserva', 'click', () => {
-        document.getElementById('reserva-form').reset();
-        document.getElementById('viaje_exclusivo').checked = false;
-        const pasajerosSelect = document.getElementById('cantidad_pasajeros');
-        pasajerosSelect.value = '1';
-        pasajerosSelect.disabled = false;
-        
-        document.getElementById('modal-title').textContent = 'Nueva Reserva';
-        document.getElementById('reserva-id').value = '';
-        if (modal) modal.style.display = 'block';
-        setTimeout(() => initMapaModal(null, null), 100);
+    if (editModal && closeEditBtn) closeEditBtn.onclick = () => editModal.style.display = 'none';
+    
+    const resetModal = document.getElementById('reset-password-modal');
+    const closeResetBtn = document.querySelector('.close-reset-password-btn');
+    if(resetModal && closeResetBtn) closeResetBtn.onclick = () => resetModal.style.display = 'none';
+
+    safeAddEventListener('btn-nueva-reserva', 'click', () => { 
+        document.getElementById('reserva-form').reset(); 
+        document.getElementById('viaje_exclusivo').checked = false; 
+        const p = document.getElementById('cantidad_pasajeros'); p.value = '1'; p.disabled = false; 
+        document.getElementById('modal-title').textContent = 'Nueva Reserva'; 
+        document.getElementById('reserva-id').value = ''; 
+        if (modal) modal.style.display = 'block'; 
+        setTimeout(() => initMapaModal(null, null), 100); 
     });
+
     safeAddEventListener('edit-form', 'submit', handleUpdateItem);
     safeAddEventListener('reserva-form', 'submit', handleSaveReserva);
     safeAddEventListener('form-clientes', 'submit', handleSaveCliente);
@@ -737,199 +714,345 @@ function attachEventListeners() {
     safeAddEventListener('form-usuarios', 'submit', handleSaveUsuario);
     safeAddEventListener('form-zonas', 'submit', handleSaveZona);
     safeAddEventListener('dni_pasajero', 'blur', handleDniBlur);
-
+    safeAddEventListener('reset-password-form', 'submit', handleResetPassword);
+    
     setupExclusiveCheckboxListener();
 }
 
-function setupExclusiveCheckboxListener() {
-    const exclusivoCheckbox = document.getElementById('viaje_exclusivo');
-    const pasajerosSelect = document.getElementById('cantidad_pasajeros');
-
-    if (exclusivoCheckbox && pasajerosSelect) {
-        exclusivoCheckbox.addEventListener('change', (e) => {
-            if (e.target.checked) {
-                pasajerosSelect.value = '4';
-                pasajerosSelect.disabled = true;
-            } else {
-                pasajerosSelect.disabled = false;
-                pasajerosSelect.value = '1'; 
-            }
+function setupExclusiveCheckboxListener() { 
+    const e = document.getElementById('viaje_exclusivo');
+    const p = document.getElementById('cantidad_pasajeros'); 
+    if (e && p) { 
+        e.addEventListener('change', (evt) => { 
+            if (evt.target.checked) { 
+                p.value = '4'; 
+                p.disabled = true; 
+            } else { 
+                p.disabled = false; 
+                p.value = '1'; 
+            } 
         });
-    }
+    } 
 }
 
-function setupExportControls() {
-    const btnExportar = document.getElementById('btn-exportar-excel');
-    const selectCliente = document.getElementById('export-cliente');
-
-    if (selectCliente) {
-        selectCliente.innerHTML = '<option value="">Todos los Clientes</option>';
-        for (const id in clientesCache) {
-            selectCliente.innerHTML += `<option value="${id}">${clientesCache[id].nombre}</option>`;
-        }
-    }
-    
-    if (btnExportar) {
-        btnExportar.addEventListener('click', async () => {
-            const fechaDesde = document.getElementById('export-fecha-desde').value;
-            const fechaHasta = document.getElementById('export-fecha-hasta').value;
-            const clienteId = document.getElementById('export-cliente').value;
-
-            if (!fechaDesde || !fechaHasta) {
-                alert("Por favor, selecciona un rango de fechas.");
-                return;
-            }
-
-            btnExportar.textContent = "Generando...";
-            btnExportar.disabled = true;
-
-            try {
-                const exportarHistorico = functions.httpsCallable('exportarHistorico');
-                const result = await exportarHistorico({ fechaDesde, fechaHasta, clienteId });
-
-                if (result.data.csvData) {
-                    const blob = new Blob(["\ufeff" + result.data.csvData], { type: 'text/csv;charset=utf-8;' });
-                    const link = document.createElement("a");
-                    const url = URL.createObjectURL(blob);
-                    link.setAttribute("href", url);
-                    link.setAttribute("download", `historico_${fechaDesde}_a_${fechaHasta}.csv`);
-                    link.style.visibility = 'hidden';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                } else {
-                    alert(result.data.message || "No se encontraron datos para exportar.");
-                }
-
-            } catch (error) {
-                console.error("Error al exportar:", error);
-                alert("Ocurrió un error al generar el archivo.");
-            } finally {
-                btnExportar.textContent = "Exportar a Excel";
-                btnExportar.disabled = false;
-            }
-        });
-    }
+function setupExportControls() { 
+    const b = document.getElementById('btn-exportar-excel'); 
+    const s = document.getElementById('export-cliente');
+    if (s) { 
+        s.innerHTML = '<option value="">Todos los Clientes</option>'; 
+        for (const id in clientesCache) { 
+            s.innerHTML += `<option value="${id}">${clientesCache[id].nombre}</option>`;
+        } 
+    } 
+    if (b) { 
+        b.addEventListener('click', async () => { 
+            const fD = document.getElementById('export-fecha-desde').value; 
+            const fH = document.getElementById('export-fecha-hasta').value; 
+            const cId = document.getElementById('export-cliente').value; 
+            if (!fD || !fH) { 
+                alert("Selecciona un rango de fechas."); 
+                return; 
+            } 
+            b.textContent = "Generando..."; 
+            b.disabled = true; 
+            try { 
+                const exp = functions.httpsCallable('exportarHistorico'); 
+                const res = await exp({ fechaDesde: fD, fechaHasta: fH, clienteId: cId }); 
+                if (res.data.csvData) { 
+                    const blob = new Blob(["\ufeff" + res.data.csvData], { type: 'text/csv;charset=utf-8;' }); 
+                    const link = document.createElement("a"); 
+                    const url = URL.createObjectURL(blob); 
+                    link.setAttribute("href", url); 
+                    link.setAttribute("download", `historico_${fD}_a_${fH}.csv`); 
+                    document.body.appendChild(link); 
+                    link.click(); 
+                    document.body.removeChild(link); 
+                } else { 
+                    alert(res.data.message || "No se encontraron datos."); 
+                } 
+            } catch (error) { 
+                console.error("Error al exportar:", error); 
+                alert("Error al generar el archivo."); 
+            } finally { 
+                b.textContent = "Exportar a Excel";
+                b.disabled = false; 
+            } 
+        }); 
+    } 
 }
 
-async function handleSaveReserva(e) {
+async function handleSaveReserva(e) { 
+    e.preventDefault(); 
+    const f = e.target; 
+    const rId = f['reserva-id'].value;
+    const esX = f.viaje_exclusivo.checked; 
+    const cP = esX ? '4' : f.cantidad_pasajeros.value;
+    const d = { 
+        cliente: f.cliente.value, 
+        siniestro: f.siniestro.value, 
+        autorizacion: f.autorizacion.value, 
+        dni_pasajero: f.dni_pasajero.value.trim(), 
+        nombre_pasajero: f.nombre_pasajero.value, 
+        telefono_pasajero: f.telefono_pasajero.value, 
+        fecha_turno: f.fecha_turno.value, 
+        hora_turno: f.hora_turno.value, 
+        hora_pickup: f.hora_pickup.value, 
+        origen: f.origen.value, 
+        destino: f.destino.value, 
+        cantidad_pasajeros: cP, 
+        zona: f.zona.value, 
+        observaciones: f.observaciones.value, 
+        es_exclusivo: esX 
+    };
+    if (!rId) { 
+        d.estado = 'Pendiente'; 
+        d.creadoEn = firebase.firestore.FieldValue.serverTimestamp(); 
+    } 
+    try { 
+        if (rId) { 
+            await db.collection('reservas').doc(rId).update(d);
+        } else { 
+            await db.collection('reservas').add(d); 
+        } 
+        if (d.dni_pasajero && d.origen) { 
+            const pRef = db.collection('pasajeros').doc(d.dni_pasajero);
+            const pData = { 
+                nombre_apellido: d.nombre_pasajero, 
+                telefono: d.telefono_pasajero, 
+                domicilios: firebase.firestore.FieldValue.arrayUnion(d.origen) 
+            }; 
+            await pRef.set(pData, { merge: true });
+        } 
+        document.getElementById('reserva-modal').style.display = 'none'; 
+    } catch (error) { 
+        alert("Error al guardar: " + error.message); 
+    } 
+}
+
+async function handleSaveCliente(e) { 
+    e.preventDefault(); 
+    const f=e.target; 
+    const d={nombre:f.nombre.value,cuit:f.cuit.value,domicilio:f.domicilio.value,telefono:f.telefono.value,color:f.color.value,creadoEn:firebase.firestore.FieldValue.serverTimestamp()}; 
+    if(!d.nombre){alert("Nombre es obligatorio.");return} 
+    try{
+        await db.collection('clientes').add(d);
+        alert("Cliente guardado.");
+        f.reset()
+    }catch(error){
+        console.error("Error:",error);
+        alert("Error: "+error.message)
+    } 
+}
+
+async function handleSavePasajero(e) { 
+    e.preventDefault(); 
+    const f=e.target; 
+    const dni=f.dni.value.trim();
+    if(!dni){alert("DNI es obligatorio.");return} 
+    const d={nombre_apellido:f.nombre_apellido.value,telefono:f.telefono.value,domicilios:firebase.firestore.FieldValue.arrayUnion(f.domicilio.value)}; 
+    try{
+        const pRef=db.collection('pasajeros').doc(dni);
+        await pRef.set(d,{merge:true});
+        alert("Pasajero guardado.");
+        f.reset()
+    }catch(error){
+        console.error("Error:",error);
+        alert("Error: "+error.message)
+    } 
+}
+
+async function handleSaveMovil(e) { 
+    e.preventDefault(); 
+    const f=e.target; 
+    const d={numero:f.numero.value,patente:f.patente.value,marca:f.marca.value,modelo:f.modelo.value,capacidad_pasajeros:f.capacidad_pasajeros.value,titular_nombre:f.titular_nombre.value,titular_domicilio:f.titular_domicilio.value,titular_telefono:f.titular_telefono.value};
+    if(!d.numero||!d.patente){alert("N° y patente son obligatorios.");return} 
+    try{
+        await db.collection('moviles').add(d);
+        alert("Móvil guardado.");
+        f.reset()
+    } catch(error) {
+        console.error("Error:",error);
+        alert("Error: "+error.message)
+    } 
+}
+
+async function handleSaveUsuario(e) { 
+    e.preventDefault(); 
+    const f=e.target; 
+    const n=f.nombre.value,em=f.email.value,p=f.password.value;
+    if(!em||!p||!n){alert("Todos los campos son obligatorios.");return} 
+    try{
+        const cuf=functions.httpsCallable('crearUsuario');
+        const res=await cuf({nombre:n,email:em,password:p});
+        alert(res.data.result);
+        f.reset()
+    }catch(error){
+        console.error("Error:",error);
+        alert("Error: "+error.message)
+    } 
+}
+
+async function handleSaveZona(e) { 
+    e.preventDefault(); 
+    const f=e.target; 
+    const d={numero:f.numero.value,descripcion:f.descripcion.value};
+    if(!d.numero||!d.descripcion){alert("Número y descripción son obligatorios.");return} 
+    try{
+        await db.collection('zonas').add(d);
+        alert("Zona guardada.");
+        f.reset()
+    }catch(error){
+        console.error("Error:",error);
+        alert("Error: "+error.message)
+    } 
+}
+
+async function handleDniBlur(e) { 
+    const dni = e.target.value.trim(); 
+    if (!dni) return;
+    try { 
+        const doc = await db.collection('pasajeros').doc(dni).get(); 
+        if (doc.exists) { 
+            const p = doc.data(); 
+            const f = document.getElementById('reserva-form');
+            f.nombre_pasajero.value = p.nombre_apellido || ''; 
+            f.telefono_pasajero.value = p.telefono || '';
+            if (p.domicilios && p.domicilios.length > 0) { 
+                f.origen.value = p.domicilios[p.domicilios.length - 1];
+            } 
+        } 
+    } catch (error) { 
+        console.error("Error al buscar DNI:", error); 
+    } 
+}
+
+async function handleSaveChofer(e) {
     e.preventDefault();
     const form = e.target;
-    const reservaId = form['reserva-id'].value;
-    
-    const esExclusivo = form.viaje_exclusivo.checked;
-    const cantidadPasajeros = esExclusivo ? '4' : form.cantidad_pasajeros.value;
-
-    const reservaData = {
-        cliente: form.cliente.value,
-        siniestro: form.siniestro.value,
-        autorizacion: form.autorizacion.value,
-        dni_pasajero: form.dni_pasajero.value.trim(),
-        nombre_pasajero: form.nombre_pasajero.value,
-        telefono_pasajero: form.telefono_pasajero.value,
-        fecha_turno: form.fecha_turno.value,
-        hora_turno: form.hora_turno.value,
-        hora_pickup: form.hora_pickup.value,
-        origen: form.origen.value,
-        destino: form.destino.value,
-        cantidad_pasajeros: cantidadPasajeros,
-        zona: form.zona.value,
-        observaciones: form.observaciones.value,
-        es_exclusivo: esExclusivo
+    const choferData = {
+        dni: form.dni.value,
+        nombre: form.nombre.value,
+        email: form.email.value,
+        password: form.password.value,
+        domicilio: form.domicilio.value,
+        telefono: form.telefono.value,
+        movil_actual_id: form.movil_actual_id.value || null
     };
-    
-    if (!reservaId) {
-        reservaData.estado = 'Pendiente';
-        reservaData.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
+    if (!choferData.dni || !choferData.nombre || !choferData.email || !choferData.password) {
+        alert("DNI, Nombre, Email y Contraseña son obligatorios.");
+        return;
+    }
+    if (choferData.password.length < 6) {
+        alert("La contraseña debe tener al menos 6 caracteres.");
+        return;
     }
     try {
-        if (reservaId) { await db.collection('reservas').doc(reservaId).update(reservaData); } else { await db.collection('reservas').add(reservaData); }
-        if (reservaData.dni_pasajero && reservaData.origen) {
-            const pasajeroRef = db.collection('pasajeros').doc(reservaData.dni_pasajero);
-            const pasajeroData = {
-                nombre_apellido: reservaData.nombre_pasajero,
-                telefono: reservaData.telefono_pasajero,
-                domicilios: firebase.firestore.FieldValue.arrayUnion(reservaData.origen)
-            };
-            await pasajeroRef.set(pasajeroData, { merge: true });
-        }
-        document.getElementById('reserva-modal').style.display = 'none';
-    } catch (error) { alert("Error al guardar reserva: " + error.message); }
+        const crearChoferConAcceso = functions.httpsCallable('crearChoferConAcceso');
+        const result = await crearChoferConAcceso(choferData);
+        alert(result.data.message);
+        form.reset();
+    } catch (error) {
+        console.error("Error al crear chofer:", error);
+        alert("Error: " + error.message);
+    }
 }
 
-async function handleSaveCliente(e) { e.preventDefault(); const form = e.target; const clienteData = { nombre: form.nombre.value, cuit: form.cuit.value, domicilio: form.domicilio.value, telefono: form.telefono.value, color: form.color.value, creadoEn: firebase.firestore.FieldValue.serverTimestamp() }; if (!clienteData.nombre) { alert("El nombre es obligatorio."); return; } try { await db.collection('clientes').add(clienteData); alert("Cliente guardado."); form.reset(); } catch (error) { console.error("Error:", error); alert("Error: " + error.message); } }
-async function handleSavePasajero(e) { e.preventDefault(); const form = e.target; const dni = form.dni.value.trim(); if (!dni) { alert("El DNI es obligatorio."); return; } const pasajeroData = { nombre_apellido: form.nombre_apellido.value, telefono: form.telefono.value, domicilios: firebase.firestore.FieldValue.arrayUnion(form.domicilio.value) }; try { const pasajeroRef = db.collection('pasajeros').doc(dni); await pasajeroRef.set(pasajeroData, { merge: true }); alert("Pasajero guardado."); form.reset(); } catch (error) { console.error("Error:", error); alert("Error: " + error.message); } }
-async function handleSaveChofer(e) { e.preventDefault(); const form = e.target; const choferData = { dni: form.dni.value, nombre: form.nombre.value, domicilio: form.domicilio.value, telefono: form.telefono.value, movil_actual_id: form.movil_actual_id.value || null }; if (!choferData.dni) { alert("El DNI es obligatorio."); return; } try { await db.collection('choferes').add(choferData); alert("Chofer guardado."); form.reset(); } catch (error) { console.error("Error:", error); alert("Error: " + error.message); } }
-async function handleSaveMovil(e) { e.preventDefault(); const form = e.target; const movilData = { numero: form.numero.value, patente: form.patente.value, marca: form.marca.value, modelo: form.modelo.value, capacidad_pasajeros: form.capacidad_pasajeros.value, titular_nombre: form.titular_nombre.value, titular_domicilio: form.titular_domicilio.value, titular_telefono: form.titular_telefono.value }; if (!movilData.numero || !movilData.patente) { alert("N° de móvil y patente son obligatorios."); return; } try { await db.collection('moviles').add(movilData); alert("Móvil guardado."); form.reset(); } catch (error) { console.error("Error:", error); alert("Error: " + error.message); } }
-async function handleSaveUsuario(e) { e.preventDefault(); const form = e.target; const nombre = form.nombre.value, email = form.email.value, password = form.password.value; if (!email || !password || !nombre) { alert("Todos los campos son obligatorios."); return; } try { const crearUsuarioCloudFunction = functions.httpsCallable('crearUsuario'); const result = await crearUsuarioCloudFunction({ nombre, email, password }); alert(result.data.result); form.reset(); } catch (error) { console.error("Error:", error); alert("Error: " + error.message); } }
-async function handleSaveZona(e) { e.preventDefault(); const form = e.target; const zonaData = { numero: form.numero.value, descripcion: form.descripcion.value }; if (!zonaData.numero || !zonaData.descripcion) { alert("Número y descripción son obligatorios."); return; } try { await db.collection('zonas').add(zonaData); alert("Zona guardada."); form.reset(); } catch (error) { console.error("Error:", error); alert("Error: " + error.message); } }
+async function handleResetPassword(e) {
+    e.preventDefault();
+    const form = e.target;
+    const auth_uid = form['reset-chofer-uid'].value;
+    const nuevaPassword = form['nueva-password'].value;
 
-async function handleDniBlur(e) {
-    const dni = e.target.value.trim();
-    if (!dni) return;
+    if (nuevaPassword.length < 6) {
+        alert("La nueva contraseña debe tener al menos 6 caracteres.");
+        return;
+    }
     try {
-        const pasajeroDoc = await db.collection('pasajeros').doc(dni).get();
-        if (pasajeroDoc.exists) {
-            const pasajero = pasajeroDoc.data();
-            const form = document.getElementById('reserva-form');
-            form.nombre_pasajero.value = pasajero.nombre_apellido || '';
-            form.telefono_pasajero.value = pasajero.telefono || '';
-            if (pasajero.domicilios && pasajero.domicilios.length > 0) {
-                form.origen.value = pasajero.domicilios[pasajero.domicilios.length - 1];
-            }
-        }
-    } catch (error) { console.error("Error al buscar pasajero por DNI:", error); }
+        const resetearPasswordChofer = functions.httpsCallable('resetearPasswordChofer');
+        const result = await resetearPasswordChofer({ auth_uid, nuevaPassword });
+        alert(result.data.message);
+        document.getElementById('reset-password-modal').style.display = 'none';
+    } catch (error) {
+        console.error("Error al resetear contraseña:", error);
+        alert("Error: " + error.message);
+    }
+}
+
+function openResetPasswordModal(authUid, nombreChofer) {
+    const modal = document.getElementById('reset-password-modal');
+    document.getElementById('reset-chofer-uid').value = authUid;
+    document.getElementById('reset-chofer-nombre').textContent = nombreChofer;
+    document.getElementById('nueva-password').value = '';
+    modal.style.display = 'block';
 }
 
 function initializeAdminLists() {
-    renderAdminList('clientes', 'lista-clientes', ['nombre', 'cuit', 'telefono', 'domicilio'], ['Nombre', 'CUIT', 'Teléfono', 'Domicilio']);
-    renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'telefono', 'domicilio'], ['DNI', 'Nombre', 'Teléfono', 'Domicilio']);
-    renderAdminList('moviles', 'lista-moviles', ['numero', 'patente', 'marca', 'modelo', 'capacidad_pasajeros'], ['N° Móvil', 'Patente', 'Marca', 'Modelo', 'Capacidad']);
+    renderAdminList('clientes', 'lista-clientes', ['nombre', 'cuit', 'telefono'], ['Nombre', 'CUIT', 'Teléfono']);
+    renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'email'], ['DNI', 'Nombre', 'Email de Acceso']);
+    renderAdminList('moviles', 'lista-moviles', ['numero', 'patente', 'marca', 'modelo'], ['N° Móvil', 'Patente', 'Marca', 'Modelo']);
     renderAdminList('zonas', 'lista-zonas', ['numero', 'descripcion'], ['Número', 'Descripción']);
     renderUsersList();
 }
 
-async function renderUsersList() {
-    const container = document.getElementById('lista-usuarios');
-    if (!container) return;
-    try {
-        const listUsersCloudFunction = functions.httpsCallable('listUsers');
-        const result = await listUsersCloudFunction();
-        const users = result.data.users;
-        if (!users || users.length === 0) { container.innerHTML = '<p>No hay usuarios para mostrar.</p>'; return; }
-        let tableHTML = `<div class="table-wrapper"><table><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Acciones</th></tr></thead><tbody>`;
-        const userRolesPromises = users.map(user => db.collection('users').doc(user.uid).get());
-        const userRolesSnapshots = await Promise.all(userRolesPromises);
-        const userRoles = {};
-        userRolesSnapshots.forEach(doc => { if (doc.exists) { userRoles[doc.id] = doc.data().rol || 'operador'; } });
-        users.forEach(user => {
-            tableHTML += `<tr><td>${user.nombre || '-'}</td><td>${user.email || '-'}</td><td>${userRoles[user.uid] || 'N/A'}</td><td class="acciones"><button onclick="editItem('users', '${user.uid}')">Editar</button><button class="btn-danger" onclick="deleteItem('users', '${user.uid}')">Borrar</button></td></tr>`;
+async function renderUsersList() { 
+    const c = document.getElementById('lista-usuarios'); 
+    if (!c) return; 
+    try { 
+        const l = functions.httpsCallable('listUsers');
+        const res = await l(); 
+        const u = res.data.users; 
+        if (!u || u.length === 0) { 
+            c.innerHTML = '<p>No hay usuarios.</p>';
+            return; 
+        } 
+        let h = `<div class="table-wrapper"><table><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Acciones</th></tr></thead><tbody>`; 
+        const p = u.map(user => db.collection('users').doc(user.uid).get()); 
+        const s = await Promise.all(p);
+        const r = {}; 
+        s.forEach(doc => { 
+            if (doc.exists) { 
+                r[doc.id] = doc.data().rol || 'operador'; 
+            } 
         });
-        tableHTML += `</tbody></table></div>`;
-        container.innerHTML = tableHTML;
-    } catch (error) { console.error("Error al llamar a la Cloud Function 'listUsers':", error); container.innerHTML = `<p style="color:red;">Error al cargar la lista de usuarios.</p>`; }
+        u.forEach(user => { 
+            h += `<tr><td>${user.nombre||'-'}</td><td>${user.email||'-'}</td><td>${r[user.uid]||'N/A'}</td><td class="acciones"><button onclick="editItem('users','${user.uid}')">Editar</button><button class="btn-danger" onclick="deleteItem('users','${user.uid}')">Borrar</button></td></tr>`; 
+        }); 
+        h += `</tbody></table></div>`; 
+        c.innerHTML = h;
+    } catch (error) { 
+        console.error("Error al listar:", error); 
+        c.innerHTML = `<p style="color:red;">Error al cargar.</p>`;
+    } 
 }
 
-function renderAdminList(collectionName, containerId, fields, headers, useDocIdAsField = false) {
+function renderAdminList(collectionName, containerId, fields, headers) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    const orderByField = useDocIdAsField ? firebase.firestore.FieldPath.documentId() : fields[0];
-    const unsubscribe = db.collection(collectionName).onSnapshot(snapshot => {
+    const orderByField = fields[0]; 
+
+    const unsubscribe = db.collection(collectionName).orderBy(orderByField).onSnapshot(snapshot => {
         if (snapshot.empty) { container.innerHTML = '<p>No hay datos para mostrar.</p>'; return; }
         let tableHTML = `<div class="table-wrapper"><table><thead><tr>`;
-        if (useDocIdAsField) headers.unshift("DNI");
         headers.forEach(header => tableHTML += `<th>${header}</th>`);
         tableHTML += `<th>Acciones</th></tr></thead><tbody>`;
+        
         snapshot.forEach(doc => {
             const item = doc.data();
             tableHTML += `<tr>`;
-            if (useDocIdAsField) tableHTML += `<td>${doc.id}</td>`;
             fields.forEach(field => {
-                const value = item[field];
-                const displayValue = Array.isArray(value) ? value.join(', ') : (value || '-');
-                tableHTML += `<td>${displayValue}</td>`;
+                if (field !== 'auth_uid') {
+                    tableHTML += `<td>${item[field] || '-'}</td>`;
+                }
             });
-            tableHTML += `<td class="acciones"><button onclick="editItem('${collectionName}', '${doc.id}')">Editar</button><button class="btn-danger" onclick="deleteItem('${collectionName}', '${doc.id}')">Borrar</button></td></tr>`;
+
+            let accionesHTML = `<button onclick="editItem('${collectionName}', '${doc.id}')">Editar</button>`;
+            if (collectionName === 'choferes' && item.auth_uid) {
+                accionesHTML += `<button onclick="openResetPasswordModal('${item.auth_uid}', '${item.nombre}')">Resetear Contraseña</button>`;
+                accionesHTML += `<button class="btn-danger" onclick="deleteItem('${collectionName}', '${doc.id}', '${item.auth_uid}')">Borrar</button>`;
+            } else {
+                 accionesHTML += `<button class="btn-danger" onclick="deleteItem('${collectionName}', '${doc.id}')">Borrar</button>`;
+            }
+            tableHTML += `<td class="acciones">${accionesHTML}</td></tr>`;
         });
         tableHTML += `</tbody></table></div>`;
         container.innerHTML = tableHTML;
@@ -937,395 +1060,339 @@ function renderAdminList(collectionName, containerId, fields, headers, useDocIdA
     adminListeners.push(unsubscribe);
 }
 
-async function editItem(collection, id) {
-    let doc;
-    if (collection === 'users') {
+async function editItem(collection, id) { 
+    let doc; 
+    if (collection === 'users') { 
         const userDoc = await db.collection('users').doc(id).get();
-        if (!userDoc.exists) { alert("Error: No se encontró el usuario en Firestore."); return; }
+        if (!userDoc.exists) { alert("Error: Usuario no encontrado."); return; } 
         doc = { id: id, exists: true, data: () => ({ ...userDoc.data(), uid: id }) };
-    } else {
-        doc = await db.collection(collection).doc(id).get();
-    }
-    if (!doc.exists) { alert("Error: No se encontró el item."); return; }
-    const data = doc.data();
-    const form = document.getElementById('edit-form');
-    form.innerHTML = '';
-    form.dataset.collection = collection;
+    } else { 
+        doc = await db.collection(collection).doc(id).get(); 
+    } 
+    if (!doc.exists) { alert("Error: Item no encontrado."); return; } 
+    const data = doc.data(); 
+    const form = document.getElementById('edit-form'); 
+    form.innerHTML = ''; 
+    form.dataset.collection = collection; 
     form.dataset.id = id;
-    const fieldsToEdit = Object.keys(data);
-    fieldsToEdit.forEach(field => {
-        const label = document.createElement('label');
-        label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
-        form.appendChild(label);
-        if (field === 'movil_actual_id' && collection === 'choferes') {
-            const select = document.createElement('select');
-            select.name = field;
-            let optionsHTML = '<option value="">Desasignar Móvil</option>';
-            movilesCache.forEach(movil => {
-                const selected = movil.id === data[field] ? 'selected' : '';
-                optionsHTML += `<option value="${movil.id}" ${selected}>N° ${movil.numero} (${movil.patente})</option>`;
-            });
-            select.innerHTML = optionsHTML;
-            form.appendChild(select);
-        } else if (field === 'color' && data.color !== undefined) {
-            const colorInput = document.createElement('input');
-            colorInput.type = 'color';
-            colorInput.name = field;
-            colorInput.value = data[field];
-            form.appendChild(colorInput);
-        } else {
-            const input = document.createElement('input');
-            input.name = field;
+    const fieldsToEdit = Object.keys(data); 
+    fieldsToEdit.forEach(field => { 
+        if (field === 'creadoEn' || field === 'auth_uid') return; 
+        const label = document.createElement('label'); 
+        label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' '); 
+        form.appendChild(label); 
+        if (field === 'movil_actual_id' && collection === 'choferes') { 
+            const select = document.createElement('select'); 
+            select.name = field; 
+            let optionsHTML = '<option value="">Desasignar Móvil</option>'; 
+            movilesCache.forEach(movil => { 
+                const selected = movil.id === data[field] ? 'selected' : ''; 
+                optionsHTML += `<option value="${movil.id}" ${selected}>N° ${movil.numero} (${movil.patente})</option>`; 
+            }); 
+            select.innerHTML = optionsHTML; 
+            form.appendChild(select); 
+        } else if (field === 'color' && data.color !== undefined) { 
+            const colorInput = document.createElement('input'); 
+            colorInput.type = 'color'; 
+            colorInput.name = field; 
+            colorInput.value = data[field]; 
+            form.appendChild(colorInput); 
+        } else { 
+            const input = document.createElement('input'); 
+            input.name = field; 
             input.value = data[field];
-            if (field === 'uid' || field === 'email' || field === 'creadoEn') {
-                input.disabled = true;
-            }
-            form.appendChild(input);
-        }
+            if (field === 'uid' || field === 'email' || field === 'dni') { 
+                input.disabled = true; 
+            } 
+            form.appendChild(input); 
+        } 
     });
-    const submitBtn = document.createElement('button');
-    submitBtn.type = 'submit';
-    submitBtn.textContent = 'Guardar Cambios';
-    form.appendChild(submitBtn);
-    document.getElementById('edit-modal-title').textContent = `Editar ${collection.slice(0, -1)}`;
+    const submitBtn = document.createElement('button'); 
+    submitBtn.type = 'submit'; 
+    submitBtn.textContent = 'Guardar Cambios'; 
+    form.appendChild(submitBtn); 
+    document.getElementById('edit-modal-title').textContent = `Editar ${collection.slice(0, -1)}`; 
     document.getElementById('edit-modal').style.display = 'block';
 }
 
-async function handleUpdateItem(e) {
-    e.preventDefault();
-    const form = e.target;
-    const collection = form.dataset.collection;
+async function handleUpdateItem(e) { 
+    e.preventDefault(); 
+    const form = e.target; 
+    const collection = form.dataset.collection; 
     const id = form.dataset.id;
-    const updatedData = {};
-    const formData = new FormData(form);
-    for (let [key, value] of formData.entries()) {
+    const updatedData = {}; 
+    const formData = new FormData(form); 
+    for (let [key, value] of formData.entries()) { 
         if (form.querySelector(`[name="${key}"]`) && form.querySelector(`[name="${key}"]`).disabled) continue;
-        updatedData[key] = value;
-    }
-    try {
-        await db.collection(collection).doc(id).update(updatedData);
-        alert("Item actualizado con éxito.");
+        updatedData[key] = value; 
+    } 
+    try { 
+        await db.collection(collection).doc(id).update(updatedData); 
+        alert("Item actualizado."); 
         document.getElementById('edit-modal').style.display = 'none';
-    } catch (error) { console.error("Error al actualizar:", error); alert("Error al guardar los cambios."); }
+    } catch (error) { 
+        console.error("Error al actualizar:", error); 
+        alert("Error al guardar.");
+    } 
 }
 
-async function deleteItem(collection, id) {
+async function deleteItem(collection, id, auth_uid = null) { 
     const docName = collection.slice(0, -1);
-    if (confirm(`¿Estás seguro de que quieres borrar este ${docName}?`)) {
+    
+    if (confirm(`¿Seguro que quieres borrar este ${docName}? Esta acción no se puede deshacer.`)) {
         try {
             if (collection === 'users') {
-                alert("La funcionalidad para borrar usuarios debe implementarse con una Cloud Function por seguridad.");
+                alert("Borrar usuarios debe hacerse con una Cloud Function."); 
                 return;
             }
-            await db.collection(collection).doc(id).delete();
-            alert(`${docName.charAt(0).toUpperCase() + docName.slice(1)} borrado con éxito.`);
+
+            if (collection === 'choferes') {
+                if (!auth_uid) {
+                    await db.collection(collection).doc(id).delete();
+                    alert(`${docName.charAt(0).toUpperCase() + docName.slice(1)} borrado.`);
+                } else {
+                    const borrarChofer = functions.httpsCallable('borrarChofer');
+                    const result = await borrarChofer({ dni: id, auth_uid: auth_uid });
+                    alert(result.data.message);
+                }
+            } else {
+                await db.collection(collection).doc(id).delete();
+                alert(`${docName.charAt(0).toUpperCase() + docName.slice(1)} borrado.`);
+            }
             if (collection === 'pasajeros') {
                 cargarPasajeros();
             }
         } catch (error) {
-            console.error(`Error al borrar ${docName}:`, error);
-            alert(`Error al borrar: ${error.message}`);
+            console.error(`Error al borrar:`, error);
+            alert(`Error: ${error.message}`);
         }
     }
 }
 
-function openTab(evt, tabName) {
-    document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none");
-    document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active'));
+function openTab(evt, tabName) { 
+    document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none"); 
+    document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active')); 
     document.getElementById(tabName).style.display = "block";
-    
-    const activeLink = evt ? evt.currentTarget : document.querySelector(`.tab-link[onclick*="'${tabName}'"]`);
-    if(activeLink) activeLink.classList.add('active');
-    
-    if (tabName === 'Mapa' && !map) {
+    const activeLink = evt ? evt.currentTarget : document.querySelector(`.tab-link[onclick*="'${tabName}'"]`); 
+    if(activeLink) activeLink.classList.add('active'); 
+    if (tabName === 'Mapa' && !map) { 
         initMap();
-    } else if (tabName === 'Mapa' && map) {
-        cargarMarcadoresDeReservas();
-    }
-
-    if (tabName === 'Historico') {
+    } else if (tabName === 'Mapa' && map) { 
+        cargarMarcadoresDeReservas(); 
+    } 
+    if (tabName === 'Historico') { 
         paginaActual = 0;
-        historialDePaginas = [null];
-        cargarHistorial();
-    }
-    if (tabName === 'Pasajeros' && !document.getElementById('lista-pasajeros').hasChildNodes()) {
-        pasajerosPaginaActual = 0;
-        pasajerosHistorialDePaginas = [null];
+        historialDePaginas = [null]; 
+        cargarHistorial(); 
+    } 
+    if (tabName === 'Pasajeros' && !document.getElementById('lista-pasajeros').hasChildNodes()) { 
+        pasajerosPaginaActual = 0; 
+        pasajerosHistorialDePaginas = [null]; 
         cargarPasajeros();
-    }
+    } 
 }
 
-function initMap() {
-    const mapContainer = document.getElementById("map-container");
-    if (mapContainer && !map) {
-        map = new google.maps.Map(mapContainer, {
-            center: { lat: -32.9566, lng: -60.6577 },
-            zoom: 12
-        });
-        map.addListener('click', hideMapContextMenu);
-        
-        if (lastReservasSnapshot) {
-            cargarMarcadoresDeReservas();
-        }
-    }
+function initMap() { 
+    const c = document.getElementById("map-container"); 
+    if (c && !map) { 
+        map = new google.maps.Map(c, { center: { lat: -32.9566, lng: -60.6577 }, zoom: 12 });
+        map.addListener('click', hideMapContextMenu); 
+        if (lastReservasSnapshot) { 
+            cargarMarcadoresDeReservas(); 
+        } 
+    } 
 }
 
-
-function showReservasTab(tabName) {
-    document.querySelectorAll('.reservas-container').forEach(c => c.style.display = 'none');
+function showReservasTab(tabName) { 
+    document.querySelectorAll('.reservas-container').forEach(c => c.style.display = 'none'); 
     document.getElementById(`reservas-${tabName}`).style.display = 'block';
-    document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.querySelector(`.sub-tab-btn[data-tab="${tabName}"]`).classList.add('active');
+    document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active')); 
+    document.querySelector(`.sub-tab-btn[data-tab="${tabName}"]`).classList.add('active'); 
 }
 
-function initAutocomplete() {
-    const origenInput = document.getElementById('origen');
-    const destinoInput = document.getElementById('destino');
-    if (!origenInput || !destinoInput) return;
-    const options = { componentRestrictions: { country: "ar" }, fields: ["formatted_address", "geometry", "name"] };
-    autocompleteOrigen = new google.maps.places.Autocomplete(origenInput, options);
-    autocompleteDestino = new google.maps.places.Autocomplete(destinoInput, options);
-    
-    autocompleteOrigen.addListener('place_changed', () => {
-        const place = autocompleteOrigen.getPlace();
-        if (place.geometry && place.geometry.location) {
-            if (mapaModal && marcadorOrigenModal) {
-                mapaModal.setCenter(place.geometry.location);
-                marcadorOrigenModal.setPosition(place.geometry.location);
-                mapaModal.setZoom(15);
-            }
-        }
+function initAutocomplete() { 
+    const o = document.getElementById('origen'); 
+    const d = document.getElementById('destino'); 
+    if (!o || !d) return;
+    const opts = { componentRestrictions: { country: "ar" }, fields: ["formatted_address", "geometry", "name"] }; 
+    autocompleteOrigen = new google.maps.places.Autocomplete(o, opts);
+    autocompleteDestino = new google.maps.places.Autocomplete(d, opts); 
+    autocompleteOrigen.addListener('place_changed', () => { 
+        const p = autocompleteOrigen.getPlace(); 
+        if (p.geometry && p.geometry.location) { 
+            if (mapaModal && marcadorOrigenModal) { 
+                mapaModal.setCenter(p.geometry.location); 
+                marcadorOrigenModal.setPosition(p.geometry.location); 
+                mapaModal.setZoom(15); 
+            } 
+        } 
     });
-    autocompleteDestino.addListener('place_changed', () => {
-        const place = autocompleteDestino.getPlace();
-        if (place.geometry && place.geometry.location) {
-            if (mapaModal && marcadorDestinoModal) {
-                mapaModal.setCenter(place.geometry.location);
-                marcadorDestinoModal.setPosition(place.geometry.location);
-                mapaModal.setZoom(15);
-            }
-        }
+    autocompleteDestino.addListener('place_changed', () => { 
+        const p = autocompleteDestino.getPlace(); 
+        if (p.geometry && p.geometry.location) { 
+            if (mapaModal && marcadorDestinoModal) { 
+                mapaModal.setCenter(p.geometry.location); 
+                marcadorDestinoModal.setPosition(p.geometry.location); 
+                mapaModal.setZoom(15); 
+            } 
+        } 
     });
 }
 
-function crearIconoDeMarcador(color, texto) {
-    const svg = `
-        <svg width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M18 48C18 48 36 33.375 36 18C36 8.05887 27.9411 0 18 0C8.05887 0 0 8.05887 0 18C0 33.375 18 48 18 48Z" fill="${color}"/>
-            <text x="18" y="21" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${texto}</text>
-        </svg>
-    `;
-
-    return {
-        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-        scaledSize: new google.maps.Size(36, 48),
-        anchor: new google.maps.Point(18, 48)
-    };
+function crearIconoDeMarcador(color, texto) { 
+    const svg = `<svg width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 48C18 48 36 33.375 36 18C36 8.05887 27.9411 0 18 0C8.05887 0 0 8.05887 0 18C0 33.375 18 48 18 48Z" fill="${color}"/><text x="18" y="21" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${texto}</text></svg>`;
+    return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(36, 48), anchor: new google.maps.Point(18, 48) };
 }
 
-function cargarMarcadoresDeReservas() {
-    if (!map || !lastReservasSnapshot) return;
-
-    Object.values(marcadoresOrigen).forEach(marker => marker.setMap(null));
-    marcadoresOrigen = {};
-
+function cargarMarcadoresDeReservas() { 
+    if (!map || !lastReservasSnapshot) return; 
+    Object.values(marcadoresOrigen).forEach(m => m.setMap(null)); 
+    marcadoresOrigen = {}; 
     const ahora = new Date();
-    const limite24hs = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
-
-    lastReservasSnapshot.forEach(doc => {
-        const reserva = { id: doc.id, ...doc.data() };
-        
-        let estadoEfectivo = reserva.estado;
-        const fechaTurno = reserva.fecha_turno ? new Date(`${reserva.fecha_turno}T${reserva.hora_turno || '00:00'}`) : null;
-
-        if (!reserva.chofer_asignado_id && reserva.estado === 'Pendiente') {
-            if (fechaTurno && fechaTurno <= limite24hs) {
-                estadoEfectivo = 'En Curso';
-            }
-        }
-        
-        const estadosActivos = ['En Curso', 'Asignado', 'Pendiente'];
-        if (!estadosActivos.includes(estadoEfectivo)) return;
-        if (filtroMapaActual !== 'Todos' && estadoEfectivo !== filtroMapaActual) return;
-
-        if (reserva.origen_coords && reserva.origen_coords.latitude) {
+    const lim = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
+    
+    lastReservasSnapshot.forEach(doc => { 
+        const r = { id: doc.id, ...doc.data() }; 
+        let e = r.estado; 
+        const fT = r.fecha_turno ? new Date(`${r.fecha_turno}T${r.hora_turno || '00:00'}`) : null; 
+        if (!r.chofer_asignado_id && r.estado === 'Pendiente') { 
+            if (fT && fT <= lim) { 
+                e = 'En Curso'; 
+            } 
+        } 
+        const est = ['En Curso', 'Asignado', 'Pendiente']; 
+        if (!est.includes(e)) return; 
+        if (filtroMapaActual !== 'Todos' && e !== filtroMapaActual) return; 
+        if (r.origen_coords && r.origen_coords.latitude) { 
+            let cM, tM = ''; 
+            switch (e) { 
+                case 'En Curso': 
+                    cM = '#F54927'; 
+                    const h = r.hora_pickup || r.hora_turno; 
+                    if (h) { tM = h.substring(0, 5); } 
+                    break; 
+                case 'Asignado': 
+                    cM = '#4DF527'; 
+                    const m = movilesCache.find(mov => mov.id === r.movil_asignado_id); 
+                    if(m && m.numero) { tM = m.numero.toString(); } 
+                    break; 
+                case 'Pendiente': 
+                    cM = '#C15DE8'; 
+                    break; 
+            } 
+            const i = crearIconoDeMarcador(cM, tM); 
+            const marker = new google.maps.Marker({ position: { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude }, map: map, title: `Origen: ${r.origen} (${e})`, icon: i });
+            marcadoresOrigen[r.id] = marker; 
             
-            let colorMarcador, textoMarcador = '';
-
-            switch (estadoEfectivo) {
-                case 'En Curso': colorMarcador = '#F54927'; const hora = reserva.hora_pickup || reserva.hora_turno; if (hora) { textoMarcador = hora.substring(0, 5); } break;
-                case 'Asignado': colorMarcador = '#4DF527'; const chofer = choferesCache.find(c => c.id === reserva.chofer_asignado_id); if (chofer && chofer.movil_actual_id) { const movil = movilesCache.find(m => m.id === chofer.movil_actual_id); if (movil && movil.numero) { textoMarcador = movil.numero.toString(); } } break;
-                case 'Pendiente': colorMarcador = '#C15DE8'; break;
-            }
-
-            const iconoPersonalizado = crearIconoDeMarcador(colorMarcador, textoMarcador);
-
-            const marker = new google.maps.Marker({
-                position: { lat: reserva.origen_coords.latitude, lng: reserva.origen_coords.longitude },
-                map: map,
-                title: `Origen: ${reserva.origen} (${estadoEfectivo})`,
-                icon: iconoPersonalizado
-            });
-            marcadoresOrigen[reserva.id] = marker;
-
-            marker.addListener('click', () => {
-                if (infoWindowActiva) infoWindowActiva.close();
-                if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null);
-
-                const cliente = clientesCache[reserva.cliente] || { nombre: 'N/A' };
-                const choferInfo = choferesCache.find(c => c.id === reserva.chofer_asignado_id) || { nombre: 'No asignado' };
-
-                let observacionesHTML = '';
-                if (reserva.observaciones) {
-                    observacionesHTML = `<p style="background-color: #fffbe6; border-left: 4px solid #ffc107; padding: 8px; margin-top: 5px;"><strong>Obs:</strong> ${reserva.observaciones}</p>`;
-                }
-
-                const contenido = `
-                    <div class="info-window">
-                        <h4>Reserva de: ${cliente.nombre}</h4>
-                        <p><strong>Pasajero:</strong> ${reserva.nombre_pasajero || 'N/A'}</p>
-                        <p><strong>Origen:</strong> ${reserva.origen}</p>
-                        <p><strong>Destino:</strong> ${reserva.destino}</p>
-                        <p><strong>Turno:</strong> ${new Date(reserva.fecha_turno + 'T' + (reserva.hora_turno || '00:00')).toLocaleString('es-AR')}</p>
-                        <p><strong>Chofer:</strong> ${choferInfo.nombre}</p>
-                        ${observacionesHTML}
-                    </div>`;
-                
-                infoWindowActiva = new google.maps.InfoWindow({ content: contenido });
-                infoWindowActiva.open(map, marker);
-
-                if (reserva.destino_coords && reserva.destino_coords.latitude) {
-                    const iconoDestino = crearIconoDeMarcador('#27DAF5', '');
-                    marcadorDestinoActivo = new google.maps.Marker({
-                        position: { lat: reserva.destino_coords.latitude, lng: reserva.destino_coords.longitude },
-                        map: map,
-                        title: `Destino: ${reserva.destino}`,
-                        icon: iconoDestino
-                    });
-                }
-
-                infoWindowActiva.addListener('closeclick', () => {
-                    if (marcadorDestinoActivo) {
-                        marcadorDestinoActivo.setMap(null);
-                        marcadorDestinoActivo = null;
-                    }
-                });
+            marker.addListener('click', () => { 
+                if (infoWindowActiva) infoWindowActiva.close(); 
+                if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null); 
+                const cli = clientesCache[r.cliente] || { nombre: 'N/A' }; 
+                const cho = choferesCache.find(c => c.id === r.chofer_asignado_id) || { nombre: 'No asignado' }; 
+                let obs = ''; 
+                if (r.observaciones) { 
+                    obs = `<p style="background-color:#fffbe6;border-left:4px solid #ffc107;padding:8px;margin-top:5px;"><strong>Obs:</strong> ${r.observaciones}</p>`; 
+                } 
+                const cont = `<div class="info-window"><h4>Reserva de: ${cli.nombre}</h4><p><strong>Pasajero:</strong> ${r.nombre_pasajero||'N/A'}</p><p><strong>Origen:</strong> ${r.origen}</p><p><strong>Destino:</strong> ${r.destino}</p><p><strong>Turno:</strong> ${new Date(r.fecha_turno + 'T' + (r.hora_turno||'00:00')).toLocaleString('es-AR')}</p><p><strong>Chofer:</strong> ${cho.nombre}</p>${obs}</div>`; 
+                infoWindowActiva = new google.maps.InfoWindow({ content: cont }); 
+                infoWindowActiva.open(map, marker); 
+                if (r.destino_coords && r.destino_coords.latitude) { 
+                    const iD = crearIconoDeMarcador('#27DAF5', '');
+                    marcadorDestinoActivo = new google.maps.Marker({ position: { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude }, map: map, title: `Destino: ${r.destino}`, icon: iD });
+                } 
+                infoWindowActiva.addListener('closeclick', () => { 
+                    if (marcadorDestinoActivo) { 
+                        marcadorDestinoActivo.setMap(null); 
+                        marcadorDestinoActivo = null; 
+                    } 
+                }); 
             });
             
-            marker.addListener('rightclick', (event) => {
-                event.domEvent.preventDefault();
-                hideMapContextMenu();
-
-                let menuHTML = '';
-                const reservaId = reserva.id;
-
-                if (estadoEfectivo === 'En Curso' || estadoEfectivo === 'Pendiente') {
-                    menuHTML = `
-                        <li><a onclick="openEditReservaModal('${reservaId}'); hideMapContextMenu()">Editar</a></li>
-                        <li><select onchange="asignarChofer('${reservaId}', this.value); hideMapContextMenu()"><option value="">Asignar Chofer...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select></li>
-                        <li><a onclick="changeReservaState('${reservaId}', 'Anulado'); hideMapContextMenu()">Anular</a></li>
-                    `;
-                } else if (estadoEfectivo === 'Asignado') {
-                    menuHTML = `
-                        <li><a onclick="openEditReservaModal('${reservaId}'); hideMapContextMenu()">Editar</a></li>
-                        <li><a onclick="finalizarReserva('${reservaId}'); hideMapContextMenu()">Finalizar</a></li>
-                        <li><a onclick="changeReservaState('${reservaId}', 'Negativo'); hideMapContextMenu()">Marcar Negativo</a></li>
-                        <li><a onclick="quitarAsignacion('${reservaId}'); hideMapContextMenu()">Quitar Móvil</a></li>
-                        <li><a onclick="changeReservaState('${reservaId}', 'Anulado'); hideMapContextMenu()">Anular Viaje</a></li>
-                        <li><select onchange="asignarChofer('${reservaId}', this.value); hideMapContextMenu()"><option value="">Reasignar...</option>${choferesCache.map(c => `<option value="${c.id}">${c.nombre || c.dni}</option>`).join('')}</select></li>
-                    `;
-                }
-
-                if (menuHTML) {
-                    mapContextMenuItems.innerHTML = menuHTML;
+            marker.addListener('rightclick', (event) => { 
+                event.domEvent.preventDefault(); 
+                hideMapContextMenu(); 
+                let menuHTML = ''; 
+                const rId = r.id; 
+                if (e === 'En Curso' || e === 'Pendiente') { 
+                    menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><select onchange="asignarMovil('${rId}', this.value); hideMapContextMenu()"><option value="">Asignar Móvil...</option>${movilesCache.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="changeReservaState('${rId}', 'Anulado'); hideMapContextMenu()">Anular</a></li>`; 
+                } else if (e === 'Asignado') { 
+                    menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><a onclick="finalizarReserva('${rId}'); hideMapContextMenu()">Finalizar</a></li><li><a onclick="quitarAsignacion('${rId}'); hideMapContextMenu()">Quitar Móvil</a></li>`; 
+                } 
+                if (menuHTML) { 
+                    mapContextMenuItems.innerHTML = menuHTML; 
                     mapContextMenu.style.left = `${event.domEvent.clientX}px`;
-                    mapContextMenu.style.top = `${event.domEvent.clientY}px`;
-                    mapContextMenu.style.display = 'block';
-                }
-            });
-        }
-    });
+                    mapContextMenu.style.top = `${event.domEvent.clientY}px`; 
+                    mapContextMenu.style.display = 'block'; 
+                } 
+            }); 
+        } 
+    }); 
 }
-function filtrarMapa(estado) {
-    filtroMapaActual = estado;
+
+function filtrarMapa(estado) { 
+    filtroMapaActual = estado; 
     document.querySelectorAll('.map-filter-btn').forEach(btn => btn.classList.remove('active'));
-    const botonActivo = Array.from(document.querySelectorAll('.map-filter-btn')).find(btn => btn.textContent.includes(estado));
-    if (botonActivo) botonActivo.classList.add('active');
-    cargarMarcadoresDeReservas();
+    const botonActivo = Array.from(document.querySelectorAll('.map-filter-btn')).find(btn => btn.textContent.includes(estado)); 
+    if (botonActivo) botonActivo.classList.add('active'); 
+    cargarMarcadoresDeReservas(); 
 }
 
-function initMapaModal(origenCoords, destinoCoords) {
-    const mapaContainer = document.getElementById("mapa-modal-container");
-    if (!mapaContainer) return;
-    
-    const centroPorDefecto = { lat: -32.95, lng: -60.65 };
-
-    if (!mapaModal) {
-        mapaModal = new google.maps.Map(mapaContainer, {
-            center: centroPorDefecto,
-            zoom: 13
-        });
-        initAutocomplete();
-    }
-    
+function initMapaModal(origenCoords, destinoCoords) { 
+    const c = document.getElementById("mapa-modal-container");
+    if (!c) return; 
+    const centro = { lat: -32.95, lng: -60.65 };
+    if (!mapaModal) { 
+        mapaModal = new google.maps.Map(c, { center: centro, zoom: 13 }); 
+        initAutocomplete(); 
+    } 
     if (marcadorOrigenModal) marcadorOrigenModal.setMap(null);
-    if (marcadorDestinoModal) marcadorDestinoModal.setMap(null);
+    if (marcadorDestinoModal) marcadorDestinoModal.setMap(null); 
     
-    const posOrigen = (origenCoords && origenCoords.latitude) ? { lat: origenCoords.latitude, lng: origenCoords.longitude } : centroPorDefecto;
-    marcadorOrigenModal = new google.maps.Marker({
-        position: posOrigen,
-        map: mapaModal,
-        draggable: true
-    });
-
-    const posDestino = (destinoCoords && destinoCoords.latitude) ? { lat: destinoCoords.latitude, lng: destinoCoords.longitude } : centroPorDefecto;
-    marcadorDestinoModal = new google.maps.Marker({
-        position: posDestino,
-        map: mapaModal,
-        draggable: true
-    });
-
-    if (origenCoords && origenCoords.latitude && destinoCoords && destinoCoords.latitude) {
-        const bounds = new google.maps.LatLngBounds();
-        bounds.extend(posOrigen);
-        bounds.extend(posDestino);
-        mapaModal.fitBounds(bounds);
-    } else if (origenCoords && origenCoords.latitude) {
-        mapaModal.setCenter(posOrigen);
-        mapaModal.setZoom(15);
-    } else {
-        mapaModal.setCenter(centroPorDefecto);
+    const pO = (origenCoords && origenCoords.latitude) ? { lat: origenCoords.latitude, lng: origenCoords.longitude } : centro;
+    marcadorOrigenModal = new google.maps.Marker({ position: pO, map: mapaModal, draggable: true }); 
+    
+    const pD = (destinoCoords && destinoCoords.latitude) ? { lat: destinoCoords.latitude, lng: destinoCoords.longitude } : centro; 
+    marcadorDestinoModal = new google.maps.Marker({ position: pD, map: mapaModal, draggable: true });
+    
+    if (origenCoords && origenCoords.latitude && destinoCoords && destinoCoords.latitude) { 
+        const b = new google.maps.LatLngBounds(); 
+        b.extend(pO); 
+        b.extend(pD); 
+        mapaModal.fitBounds(b);
+    } else if (origenCoords && origenCoords.latitude) { 
+        mapaModal.setCenter(pO); 
+        mapaModal.setZoom(15); 
+    } else { 
+        mapaModal.setCenter(centro); 
         mapaModal.setZoom(13);
-    }
+    } 
     
-    marcadorOrigenModal.addListener('dragend', (event) => {
-        actualizarInputDesdeCoordenadas(event.latLng, 'origen');
-    });
-    marcadorDestinoModal.addListener('dragend', (event) => {
-        actualizarInputDesdeCoordenadas(event.latLng, 'destino');
+    marcadorOrigenModal.addListener('dragend', (event) => { 
+        actualizarInputDesdeCoordenadas(event.latLng, 'origen'); 
+    }); 
+    marcadorDestinoModal.addListener('dragend', (event) => { 
+        actualizarInputDesdeCoordenadas(event.latLng, 'destino'); 
     });
 }
 
-
-function actualizarInputDesdeCoordenadas(latLng, tipoInput) {
+function actualizarInputDesdeCoordenadas(latLng, tipo) { 
     if (!geocoder) geocoder = new google.maps.Geocoder();
-    geocoder.geocode({ 'location': latLng }, (results, status) => {
-        if (status === 'OK') {
-            if (results[0]) {
-                document.getElementById(tipoInput).value = results[0].formatted_address;
-            } else {
-                window.alert('No se encontraron resultados para las coordenadas.');
-            }
-        } else {
-            window.alert('El servicio de geocodificación falló debido a: ' + status);
-        }
+    geocoder.geocode({ 'location': latLng }, (results, status) => { 
+        if (status === 'OK') { 
+            if (results[0]) { 
+                document.getElementById(tipo).value = results[0].formatted_address; 
+            } else { 
+                window.alert('No se encontraron resultados.'); 
+            } 
+        } else { 
+            window.alert('Geocodificación falló: ' + status); 
+        } 
     });
 }
 
 // ===================================================================================
-// INICIALIZACIÓN DEL MAPA Y EVENTOS DEL DOM
+// INICIALIZACIÓN
 // ===================================================================================
-
 document.addEventListener('DOMContentLoaded', () => {
     // Búsquedas
     const searchInput = document.getElementById('search-historial-input');
