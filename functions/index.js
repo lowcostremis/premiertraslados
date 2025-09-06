@@ -42,29 +42,13 @@ function getAlgoliaIndices() {
 // ===================================================================================
 
 exports.crearChoferConAcceso = onCall(async (request) => {
-    // Aquí se podría verificar si el usuario que llama es un administrador
     const { email, password, nombre, dni, domicilio, telefono, movil_actual_id } = request.data;
     if (!email || !password || !nombre || !dni) {
         throw new HttpsError('invalid-argument', 'Faltan datos esenciales (email, password, nombre, dni).');
     }
     try {
-        const userRecord = await admin.auth().createUser({
-            email: email,
-            password: password,
-            displayName: nombre,
-            emailVerified: true,
-            disabled: false
-        });
-        const choferData = {
-            auth_uid: userRecord.uid,
-            email: email,
-            nombre: nombre,
-            dni: dni,
-            domicilio: domicilio || '',
-            telefono: telefono || '',
-            movil_actual_id: movil_actual_id || null,
-            creadoEn: admin.firestore.FieldValue.serverTimestamp()
-        };
+        const userRecord = await admin.auth().createUser({ email, password, displayName: nombre, emailVerified: true, disabled: false });
+        const choferData = { auth_uid: userRecord.uid, email, nombre, dni, domicilio: domicilio || '', telefono: telefono || '', movil_actual_id: movil_actual_id || null, creadoEn: admin.firestore.FieldValue.serverTimestamp() };
         await admin.firestore().collection('choferes').doc(dni).set(choferData);
         return { message: `¡Éxito! Chofer ${nombre} y su acceso fueron creados.` };
     } catch (error) {
@@ -77,7 +61,6 @@ exports.crearChoferConAcceso = onCall(async (request) => {
 });
 
 exports.borrarChofer = onCall(async (request) => {
-    // Aquí se debería validar que el que llama sea un admin.
     const { dni, auth_uid } = request.data;
     if (!dni || !auth_uid) {
         throw new HttpsError('invalid-argument', 'Faltan datos (dni o auth_uid) para borrar el chofer.');
@@ -105,9 +88,7 @@ exports.resetearPasswordChofer = onCall(async (request) => {
         throw new HttpsError('invalid-argument', 'La contraseña debe tener al menos 6 caracteres.');
     }
     try {
-        await admin.auth().updateUser(auth_uid, {
-            password: nuevaPassword
-        });
+        await admin.auth().updateUser(auth_uid, { password: nuevaPassword });
         return { message: 'La contraseña del chofer ha sido actualizada con éxito.' };
     } catch (error) {
         console.error("Error al resetear contraseña:", error);
@@ -116,8 +97,56 @@ exports.resetearPasswordChofer = onCall(async (request) => {
 });
 
 // ===================================================================================
-// FUNCIONES PARA APP DE CHOFERES (GEOLOCALIZACIÓN)
+// FUNCIONES PARA APP DE CHOFERES (ESTADO Y GEOLOCALIZACIÓN)
 // ===================================================================================
+
+exports.actualizarEstadoViaje = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'El usuario debe estar autenticado.');
+    }
+    const { reservaId, nuevoEstado } = request.data;
+    if (!reservaId || !nuevoEstado) {
+        throw new HttpsError('invalid-argument', 'Faltan datos (reservaId o nuevoEstado).');
+    }
+    const authUid = request.auth.uid;
+    const db = admin.firestore();
+    try {
+        const choferQuery = await db.collection('choferes').where('auth_uid', '==', authUid).limit(1).get();
+        if (choferQuery.empty) {
+            throw new HttpsError('not-found', 'No se encontró el perfil del chofer.');
+        }
+        const choferId = choferQuery.docs[0].id;
+        const reservaRef = db.collection('reservas').doc(reservaId);
+        const reservaDoc = await reservaRef.get();
+        if (!reservaDoc.exists || reservaDoc.data().chofer_asignado_id !== choferId) {
+            throw new HttpsError('permission-denied', 'No tienes permiso para modificar este viaje.');
+        }
+        if (nuevoEstado === 'Finalizado') {
+            const reservaData = reservaDoc.data();
+            reservaData.estado = 'Finalizado';
+            reservaData.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
+            if (reservaData.cliente) {
+                const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
+                if (clienteDoc.exists) {
+                    reservaData.clienteNombre = clienteDoc.data().nombre;
+                }
+            }
+            const historicoRef = db.collection('historico').doc(reservaId);
+            await db.runTransaction(async (transaction) => {
+                transaction.set(historicoRef, reservaData);
+                transaction.delete(reservaRef);
+            });
+            return { status: 'success', message: 'Viaje finalizado y archivado.' };
+        } else {
+            await reservaRef.update({ estado: nuevoEstado });
+            return { status: 'success', message: `El estado del viaje se actualizó a ${nuevoEstado}.` };
+        }
+    } catch (error) {
+        console.error("Error al actualizar estado del viaje:", error);
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError('internal', 'Ocurrió un error al actualizar el viaje.');
+    }
+});
 
 exports.actualizarUbicacionChofer = onCall(async (request) => {
     if (!request.auth) {
@@ -212,8 +241,8 @@ exports.crearUsuario = onCall(async (request) => {
     const { email, password, nombre } = request.data;
     if (!email || !password || !nombre) { throw new HttpsError('invalid-argument', 'Faltan datos.'); }
     try {
-        const userRecord = await admin.auth().createUser({ email: email, password: password, displayName: nombre });
-        await admin.firestore().collection('users').doc(userRecord.uid).set({ nombre: nombre, email: email, rol: 'operador' });
+        const userRecord = await admin.auth().createUser({ email, password, displayName: nombre });
+        await admin.firestore().collection('users').doc(userRecord.uid).set({ nombre, email, rol: 'operador' });
         return { result: `Usuario ${nombre} creado con éxito.` };
     } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al crear.'); }
 });
@@ -237,9 +266,7 @@ exports.exportarHistorico = onCall(async (request) => {
         }
         const fechaInicio = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00Z'));
         const fechaFin = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59Z'));
-        let query = admin.firestore().collection('historico')
-            .where('archivadoEn', '>=', fechaInicio)
-            .where('archivadoEn', '<=', fechaFin);
+        let query = admin.firestore().collection('historico').where('archivadoEn', '>=', fechaInicio).where('archivadoEn', '<=', fechaFin);
         if (clienteId) {
             query = query.where('cliente', '==', clienteId);
         }
@@ -251,18 +278,7 @@ exports.exportarHistorico = onCall(async (request) => {
         snapshot.forEach(doc => {
             const viaje = doc.data();
             const escapeCSV = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
-            const fila = [
-                viaje.fecha_turno || 'N/A',
-                viaje.hora_turno || 'N/A',
-                viaje.hora_pickup || 'N/A',
-                escapeCSV(viaje.nombre_pasajero),
-                escapeCSV(viaje.clienteNombre),
-                escapeCSV(viaje.origen),
-                escapeCSV(viaje.destino),
-                viaje.estado || 'N/A',
-                viaje.siniestro || 'N/A',
-                viaje.autorizacion || 'N/A'
-            ].join(',');
+            const fila = [viaje.fecha_turno || 'N/A', viaje.hora_turno || 'N/A', viaje.hora_pickup || 'N/A', escapeCSV(viaje.nombre_pasajero), escapeCSV(viaje.clienteNombre), escapeCSV(viaje.origen), escapeCSV(viaje.destino), viaje.estado || 'N/A', viaje.siniestro || 'N/A', viaje.autorizacion || 'N/A'].join(',');
             csvContent += fila + "\n";
         });
         return { csvData: csvContent };
