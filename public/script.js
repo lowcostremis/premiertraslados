@@ -1299,9 +1299,12 @@ function toggleChoferesVisibility(mostrar) {
     }
 }
 
+// Variable global para gestionar una única InfoWindow
+let infoWindowChofer = new google.maps.InfoWindow();
+
 function escucharUbicacionChoferes() {
     db.collection('choferes').onSnapshot(snapshot => {
-        if (!map) return; 
+        if (!map) return;
 
         const mostrar = document.getElementById('toggle-choferes').checked;
 
@@ -1309,16 +1312,8 @@ function escucharUbicacionChoferes() {
             const chofer = { id: change.doc.id, ...change.doc.data() };
             const marcadorExistente = marcadoresChoferes[chofer.id];
 
-            if (change.type === 'removed') {
+            if (change.type === 'removed' || !chofer.coordenadas) {
                 if (marcadorExistente) {
-                    marcadorExistente.setMap(null);
-                    delete marcadoresChoferes[chofer.id];
-                }
-                return;
-            }
-
-            if (!chofer.coordenadas) {
-                 if (marcadorExistente) {
                     marcadorExistente.setMap(null);
                     delete marcadoresChoferes[chofer.id];
                 }
@@ -1329,21 +1324,37 @@ function escucharUbicacionChoferes() {
 
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
-                marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}`);
             } else {
-                // --- CAMBIO AQUÍ: Usamos un label con emoji en lugar de un ícono ---
                 const marcador = new google.maps.Marker({
                     position: nuevaPos,
                     map: map,
+                    // --- CAMBIO 1: Ocultamos el pin rojo por defecto ---
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 0
+                    },
                     label: {
-                        text: '🚗', // El emoji del auto
-                        fontSize: '24px', // Tamaño del emoji
-                        color: '#FFFFFF' // Color (no afecta al emoji pero es buena práctica)
+                        text: '🚗',
+                        fontSize: '24px',
                     },
                     title: `Chofer: ${chofer.nombre || 'N/A'}`,
-                    zIndex: 100 
+                    zIndex: 100
                 });
-                // --- FIN DEL CAMBIO ---
+
+                // --- CAMBIO 2: Añadimos la ventana de información al hacer clic ---
+                marcador.addListener('click', () => {
+                    infoWindowChofer.close(); // Cierra cualquier otra ventana abierta
+                    
+                    const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
+                    const infoContent = `
+                        <div class="info-window">
+                            <h4>${chofer.nombre || 'Chofer'}</h4>
+                            <p><strong>Móvil:</strong> ${movilAsignado ? movilAsignado.numero : 'No asignado'}</p>
+                        </div>`;
+
+                    infoWindowChofer.setContent(infoContent);
+                    infoWindowChofer.open(map, marcador);
+                });
                 
                 marcador.setVisible(mostrar);
                 marcadoresChoferes[chofer.id] = marcador;
