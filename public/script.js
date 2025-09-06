@@ -274,7 +274,7 @@ function renderAllReservas(snapshot) {
         const estadoPrincipal = typeof reserva.estado === 'object' ? reserva.estado.principal : reserva.estado;
 
         let targetTableId = '';
-        if (['Finalizado', 'Anulado', 'Negativo'].includes(estadoPrincipal)) {
+        if (['Finalizado', 'Anulado', 'Negativo'].includes(estadoPrincipal) && reserva.estado?.detalle !== 'Traslado negativo') {
             // No hacer nada, ya no están en estas tablas
         } else if (estadoPrincipal === 'Asignado' || estadoPrincipal === 'En Origen' || estadoPrincipal === 'Viaje Iniciado') {
              targetTableId = 'tabla-asignados';
@@ -290,7 +290,6 @@ function renderAllReservas(snapshot) {
     });
 }
 
-// --- FUNCIÓN CORREGIDA PARA MOSTRAR ESTADO Y CHOFER CORRECTAMENTE ---
 function renderFilaReserva(tbody, reserva) {
     const cliente = clientesCache[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
     const row = tbody.insertRow();
@@ -301,8 +300,9 @@ function renderFilaReserva(tbody, reserva) {
     if (reserva.es_exclusivo) {
         row.style.backgroundColor = '#51ED8D';
         row.style.color = '#333';
-    } else if (estadoPrincipal === 'Negativo') {
-        row.className = 'estado-negativo';
+    } else if (estadoPrincipal === 'Negativo' || estadoDetalle === 'Traslado negativo') {
+        row.style.backgroundColor = '#FFDE59'; // Amarillo para negativos
+        row.style.color = '#333';
     } else if (estadoPrincipal === 'Anulado') {
         row.className = 'estado-anulado';
     } else if (cliente.color) {
@@ -326,7 +326,6 @@ function renderFilaReserva(tbody, reserva) {
         movilAsignadoTexto = textoMovil + textoChofer;
     }
     
-    // Construcción de la celda de "Detalle Estado"
     let detalleFinalHTML = `<strong>${estadoDetalle}</strong>`;
     if (movilAsignadoTexto) {
         detalleFinalHTML += `<br><small style="color: #ccc;">${movilAsignadoTexto}</small>`;
@@ -635,7 +634,7 @@ async function asignarMovil(reservaId, movilId) {
             chofer_asignado_id: choferAsignado.id,
             estado: {
                 principal: 'Asignado',
-                detalle: 'Enviando...',
+                detalle: 'Enviada al chofer', // <-- CAMBIO DE ESTADO
                 actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
             }
         };
@@ -1299,9 +1298,7 @@ function toggleChoferesVisibility(mostrar) {
     }
 }
 
-// Variable global para gestionar una única InfoWindow
-let infoWindowChofer = new google.maps.InfoWindow();
-
+// --- CAMBIO: Función para escuchar y mostrar la ubicación de los choferes ---
 function escucharUbicacionChoferes() {
     db.collection('choferes').onSnapshot(snapshot => {
         if (!map) return;
@@ -1321,39 +1318,39 @@ function escucharUbicacionChoferes() {
             }
 
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
+            const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
+            const etiqueta = movilAsignado ? `Móvil ${movilAsignado.numero}` : (chofer.nombre || 'Chofer');
 
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
+                marcadorExistente.setLabel({
+                    text: etiqueta,
+                    color: 'white',
+                    fontWeight: 'bold'
+                });
+                marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${movilAsignado ? movilAsignado.numero : 'N/A'}`);
             } else {
                 const marcador = new google.maps.Marker({
                     position: nuevaPos,
                     map: map,
-                    // --- CAMBIO 1: Ocultamos el pin rojo por defecto ---
                     icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 0
+                        path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z',
+                        fillColor: '#1A73E8', // Un color azul distintivo
+                        fillOpacity: 1,
+                        strokeWeight: 1.5,
+                        strokeColor: '#FFFFFF',
+                        scale: 1.8,
+                        anchor: new google.maps.Point(12, 24),
+                        labelOrigin: new google.maps.Point(12, 11) // Centra la etiqueta en el ícono
                     },
                     label: {
-                        text: '🚗',
-                        fontSize: '24px',
+                        text: etiqueta,
+                        color: 'white',
+                        fontWeight: 'bold',
+                        fontSize: '11px',
                     },
-                    title: `Chofer: ${chofer.nombre || 'N/A'}`,
-                    zIndex: 100
-                });
-
-                // --- CAMBIO 2: Añadimos la ventana de información al hacer clic ---
-                marcador.addListener('click', () => {
-                    infoWindowChofer.close(); // Cierra cualquier otra ventana abierta
-                    
-                    const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
-                    const infoContent = `
-                        <div class="info-window">
-                            <h4>${chofer.nombre || 'Chofer'}</h4>
-                            <p><strong>Móvil:</strong> ${movilAsignado ? movilAsignado.numero : 'No asignado'}</p>
-                        </div>`;
-
-                    infoWindowChofer.setContent(infoContent);
-                    infoWindowChofer.open(map, marcador);
+                    title: `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${movilAsignado ? movilAsignado.numero : 'N/A'}`,
+                    zIndex: 101 // Un z-index alto para que esté siempre visible
                 });
                 
                 marcador.setVisible(mostrar);
@@ -1362,6 +1359,7 @@ function escucharUbicacionChoferes() {
         });
     });
 }
+
 
 function cargarMarcadoresDeReservas() { 
     if (!map || !lastReservasSnapshot) return; 
@@ -1377,7 +1375,6 @@ function cargarMarcadoresDeReservas() {
         const est = ['En Curso', 'Asignado', 'Pendiente', 'En Origen', 'Viaje Iniciado']; 
         if (!est.includes(e)) return; 
 
-        // Re-evaluar estado para tabla En Curso vs Pendiente
         if (!r.chofer_asignado_id && e === 'Pendiente') { 
             const fT = r.fecha_turno ? new Date(`${r.fecha_turno}T${r.hora_turno || '00:00'}`) : null; 
             if (fT && fT <= lim) { 
