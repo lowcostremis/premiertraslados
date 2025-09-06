@@ -236,7 +236,7 @@ let mapaModal, marcadorOrigenModal, marcadorDestinoModal, geocoder;
 let filtroMapaActual = 'Todos';
 let refrescoAutomaticoIntervalo;
 let marcadoresOrigen = {};
-let marcadoresChoferes = {}; // <-- NUEVO: Para guardar marcadores de choferes
+let marcadoresChoferes = {};
 let marcadorDestinoActivo = null;
 let infoWindowActiva = null;
 let mapContextMenu, mapContextMenuItems;
@@ -290,11 +290,11 @@ function renderAllReservas(snapshot) {
     });
 }
 
+// --- FUNCIÓN CORREGIDA PARA MOSTRAR ESTADO Y CHOFER CORRECTAMENTE ---
 function renderFilaReserva(tbody, reserva) {
     const cliente = clientesCache[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
     const row = tbody.insertRow();
     
-    // Extraer estado principal y detalle para la lógica
     const estadoPrincipal = (typeof reserva.estado === 'object' && reserva.estado.principal) ? reserva.estado.principal : reserva.estado;
     const estadoDetalle = (typeof reserva.estado === 'object' && reserva.estado.detalle) ? reserva.estado.detalle : '---';
 
@@ -326,6 +326,12 @@ function renderFilaReserva(tbody, reserva) {
         movilAsignadoTexto = textoMovil + textoChofer;
     }
     
+    // Construcción de la celda de "Detalle Estado"
+    let detalleFinalHTML = `<strong>${estadoDetalle}</strong>`;
+    if (movilAsignadoTexto) {
+        detalleFinalHTML += `<br><small style="color: #ccc;">${movilAsignadoTexto}</small>`;
+    }
+    
     const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
     const isAsignable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes';
     const isAsignado = tbody.parentElement.id === 'tabla-asignados';
@@ -353,7 +359,6 @@ function renderFilaReserva(tbody, reserva) {
             </div>
         </td>`;
 
-    // Se agrega la nueva columna "Detalle Estado"
     row.innerHTML = `
         <td>${reserva.autorizacion || ''}</td>
         <td>${reserva.siniestro || ''}</td>
@@ -367,7 +372,7 @@ function renderFilaReserva(tbody, reserva) {
         <td class="editable-cell zona-cell"></td>
         <td>${cliente.nombre}</td>
         <td><strong>${estadoPrincipal || 'Pendiente'}</strong></td>
-        <td>${movilAsignadoTexto ? `<em>${movilAsignadoTexto}</em>` : estadoDetalle}</td>
+        <td>${detalleFinalHTML}</td>
         ${accionesHTML}
     `;
 
@@ -465,15 +470,13 @@ function initApp() {
     mapContextMenu = document.getElementById('map-context-menu');
     mapContextMenuItems = document.getElementById('map-context-menu-items');
     
-    // ▼▼▼ NUEVO LISTENER PARA EL CHECKBOX DEL MAPA ▼▼▼
     const toggleChoferes = document.getElementById('toggle-choferes');
     if (toggleChoferes) {
         toggleChoferes.addEventListener('change', (e) => {
             toggleChoferesVisibility(e.target.checked);
         });
     }
-    escucharUbicacionChoferes(); // <-- NUEVO: Iniciar escucha de choferes
-    // ▲▲▲ FIN DEL CAMBIO ▲▲▲
+    escucharUbicacionChoferes();
 
     if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     refrescoAutomaticoIntervalo = setInterval(() => {
@@ -582,7 +585,6 @@ async function changeReservaState(reservaId, newState) {
         }
     } else {
         try {
-            // Este es un cambio de estado simple, usamos la estructura de objeto
             const updateData = {
                 estado: {
                     principal: newState,
@@ -628,17 +630,15 @@ async function asignarMovil(reservaId, movilId) {
             if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
             return;
         }
-        // ▼▼▼ CAMBIO: Usamos el nuevo formato de estado ▼▼▼
         const updateData = {
             movil_asignado_id: movilId,
             chofer_asignado_id: choferAsignado.id,
             estado: {
                 principal: 'Asignado',
-                detalle: 'Enviada al chofer',
+                detalle: 'Enviando...',
                 actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
             }
         };
-        // ▲▲▲ FIN DEL CAMBIO ▲▲▲
         await db.collection('reservas').doc(reservaId).update(updateData);
     } catch (err) {
         console.error("Error al asignar móvil:", err);
@@ -678,7 +678,7 @@ async function quitarAsignacion(reservaId) {
         try {
             const reservaRef = db.collection('reservas').doc(reservaId);
             await reservaRef.update({
-                estado: { // Volvemos al formato de objeto
+                estado: {
                     principal: 'En Curso',
                     detalle: 'Móvil des-asignado por operador',
                     actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
@@ -703,7 +703,6 @@ async function moverReservaAHistorico(reservaId, estadoFinal) {
             return;
         }
         const reservaData = doc.data();
-        // Aseguramos que el estado sea un objeto
         reservaData.estado = {
             principal: estadoFinal,
             detalle: `Viaje marcado como ${estadoFinal}`,
@@ -851,7 +850,6 @@ async function handleSaveReserva(e) {
         es_exclusivo: esX 
     };
     if (!rId) { 
-        // Estado inicial como objeto
         d.estado = {
             principal: 'Pendiente',
             detalle: 'Recién creada',
@@ -1295,15 +1293,12 @@ function crearIconoDeMarcador(color, texto) {
     return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(36, 48), anchor: new google.maps.Point(18, 48) };
 }
 
-// ▼▼▼ NUEVA FUNCIÓN PARA VISIBILIDAD DE CHOFERES ▼▼▼
 function toggleChoferesVisibility(mostrar) {
     for (const choferId in marcadoresChoferes) {
         marcadoresChoferes[choferId].setVisible(mostrar);
     }
 }
-// ▲▲▲ FIN DE LA NUEVA FUNCIÓN ▲▲▲
 
-// ▼▼▼ NUEVA FUNCIÓN PARA ESCUCHAR UBICACIÓN DE CHOFERES ▼▼▼
 function escucharUbicacionChoferes() {
     db.collection('choferes').onSnapshot(snapshot => {
         if (!map) return; 
@@ -1336,19 +1331,19 @@ function escucharUbicacionChoferes() {
                 marcadorExistente.setPosition(nuevaPos);
                 marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}`);
             } else {
-                const iconoChofer = {
-                    url: 'https://i.imgur.com/LsoPSi1.png', // Un ícono simple de auto
-                    scaledSize: new google.maps.Size(32, 32),
-                    anchor: new google.maps.Point(16, 16)
-                };
-                
+                // --- CAMBIO AQUÍ: Usamos un label con emoji en lugar de un ícono ---
                 const marcador = new google.maps.Marker({
                     position: nuevaPos,
                     map: map,
-                    icon: iconoChofer,
+                    label: {
+                        text: '🚗', // El emoji del auto
+                        fontSize: '24px', // Tamaño del emoji
+                        color: '#FFFFFF' // Color (no afecta al emoji pero es buena práctica)
+                    },
                     title: `Chofer: ${chofer.nombre || 'N/A'}`,
-                    zIndex: 100 // Para que aparezcan por encima de las reservas
+                    zIndex: 100 
                 });
+                // --- FIN DEL CAMBIO ---
                 
                 marcador.setVisible(mostrar);
                 marcadoresChoferes[chofer.id] = marcador;
@@ -1356,7 +1351,6 @@ function escucharUbicacionChoferes() {
         });
     });
 }
-// ▲▲▲ FIN DE LA NUEVA FUNCIÓN ▲▲▲
 
 function cargarMarcadoresDeReservas() { 
     if (!map || !lastReservasSnapshot) return; 

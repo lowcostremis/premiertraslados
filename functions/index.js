@@ -17,6 +17,9 @@ let algoliaClient;
 let mapsClient;
 let pasajerosIndex, historicoIndex, reservasIndex;
 
+// Asegúrate de configurar estas variables en tu entorno de Firebase
+// firebase functions:config:set geocoding.key="TU_API_KEY_DE_GOOGLE_MAPS"
+// firebase functions:config:set algolia.app_id="TU_APP_ID" algolia.api_key="TU_API_KEY"
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
 
 function getMapsClient() {
@@ -38,19 +41,16 @@ function getAlgoliaIndices() {
 // --- FIN DE LA INICIALIZACIÓN DIFERIDA ---
 
 // ===================================================================================
-// FUNCIONES PARA GESTIÓN DE CHOFERES (CREAR, BORRAR, ACTUALIZAR)
+// FUNCIONES PARA GESTIÓN DE CHOFERES (ESTADO Y UBICACIÓN)
 // ===================================================================================
 
 exports.actualizarEstadoViaje = onCall(async (request) => {
-    // Verificación de autenticación (sin cambios)
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'El usuario debe estar autenticado.');
     }
 
-    // AHORA RECIBIMOS UN OBJETO 'nuevoEstado' EN LUGAR DE UN STRING
     const { reservaId, nuevoEstado } = request.data;
     
-    // Verificación de datos de entrada mejorada
     if (!reservaId || !nuevoEstado || typeof nuevoEstado !== 'object' || !nuevoEstado.principal) {
         throw new HttpsError('invalid-argument', 'Faltan datos o el formato del nuevo estado es incorrecto.');
     }
@@ -72,12 +72,10 @@ exports.actualizarEstadoViaje = onCall(async (request) => {
             throw new HttpsError('permission-denied', 'No tienes permiso para modificar este viaje.');
         }
 
-        // Lógica para finalizar el viaje (el estado principal será 'Finalizado' o similar)
         const estadosFinales = ['Finalizado', 'Negativo', 'Anulado'];
         if (estadosFinales.includes(nuevoEstado.principal)) {
             const reservaData = reservaDoc.data();
             
-            // Guardamos el nuevo estado detallado
             reservaData.estado = nuevoEstado; 
             reservaData.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
 
@@ -94,7 +92,6 @@ exports.actualizarEstadoViaje = onCall(async (request) => {
             });
             return { status: 'success', message: 'Viaje finalizado y archivado.' };
         } else {
-            // Para cualquier otro estado, actualizamos el documento con el nuevo objeto de estado
             await reservaRef.update({ estado: nuevoEstado });
             return { status: 'success', message: `El estado del viaje se actualizó a ${nuevoEstado.principal}.` };
         }
@@ -235,7 +232,18 @@ exports.exportarHistorico = onCall(async (request) => {
         snapshot.forEach(doc => {
             const viaje = doc.data();
             const escapeCSV = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
-            const fila = [viaje.fecha_turno || 'N/A', viaje.hora_turno || 'N/A', viaje.hora_pickup || 'N/A', escapeCSV(viaje.nombre_pasajero), escapeCSV(viaje.clienteNombre), escapeCSV(viaje.origen), escapeCSV(viaje.destino), viaje.estado || 'N/A', viaje.siniestro || 'N/A', viaje.autorizacion || 'N/A'].join(',');
+            const fila = [
+                viaje.fecha_turno || 'N/A', 
+                viaje.hora_turno || 'N/A', 
+                viaje.hora_pickup || 'N/A', 
+                escapeCSV(viaje.nombre_pasajero), 
+                escapeCSV(viaje.clienteNombre), 
+                escapeCSV(viaje.origen), 
+                escapeCSV(viaje.destino), 
+                (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A', 
+                viaje.siniestro || 'N/A', 
+                viaje.autorizacion || 'N/A'
+            ].join(',');
             csvContent += fila + "\n";
         });
         return { csvData: csvContent };
