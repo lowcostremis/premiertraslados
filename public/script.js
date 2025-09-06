@@ -98,7 +98,7 @@ function mostrarDatosHistorialEnTabla(documentos) {
                 <td>${viaje.origen || 'N/A'}</td>
                 <td>${viaje.destino || 'N/A'}</td>
                 <td>${nombreChofer}</td>
-                <td>${viaje.estado || 'N/A'}</td>
+                <td>${viaje.estado?.principal || viaje.estado || 'N/A'}</td>
             </tr>
         `;
         historialBody.innerHTML += fila;
@@ -236,6 +236,7 @@ let mapaModal, marcadorOrigenModal, marcadorDestinoModal, geocoder;
 let filtroMapaActual = 'Todos';
 let refrescoAutomaticoIntervalo;
 let marcadoresOrigen = {};
+let marcadoresChoferes = {}; // <-- NUEVO: Para guardar marcadores de choferes
 let marcadorDestinoActivo = null;
 let infoWindowActiva = null;
 let mapContextMenu, mapContextMenuItems;
@@ -269,14 +270,20 @@ function renderAllReservas(snapshot) {
     snapshot.forEach(doc => {
         const reserva = { id: doc.id, ...doc.data() };
         const fechaTurno = reserva.fecha_turno ? new Date(`${reserva.fecha_turno}T${reserva.hora_turno || '00:00'}`) : null;
+        
+        const estadoPrincipal = typeof reserva.estado === 'object' ? reserva.estado.principal : reserva.estado;
+
         let targetTableId = '';
-        if (['Finalizado', 'Anulado', 'Negativo'].includes(reserva.estado)) {} else if (reserva.movil_asignado_id) {
-            targetTableId = 'tabla-asignados';
+        if (['Finalizado', 'Anulado', 'Negativo'].includes(estadoPrincipal)) {
+            // No hacer nada, ya no están en estas tablas
+        } else if (estadoPrincipal === 'Asignado' || estadoPrincipal === 'En Origen' || estadoPrincipal === 'Viaje Iniciado') {
+             targetTableId = 'tabla-asignados';
         } else if (fechaTurno && fechaTurno > limite24hs) {
             targetTableId = 'tabla-pendientes';
         } else {
             targetTableId = 'tabla-en-curso';
         }
+        
         if (targetTableId && bodies[targetTableId]) {
             renderFilaReserva(bodies[targetTableId], reserva);
         }
@@ -287,12 +294,16 @@ function renderFilaReserva(tbody, reserva) {
     const cliente = clientesCache[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
     const row = tbody.insertRow();
     
+    // Extraer estado principal y detalle para la lógica
+    const estadoPrincipal = (typeof reserva.estado === 'object' && reserva.estado.principal) ? reserva.estado.principal : reserva.estado;
+    const estadoDetalle = (typeof reserva.estado === 'object' && reserva.estado.detalle) ? reserva.estado.detalle : '---';
+
     if (reserva.es_exclusivo) {
         row.style.backgroundColor = '#51ED8D';
         row.style.color = '#333';
-    } else if (reserva.estado === 'Negativo') {
+    } else if (estadoPrincipal === 'Negativo') {
         row.className = 'estado-negativo';
-    } else if (reserva.estado === 'Anulado') {
+    } else if (estadoPrincipal === 'Anulado') {
         row.className = 'estado-anulado';
     } else if (cliente.color) {
         row.style.backgroundColor = cliente.color;
@@ -306,26 +317,21 @@ function renderFilaReserva(tbody, reserva) {
         }
     }
     
-    let estadoCellContent = reserva.estado || 'Pendiente';
-    const isAsignadoTable = tbody.parentElement.id === 'tabla-asignados';
-
-    if (isAsignadoTable && reserva.movil_asignado_id) {
+    let movilAsignadoTexto = '';
+    if (reserva.movil_asignado_id) {
         const movilAsignado = movilesCache.find(m => m.id === reserva.movil_asignado_id);
         const choferAsignado = choferesCache.find(c => c.id === reserva.chofer_asignado_id);
-        
         const textoMovil = movilAsignado ? `Móvil ${movilAsignado.numero}` : 'Móvil no encontrado';
         const textoChofer = choferAsignado ? ` (${choferAsignado.nombre})` : '';
-        
-        estadoCellContent = textoMovil + textoChofer;
+        movilAsignadoTexto = textoMovil + textoChofer;
     }
-
+    
     const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
-    const isSpecialTable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes' || tbody.parentElement.id === 'tabla-asignados';
-    const isEditable = isSpecialTable && (tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes');
-    const isAsignado = isSpecialTable && tbody.parentElement.id === 'tabla-asignados';
+    const isAsignable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes';
+    const isAsignado = tbody.parentElement.id === 'tabla-asignados';
     
     let menuItems = `<a href="#" onclick="openEditReservaModal('${reserva.id || reserva.objectID}'); return false;">Editar</a>`;
-    if (isEditable) {
+    if (isAsignable) {
         let movilesOptions = movilesCache.map(movil => {
             const choferDelMovil = choferesCache.find(c => c.movil_actual_id === movil.id);
             const nombreChofer = choferDelMovil ? ` (${choferDelMovil.nombre})` : ' (Sin chofer)';
@@ -346,6 +352,8 @@ function renderFilaReserva(tbody, reserva) {
                 <div class="menu-contenido">${menuItems}</div>
             </div>
         </td>`;
+
+    // Se agrega la nueva columna "Detalle Estado"
     row.innerHTML = `
         <td>${reserva.autorizacion || ''}</td>
         <td>${reserva.siniestro || ''}</td>
@@ -358,12 +366,14 @@ function renderFilaReserva(tbody, reserva) {
         <td>${reserva.cantidad_pasajeros || 1}</td>
         <td class="editable-cell zona-cell"></td>
         <td>${cliente.nombre}</td>
-        <td>${estadoCellContent}</td>
+        <td><strong>${estadoPrincipal || 'Pendiente'}</strong></td>
+        <td>${movilAsignadoTexto ? `<em>${movilAsignadoTexto}</em>` : estadoDetalle}</td>
         ${accionesHTML}
     `;
+
     const pickupCell = row.querySelector('.pickup-cell');
     const zonaCell = row.querySelector('.zona-cell');
-    if (isEditable) {
+    if (isAsignable) {
         pickupCell.innerHTML = `<input type="time" value="${reserva.hora_pickup || ''}" onchange="updateHoraPickup(event, '${reserva.id}', '${reserva.hora_turno}')">`;
         let zonaSelectHTML = `<select onchange="updateZona(event, '${reserva.id}')"><option value="">Seleccionar...</option>`;
         zonasCache.forEach(zona => {
@@ -377,6 +387,7 @@ function renderFilaReserva(tbody, reserva) {
         zonaCell.textContent = reserva.zona || '';
     }
 }
+
 
 async function buscarEnReservas(texto) {
     const resultadosContainer = document.getElementById('resultados-busqueda-reservas');
@@ -396,11 +407,11 @@ async function buscarEnReservas(texto) {
         subNav.style.display = 'none';
         containersOriginales.forEach(c => c.style.display = 'none');
         resultadosContainer.style.display = 'block';
-        resultadosTbody.innerHTML = '<tr><td colspan="13">Buscando...</td></tr>';
+        resultadosTbody.innerHTML = '<tr><td colspan="14">Buscando...</td></tr>';
         const { hits } = await reservasSearchIndex.search(texto);
         resultadosTbody.innerHTML = '';
         if (hits.length === 0) {
-            resultadosTbody.innerHTML = '<tr><td colspan="13">No se encontraron reservas.</td></tr>';
+            resultadosTbody.innerHTML = '<tr><td colspan="14">No se encontraron reservas.</td></tr>';
             return;
         }
         hits.forEach(reserva => {
@@ -409,7 +420,7 @@ async function buscarEnReservas(texto) {
         });
     } catch (error) {
         console.error("Error buscando reservas en Algolia: ", error);
-        resultadosTbody.innerHTML = '<tr><td colspan="13">Error al realizar la búsqueda.</td></tr>';
+        resultadosTbody.innerHTML = '<tr><td colspan="14">Error al realizar la búsqueda.</td></tr>';
     }
 }
 
@@ -453,6 +464,17 @@ function initApp() {
     initializeAdminLists();
     mapContextMenu = document.getElementById('map-context-menu');
     mapContextMenuItems = document.getElementById('map-context-menu-items');
+    
+    // ▼▼▼ NUEVO LISTENER PARA EL CHECKBOX DEL MAPA ▼▼▼
+    const toggleChoferes = document.getElementById('toggle-choferes');
+    if (toggleChoferes) {
+        toggleChoferes.addEventListener('change', (e) => {
+            toggleChoferesVisibility(e.target.checked);
+        });
+    }
+    escucharUbicacionChoferes(); // <-- NUEVO: Iniciar escucha de choferes
+    // ▲▲▲ FIN DEL CAMBIO ▲▲▲
+
     if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     refrescoAutomaticoIntervalo = setInterval(() => {
         if (lastReservasSnapshot) {
@@ -560,7 +582,15 @@ async function changeReservaState(reservaId, newState) {
         }
     } else {
         try {
-            await db.collection('reservas').doc(reservaId).update({ estado: newState });
+            // Este es un cambio de estado simple, usamos la estructura de objeto
+            const updateData = {
+                estado: {
+                    principal: newState,
+                    detalle: `Estado cambiado a ${newState}`,
+                    actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
+                }
+            };
+            await db.collection('reservas').doc(reservaId).update(updateData);
         } catch (error) {
             console.error(`Error al cambiar estado a ${newState}:`, error);
             alert("Hubo un error al actualizar la reserva.");
@@ -598,11 +628,17 @@ async function asignarMovil(reservaId, movilId) {
             if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
             return;
         }
+        // ▼▼▼ CAMBIO: Usamos el nuevo formato de estado ▼▼▼
         const updateData = {
             movil_asignado_id: movilId,
             chofer_asignado_id: choferAsignado.id,
-            estado: 'Asignado'
+            estado: {
+                principal: 'Asignado',
+                detalle: 'Enviada al chofer',
+                actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
+            }
         };
+        // ▲▲▲ FIN DEL CAMBIO ▲▲▲
         await db.collection('reservas').doc(reservaId).update(updateData);
     } catch (err) {
         console.error("Error al asignar móvil:", err);
@@ -642,7 +678,11 @@ async function quitarAsignacion(reservaId) {
         try {
             const reservaRef = db.collection('reservas').doc(reservaId);
             await reservaRef.update({
-                estado: 'En Curso',
+                estado: { // Volvemos al formato de objeto
+                    principal: 'En Curso',
+                    detalle: 'Móvil des-asignado por operador',
+                    actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
+                },
                 chofer_asignado_id: firebase.firestore.FieldValue.delete(),
                 movil_asignado_id: firebase.firestore.FieldValue.delete()
             });
@@ -663,8 +703,14 @@ async function moverReservaAHistorico(reservaId, estadoFinal) {
             return;
         }
         const reservaData = doc.data();
-        reservaData.estado = estadoFinal;
+        // Aseguramos que el estado sea un objeto
+        reservaData.estado = {
+            principal: estadoFinal,
+            detalle: `Viaje marcado como ${estadoFinal}`,
+            actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
+        };
         reservaData.archivadoEn = firebase.firestore.FieldValue.serverTimestamp();
+        
         if (clientesCache[reservaData.cliente]) {
             reservaData.clienteNombre = clientesCache[reservaData.cliente].nombre;
         } else {
@@ -805,7 +851,12 @@ async function handleSaveReserva(e) {
         es_exclusivo: esX 
     };
     if (!rId) { 
-        d.estado = 'Pendiente'; 
+        // Estado inicial como objeto
+        d.estado = {
+            principal: 'Pendiente',
+            detalle: 'Recién creada',
+            actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
+        };
         d.creadoEn = firebase.firestore.FieldValue.serverTimestamp(); 
     } 
     try { 
@@ -1244,6 +1295,69 @@ function crearIconoDeMarcador(color, texto) {
     return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(36, 48), anchor: new google.maps.Point(18, 48) };
 }
 
+// ▼▼▼ NUEVA FUNCIÓN PARA VISIBILIDAD DE CHOFERES ▼▼▼
+function toggleChoferesVisibility(mostrar) {
+    for (const choferId in marcadoresChoferes) {
+        marcadoresChoferes[choferId].setVisible(mostrar);
+    }
+}
+// ▲▲▲ FIN DE LA NUEVA FUNCIÓN ▲▲▲
+
+// ▼▼▼ NUEVA FUNCIÓN PARA ESCUCHAR UBICACIÓN DE CHOFERES ▼▼▼
+function escucharUbicacionChoferes() {
+    db.collection('choferes').onSnapshot(snapshot => {
+        if (!map) return; 
+
+        const mostrar = document.getElementById('toggle-choferes').checked;
+
+        snapshot.docChanges().forEach(change => {
+            const chofer = { id: change.doc.id, ...change.doc.data() };
+            const marcadorExistente = marcadoresChoferes[chofer.id];
+
+            if (change.type === 'removed') {
+                if (marcadorExistente) {
+                    marcadorExistente.setMap(null);
+                    delete marcadoresChoferes[chofer.id];
+                }
+                return;
+            }
+
+            if (!chofer.coordenadas) {
+                 if (marcadorExistente) {
+                    marcadorExistente.setMap(null);
+                    delete marcadoresChoferes[chofer.id];
+                }
+                return;
+            }
+
+            const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
+
+            if (marcadorExistente) {
+                marcadorExistente.setPosition(nuevaPos);
+                marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}`);
+            } else {
+                const iconoChofer = {
+                    url: 'https://i.imgur.com/LsoPSi1.png', // Un ícono simple de auto
+                    scaledSize: new google.maps.Size(32, 32),
+                    anchor: new google.maps.Point(16, 16)
+                };
+                
+                const marcador = new google.maps.Marker({
+                    position: nuevaPos,
+                    map: map,
+                    icon: iconoChofer,
+                    title: `Chofer: ${chofer.nombre || 'N/A'}`,
+                    zIndex: 100 // Para que aparezcan por encima de las reservas
+                });
+                
+                marcador.setVisible(mostrar);
+                marcadoresChoferes[chofer.id] = marcador;
+            }
+        });
+    });
+}
+// ▲▲▲ FIN DE LA NUEVA FUNCIÓN ▲▲▲
+
 function cargarMarcadoresDeReservas() { 
     if (!map || !lastReservasSnapshot) return; 
     Object.values(marcadoresOrigen).forEach(m => m.setMap(null)); 
@@ -1253,20 +1367,26 @@ function cargarMarcadoresDeReservas() {
     
     lastReservasSnapshot.forEach(doc => { 
         const r = { id: doc.id, ...doc.data() }; 
-        let e = r.estado; 
-        const fT = r.fecha_turno ? new Date(`${r.fecha_turno}T${r.hora_turno || '00:00'}`) : null; 
-        if (!r.chofer_asignado_id && r.estado === 'Pendiente') { 
+        let e = (typeof r.estado === 'object') ? r.estado.principal : r.estado;
+        
+        const est = ['En Curso', 'Asignado', 'Pendiente', 'En Origen', 'Viaje Iniciado']; 
+        if (!est.includes(e)) return; 
+
+        // Re-evaluar estado para tabla En Curso vs Pendiente
+        if (!r.chofer_asignado_id && e === 'Pendiente') { 
+            const fT = r.fecha_turno ? new Date(`${r.fecha_turno}T${r.hora_turno || '00:00'}`) : null; 
             if (fT && fT <= lim) { 
                 e = 'En Curso'; 
             } 
         } 
-        const est = ['En Curso', 'Asignado', 'Pendiente']; 
-        if (!est.includes(e)) return; 
+        
         if (filtroMapaActual !== 'Todos' && e !== filtroMapaActual) return; 
         if (r.origen_coords && r.origen_coords.latitude) { 
             let cM, tM = ''; 
             switch (e) { 
                 case 'En Curso': 
+                case 'En Origen':
+                case 'Viaje Iniciado':
                     cM = '#F54927'; 
                     const h = r.hora_pickup || r.hora_turno; 
                     if (h) { tM = h.substring(0, 5); } 
@@ -1315,7 +1435,7 @@ function cargarMarcadoresDeReservas() {
                 const rId = r.id; 
                 if (e === 'En Curso' || e === 'Pendiente') { 
                     menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><select onchange="asignarMovil('${rId}', this.value); hideMapContextMenu()"><option value="">Asignar Móvil...</option>${movilesCache.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="changeReservaState('${rId}', 'Anulado'); hideMapContextMenu()">Anular</a></li>`; 
-                } else if (e === 'Asignado') { 
+                } else if (e === 'Asignado' || e === 'En Origen' || e === 'Viaje Iniciado') { 
                     menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><a onclick="finalizarReserva('${rId}'); hideMapContextMenu()">Finalizar</a></li><li><a onclick="quitarAsignacion('${rId}'); hideMapContextMenu()">Quitar Móvil</a></li>`; 
                 } 
                 if (menuHTML) { 

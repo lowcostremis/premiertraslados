@@ -41,90 +41,46 @@ function getAlgoliaIndices() {
 // FUNCIONES PARA GESTIÓN DE CHOFERES (CREAR, BORRAR, ACTUALIZAR)
 // ===================================================================================
 
-exports.crearChoferConAcceso = onCall(async (request) => {
-    const { email, password, nombre, dni, domicilio, telefono, movil_actual_id } = request.data;
-    if (!email || !password || !nombre || !dni) {
-        throw new HttpsError('invalid-argument', 'Faltan datos esenciales (email, password, nombre, dni).');
-    }
-    try {
-        const userRecord = await admin.auth().createUser({ email, password, displayName: nombre, emailVerified: true, disabled: false });
-        const choferData = { auth_uid: userRecord.uid, email, nombre, dni, domicilio: domicilio || '', telefono: telefono || '', movil_actual_id: movil_actual_id || null, creadoEn: admin.firestore.FieldValue.serverTimestamp() };
-        await admin.firestore().collection('choferes').doc(dni).set(choferData);
-        return { message: `¡Éxito! Chofer ${nombre} y su acceso fueron creados.` };
-    } catch (error) {
-        console.error("Error en crearChoferConAcceso:", error);
-        if (error.code === 'auth/email-already-exists') {
-            throw new HttpsError('already-exists', 'El correo electrónico ya está en uso por otro usuario.');
-        }
-        throw new HttpsError('internal', 'Ocurrió un error interno al crear el chofer.');
-    }
-});
-
-exports.borrarChofer = onCall(async (request) => {
-    const { dni, auth_uid } = request.data;
-    if (!dni || !auth_uid) {
-        throw new HttpsError('invalid-argument', 'Faltan datos (dni o auth_uid) para borrar el chofer.');
-    }
-    try {
-        await admin.auth().deleteUser(auth_uid);
-        await admin.firestore().collection('choferes').doc(dni).delete();
-        return { status: 'success', message: 'Chofer borrado completamente.' };
-    } catch (error) {
-        console.error("Error al borrar chofer:", error);
-        if (error.code === 'auth/user-not-found') {
-            await admin.firestore().collection('choferes').doc(dni).delete();
-            return { status: 'success', message: 'El usuario de autenticación no existía, pero el registro de la base de datos fue borrado.' };
-        }
-        throw new HttpsError('internal', 'Ocurrió un error al borrar el chofer.');
-    }
-});
-
-exports.resetearPasswordChofer = onCall(async (request) => {
-    const { auth_uid, nuevaPassword } = request.data;
-    if (!auth_uid || !nuevaPassword) {
-        throw new HttpsError('invalid-argument', 'Faltan el UID del chofer o la nueva contraseña.');
-    }
-    if (nuevaPassword.length < 6) {
-        throw new HttpsError('invalid-argument', 'La contraseña debe tener al menos 6 caracteres.');
-    }
-    try {
-        await admin.auth().updateUser(auth_uid, { password: nuevaPassword });
-        return { message: 'La contraseña del chofer ha sido actualizada con éxito.' };
-    } catch (error) {
-        console.error("Error al resetear contraseña:", error);
-        throw new HttpsError('internal', 'No se pudo actualizar la contraseña.');
-    }
-});
-
-// ===================================================================================
-// FUNCIONES PARA APP DE CHOFERES (ESTADO Y GEOLOCALIZACIÓN)
-// ===================================================================================
-
 exports.actualizarEstadoViaje = onCall(async (request) => {
+    // Verificación de autenticación (sin cambios)
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'El usuario debe estar autenticado.');
     }
+
+    // AHORA RECIBIMOS UN OBJETO 'nuevoEstado' EN LUGAR DE UN STRING
     const { reservaId, nuevoEstado } = request.data;
-    if (!reservaId || !nuevoEstado) {
-        throw new HttpsError('invalid-argument', 'Faltan datos (reservaId o nuevoEstado).');
+    
+    // Verificación de datos de entrada mejorada
+    if (!reservaId || !nuevoEstado || typeof nuevoEstado !== 'object' || !nuevoEstado.principal) {
+        throw new HttpsError('invalid-argument', 'Faltan datos o el formato del nuevo estado es incorrecto.');
     }
+
     const authUid = request.auth.uid;
     const db = admin.firestore();
+
     try {
         const choferQuery = await db.collection('choferes').where('auth_uid', '==', authUid).limit(1).get();
         if (choferQuery.empty) {
             throw new HttpsError('not-found', 'No se encontró el perfil del chofer.');
         }
         const choferId = choferQuery.docs[0].id;
+
         const reservaRef = db.collection('reservas').doc(reservaId);
         const reservaDoc = await reservaRef.get();
+
         if (!reservaDoc.exists || reservaDoc.data().chofer_asignado_id !== choferId) {
             throw new HttpsError('permission-denied', 'No tienes permiso para modificar este viaje.');
         }
-        if (nuevoEstado === 'Finalizado') {
+
+        // Lógica para finalizar el viaje (el estado principal será 'Finalizado' o similar)
+        const estadosFinales = ['Finalizado', 'Negativo', 'Anulado'];
+        if (estadosFinales.includes(nuevoEstado.principal)) {
             const reservaData = reservaDoc.data();
-            reservaData.estado = 'Finalizado';
+            
+            // Guardamos el nuevo estado detallado
+            reservaData.estado = nuevoEstado; 
             reservaData.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
+
             if (reservaData.cliente) {
                 const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
                 if (clienteDoc.exists) {
@@ -138,8 +94,9 @@ exports.actualizarEstadoViaje = onCall(async (request) => {
             });
             return { status: 'success', message: 'Viaje finalizado y archivado.' };
         } else {
+            // Para cualquier otro estado, actualizamos el documento con el nuevo objeto de estado
             await reservaRef.update({ estado: nuevoEstado });
-            return { status: 'success', message: `El estado del viaje se actualizó a ${nuevoEstado}.` };
+            return { status: 'success', message: `El estado del viaje se actualizó a ${nuevoEstado.principal}.` };
         }
     } catch (error) {
         console.error("Error al actualizar estado del viaje:", error);

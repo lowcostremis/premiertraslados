@@ -68,6 +68,7 @@
                             <th>Zona</th>
                             <th>Cliente</th>
                             <th>Estado</th>
+                            <th>Detalle Estado</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
@@ -75,10 +76,10 @@
                 </table>
             </div>
 
-            <div class="reservas-container" id="reservas-en-curso"><div class="table-wrapper"><table id="tabla-en-curso"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
-            <div class="reservas-container" id="reservas-pendientes" style="display:none;"><div class="table-wrapper"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="reservas-container" id="reservas-en-curso"><div class="table-wrapper"><table id="tabla-en-curso"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Detalle Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="reservas-container" id="reservas-pendientes" style="display:none;"><div class="table-wrapper"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Detalle Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
             
-            <div class="reservas-container" id="reservas-asignados" style="display:none;"><div class="table-wrapper"><table id="tabla-asignados"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Móvil Asignado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="reservas-container" id="reservas-asignados" style="display:none;"><div class="table-wrapper"><table id="tabla-asignados"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Detalle Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
         </div>
 
         <div id="Historico" class="tab-content" style="display:none;">
@@ -132,7 +133,11 @@
                 <button class="map-filter-btn" onclick="filtrarMapa('Pendiente')">Ver Pendientes</button>
                 <button class="map-filter-btn" onclick="filtrarMapa('Asignado')">Ver Asignados</button>
                 <button class="map-filter-btn" onclick="filtrarMapa('En Curso')">Ver en Curso</button>
-            </div>
+                <div class="map-toggle">
+                    <input type="checkbox" id="toggle-choferes" checked>
+                    <label for="toggle-choferes">Mostrar Choferes</label>
+                </div>
+                </div>
             <div id="map-container"></div>
         </div>
         
