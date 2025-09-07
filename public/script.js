@@ -303,6 +303,9 @@ function renderFilaReserva(tbody, reserva) {
     } else if (estadoPrincipal === 'Negativo' || estadoDetalle === 'Traslado negativo') {
         row.style.backgroundColor = '#FFDE59'; // Amarillo para negativos
         row.style.color = '#333';
+    } else if (estadoDetalle.startsWith('Rechazado por')) { // <-- NUEVO: Identificador visual para rechazados
+        row.style.backgroundColor = '#f8d7da'; // Un rojo claro para destacar
+        row.style.color = '#721c24';
     } else if (estadoPrincipal === 'Anulado') {
         row.className = 'estado-anulado';
     } else if (cliente.color) {
@@ -1542,3 +1545,4 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pasajerosBtnSiguiente) pasajerosBtnSiguiente.addEventListener('click', () => { if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) { pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible); } pasajerosPaginaActual++; cargarPasajeros(); });
     if (pasajerosBtnAnterior) pasajerosBtnAnterior.addEventListener('click', () => { if (pasajerosPaginaActual > 0) { pasajerosPaginaActual--; cargarPasajeros(); } });
 });
+
