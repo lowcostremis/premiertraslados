@@ -119,10 +119,14 @@ exports.actualizarUbicacionChofer = onCall(async (request) => {
             throw new HttpsError('not-found', 'No se encontró un perfil de chofer para este usuario.');
         }
         const choferDoc = snapshot.docs[0];
+
+        // <<< ESTA ES LA LÍNEA CRÍTICA Y CORRECTA >>>
+        // Se asegura de guardar las coordenadas en el formato GeoPoint que Firestore y Google Maps necesitan.
         await choferDoc.ref.update({
             coordenadas: new admin.firestore.GeoPoint(latitud, longitud),
             ultima_actualizacion: admin.firestore.FieldValue.serverTimestamp()
         });
+
         return { status: 'success', message: 'Ubicación actualizada correctamente.' };
     } catch (error) {
         console.error("Error al actualizar ubicación:", error);
