@@ -1301,7 +1301,6 @@ function toggleChoferesVisibility(mostrar) {
     }
 }
 
-// --- CAMBIO: Función para escuchar y mostrar la ubicación de los choferes ---
 function escucharUbicacionChoferes() {
     db.collection('choferes').onSnapshot(snapshot => {
         if (!map) return;
@@ -1326,34 +1325,36 @@ function escucharUbicacionChoferes() {
 
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
-                marcadorExistente.setLabel({
-                    text: etiqueta,
-                    color: 'white',
-                    fontWeight: 'bold'
+                // También actualizamos el ícono y la etiqueta para que usen el emoji
+                marcadorExistente.setIcon({ // Establece el ícono invisible
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 0,
+                });
+                marcadorExistente.setLabel({ // Establece la etiqueta con el emoji
+                    text: `🚗 ${etiqueta}`, // Usamos el emoji del auto + el texto del móvil
+                    color: 'black',      // Color de texto negro para buena legibilidad
+                    fontSize: '14px',    // Aumentamos el tamaño para que se vea mejor
+                    fontWeight: 'bold',
                 });
                 marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${movilAsignado ? movilAsignado.numero : 'N/A'}`);
             } else {
                 const marcador = new google.maps.Marker({
                     position: nuevaPos,
                     map: map,
+                    // Hacemos invisible el pin predeterminado para que no interfiera.
                     icon: {
-                        path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z',
-                        fillColor: '#1A73E8', // Un color azul distintivo
-                        fillOpacity: 1,
-                        strokeWeight: 1.5,
-                        strokeColor: '#FFFFFF',
-                        scale: 1.8,
-                        anchor: new google.maps.Point(12, 24),
-                        labelOrigin: new google.maps.Point(12, 11) // Centra la etiqueta en el ícono
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 0,
                     },
+                    // Usamos la etiqueta para mostrar el emoji del auto y el número de móvil.
                     label: {
-                        text: etiqueta,
-                        color: 'white',
+                        text: `🚗 ${etiqueta}`, // Usamos un emoji de auto + el texto del móvil
+                        color: 'black',      // Color de texto negro para buena legibilidad
+                        fontSize: '14px',    // Aumentamos el tamaño para que se vea mejor
                         fontWeight: 'bold',
-                        fontSize: '11px',
                     },
                     title: `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${movilAsignado ? movilAsignado.numero : 'N/A'}`,
-                    zIndex: 101 // Un z-index alto para que esté siempre visible
+                    zIndex: 101 // Mantenemos la prioridad alta para que esté por encima de todo
                 });
                 
                 marcador.setVisible(mostrar);
@@ -1545,4 +1546,3 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pasajerosBtnSiguiente) pasajerosBtnSiguiente.addEventListener('click', () => { if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) { pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible); } pasajerosPaginaActual++; cargarPasajeros(); });
     if (pasajerosBtnAnterior) pasajerosBtnAnterior.addEventListener('click', () => { if (pasajerosPaginaActual > 0) { pasajerosPaginaActual--; cargarPasajeros(); } });
 });
-
