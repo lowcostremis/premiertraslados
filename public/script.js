@@ -1319,7 +1319,7 @@ function escucharUbicacionChoferes() {
                 return;
             }
 
-            const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
+            const nuevaPos = new google.maps.LatLng(chofer.coordenadas.lat, chofer.coordenadas.lng);
             const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
             const etiqueta = movilAsignado ? `Móvil ${movilAsignado.numero}` : (chofer.nombre || 'Chofer');
 
