@@ -1290,9 +1290,28 @@ function initAutocomplete() {
     });
 }
 
-function crearIconoDeMarcador(color, texto) { 
-    const svg = `<svg width="36" height="48" viewBox="0 0 36 48" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M18 48C18 48 36 33.375 36 18C36 8.05887 27.9411 0 18 0C8.05887 0 0 8.05887 0 18C0 33.375 18 48 18 48Z" fill="${color}"/><text x="18" y="21" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle">${texto}</text></svg>`;
-    return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(36, 48), anchor: new google.maps.Point(18, 48) };
+// Asegúrate de que tu función crearIconoDeMarcador pueda manejar un texto principal y un emoji.
+// Ejemplo de cómo podría ser tu función (ajusta si es necesario):
+function crearIconoDeMarcador(colorFondo, textoPrincipal, emoji = '') {
+    const svgIcon = `<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0" width="40" height="40" rx="10" fill="${colorFondo}"/>
+        <text x="20" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${textoPrincipal}</text>
+        ${emoji ? `<text x="10" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${emoji}</text>` : ''}
+    </svg>`;
+    
+    // Si necesitas el emoji a la derecha, ajusta la posición x del textoPrincipal y del emoji.
+    // Ejemplo para emoji a la izquierda y número de móvil a la derecha
+    const svgIconConEmojiYNumero = `<svg width="50" height="40" viewBox="0 0 50 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0" width="50" height="40" rx="10" fill="${colorFondo}"/>
+        ${emoji ? `<text x="15" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${emoji}</text>` : ''}
+        <text x="35" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${textoPrincipal}</text>
+    </svg>`;
+
+
+    return {
+        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIconConEmojiYNumero),
+        scaledSize: new google.maps.Size(50, 40) // Ajusta el tamaño según sea necesario
+    };
 }
 
 function toggleChoferesVisibility(mostrar) {
@@ -1304,9 +1323,7 @@ function toggleChoferesVisibility(mostrar) {
 function escucharUbicacionChoferes() {
     db.collection('choferes').onSnapshot(snapshot => {
         if (!map) return;
-
         const mostrar = document.getElementById('toggle-choferes').checked;
-
         snapshot.docChanges().forEach(change => {
             const chofer = { id: change.doc.id, ...change.doc.data() };
             const marcadorExistente = marcadoresChoferes[chofer.id];
@@ -1321,40 +1338,24 @@ function escucharUbicacionChoferes() {
 
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.lat, chofer.coordenadas.lng);
             const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
-            const etiqueta = movilAsignado ? `Móvil ${movilAsignado.numero}` : (chofer.nombre || 'Chofer');
+            const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A'; // Asegúrate que sea string
+
+            // Creamos un ícono personalizado para el chofer con el número de móvil y un emoji
+            const iconoChofer = crearIconoDeMarcador('#1D7BFF', numeroMovil, '🚕'); // Color azul, número y taxi
 
             if (marcadorExistente) {
+                // Actualiza la posición y el ícono si es necesario
                 marcadorExistente.setPosition(nuevaPos);
-                // También actualizamos el ícono y la etiqueta para que usen el emoji
-                marcadorExistente.setIcon({ // Establece el ícono invisible
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 0,
-                });
-                marcadorExistente.setLabel({ // Establece la etiqueta con el emoji
-                    text: `🚗 ${etiqueta}`, // Usamos el emoji del auto + el texto del móvil
-                    color: 'black',      // Color de texto negro para buena legibilidad
-                    fontSize: '14px',    // Aumentamos el tamaño para que se vea mejor
-                    fontWeight: 'bold',
-                });
-                marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${movilAsignado ? movilAsignado.numero : 'N/A'}`);
+                marcadorExistente.setIcon(iconoChofer);
+                marcadorExistente.setLabel(null); // No necesitamos etiqueta adicional
+                marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`);
             } else {
                 const marcador = new google.maps.Marker({
                     position: nuevaPos,
                     map: map,
-                    // Hacemos invisible el pin predeterminado para que no interfiera.
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 0,
-                    },
-                    // Usamos la etiqueta para mostrar el emoji del auto y el número de móvil.
-                    label: {
-                        text: `🚗 ${etiqueta}`, // Usamos un emoji de auto + el texto del móvil
-                        color: 'black',      // Color de texto negro para buena legibilidad
-                        fontSize: '14px',    // Aumentamos el tamaño para que se vea mejor
-                        fontWeight: 'bold',
-                    },
-                    title: `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${movilAsignado ? movilAsignado.numero : 'N/A'}`,
-                    zIndex: 101 // Mantenemos la prioridad alta para que esté por encima de todo
+                    title: `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`,
+                    icon: iconoChofer, // Usamos el ícono personalizado con el número de móvil
+                    zIndex: 101 // Asegura que los choferes estén por encima de otras cosas
                 });
                 
                 marcador.setVisible(mostrar);
