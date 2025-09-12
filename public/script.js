@@ -684,10 +684,23 @@ window.onclick = function(event) {
 };
 
 async function quitarAsignacion(reservaId) {
-     if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
+      if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
         try {
             const reservaRef = db.collection('reservas').doc(reservaId);
-            await reservaRef.update({
+            const reservaDoc = await reservaRef.get();
+            
+            // Si la reserva no existe, no se puede hacer nada
+            if (!reservaDoc.exists) {
+                console.warn("La reserva ya no existe, no se puede quitar la asignación.");
+                return;
+            }
+
+            const choferAsignadoId = reservaDoc.data().chofer_asignado_id;
+
+            // LÓGICA DE ACTUALIZACIÓN - Solo si existe un chofer asignado
+            const batch = db.batch();
+
+            batch.update(reservaRef, {
                 estado: {
                     principal: 'En Curso',
                     detalle: 'Móvil des-asignado por operador',
@@ -697,15 +710,24 @@ async function quitarAsignacion(reservaId) {
                 movil_asignado_id: firebase.firestore.FieldValue.delete()
             });
 
-            // --- LÓGICA AGREGADA PARA LA NOTIFICACIÓN ---
-            const reservaDoc = await reservaRef.get();
-            const choferAsignadoId = reservaDoc.data().chofer_asignado_id;
-            const choferRef = db.collection('choferes').doc(choferAsignadoId);
-            await choferRef.update({
-                viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
-            });
-            // --- FIN DE LA LÓGICA AGREGADA ---
+            // Verificar si hay un chofer asignado antes de intentar actualizar su documento
+            if (choferAsignadoId) {
+                const choferRef = db.collection('choferes').doc(choferAsignadoId);
+                const choferDoc = await choferRef.get();
 
+                // Solo si el documento del chofer existe, lo actualizamos.
+                if (choferDoc.exists) {
+                     batch.update(choferRef, {
+                        viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
+                    });
+                } else {
+                    console.warn(`El chofer con ID ${choferAsignadoId} no existe. No se puede actualizar su lista de viajes.`);
+                }
+            }
+
+            await batch.commit();
+
+            console.log("Asignación de reserva quitada exitosamente.");
         } catch (error) {
             console.error("Error al quitar asignación:", error);
             alert("Hubo un error al actualizar la reserva.");
