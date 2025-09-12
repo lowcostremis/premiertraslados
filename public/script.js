@@ -698,7 +698,8 @@ async function quitarAsignacion(reservaId) {
             });
 
             // --- LÓGICA AGREGADA PARA LA NOTIFICACIÓN ---
-            const choferAsignadoId = reservaRef.data().chofer_asignado_id;
+            const reservaDoc = await reservaRef.get();
+            const choferAsignadoId = reservaDoc.data().chofer_asignado_id;
             const choferRef = db.collection('choferes').doc(choferAsignadoId);
             await choferRef.update({
                 viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
