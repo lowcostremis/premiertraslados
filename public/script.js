@@ -151,7 +151,7 @@ function renderPasajerosTable(documentos) {
     }
     let tableHTML = `<div class="table-wrapper"><table><thead><tr><th>DNI</th><th>Nombre y Apellido</th><th>Teléfono</th><th>Domicilios</th><th>Acciones</th></tr></thead><tbody>`;
     documentos.forEach(doc => {
-        const item = typeof doc.data === 'function' ? doc.data() : doc;
+        const item = typeof doc.data === 'function' ? doc.data() : item;
         const id = typeof doc.data === 'function' ? doc.id : doc.objectID;
         const domicilios = Array.isArray(item.domicilios) ? item.domicilios.join(', ') : (item.domicilios || '-');
         tableHTML += `<tr>
@@ -642,6 +642,14 @@ async function asignarMovil(reservaId, movilId) {
             }
         };
         await db.collection('reservas').doc(reservaId).update(updateData);
+
+        // --- LÓGICA AGREGADA PARA LA NOTIFICACIÓN ---
+        const choferRef = db.collection('choferes').doc(choferAsignado.id);
+        await choferRef.update({
+            viajes_activos: firebase.firestore.FieldValue.arrayUnion(reservaId)
+        });
+        // --- FIN DE LA LÓGICA AGREGADA ---
+
     } catch (err) {
         console.error("Error al asignar móvil:", err);
         alert("Error al asignar el móvil: " + err.message);
@@ -688,6 +696,15 @@ async function quitarAsignacion(reservaId) {
                 chofer_asignado_id: firebase.firestore.FieldValue.delete(),
                 movil_asignado_id: firebase.firestore.FieldValue.delete()
             });
+
+            // --- LÓGICA AGREGADA PARA LA NOTIFICACIÓN ---
+            const choferAsignadoId = reservaRef.data().chofer_asignado_id;
+            const choferRef = db.collection('choferes').doc(choferAsignadoId);
+            await choferRef.update({
+                viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
+            });
+            // --- FIN DE LA LÓGICA AGREGADA ---
+
         } catch (error) {
             console.error("Error al quitar asignación:", error);
             alert("Hubo un error al actualizar la reserva.");
@@ -717,6 +734,16 @@ async function moverReservaAHistorico(reservaId, estadoFinal) {
         } else {
             reservaData.clienteNombre = 'Default';
         }
+
+        // --- LÓGICA AGREGADA PARA LA NOTIFICACIÓN ---
+        if (reservaData.chofer_asignado_id) {
+            const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
+            await choferRef.update({
+                viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
+            });
+        }
+        // --- FIN DE LA LÓGICA AGREGADA ---
+
         await db.runTransaction(async (transaction) => {
             transaction.set(historicoRef, reservaData);
             transaction.delete(reservaRef);
@@ -1441,7 +1468,7 @@ function cargarMarcadoresDeReservas() {
                 let menuHTML = ''; 
                 const rId = r.id; 
                 if (e === 'En Curso' || e === 'Pendiente') { 
-                    menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><select onchange="asignarMovil('${rId}', this.value); hideMapContextMenu()"><option value="">Asignar Móvil...</option>${movilesCache.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="changeReservaState('${rId}', 'Anulado'); hideMapContextMenu()">Anular</a></li>`; 
+                    menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><select onchange="asignarMovil('${rId}', this.value); hideMapContextMenu()"><option value="">Asignar Móvil...</option>${movilesCache.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="changeReservaState('${rId}', 'Anulado'); return false;">Anular</a></li>`; 
                 } else if (e === 'Asignado' || e === 'En Origen' || e === 'Viaje Iniciado') { 
                     menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><a onclick="finalizarReserva('${rId}'); hideMapContextMenu()">Finalizar</a></li><li><a onclick="quitarAsignacion('${rId}'); hideMapContextMenu()">Quitar Móvil</a></li>`; 
                 } 
@@ -1531,7 +1558,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const reservasSearchInput = document.getElementById('busqueda-reservas');
     if (reservasSearchInput) reservasSearchInput.addEventListener('input', (e) => buscarEnReservas(e.target.value));
 
-    // Paginación Histórico
+    // Paginación Históricos
     historialBody = document.getElementById('historial-body');
     btnAnterior = document.getElementById('btn-anterior');
     btnSiguiente = document.getElementById('btn-siguiente');
@@ -1547,3 +1574,4 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pasajerosBtnSiguiente) pasajerosBtnSiguiente.addEventListener('click', () => { if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) { pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible); } pasajerosPaginaActual++; cargarPasajeros(); });
     if (pasajerosBtnAnterior) pasajerosBtnAnterior.addEventListener('click', () => { if (pasajerosPaginaActual > 0) { pasajerosPaginaActual--; cargarPasajeros(); } });
 });
+}
