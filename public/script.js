@@ -271,17 +271,22 @@ function renderAllReservas(snapshot) {
         reservas.push({ id: doc.id, ...doc.data() });
     });
 
+     // --- INICIO DE LA LÓGICA DE ORDENAMIENTO CORREGIDA ---
     reservas.sort((a, b) => {
         const fechaA = a.fecha_turno || '9999-12-31';
-        const horaA = a.hora_turno || '23:59';
+        // Prioriza hora_pickup, si no existe usa hora_turno
+        const horaA = (a.hora_pickup && a.hora_pickup.trim() !== '') ? a.hora_pickup : (a.hora_turno || '23:59');
         const dateTimeA = new Date(`${fechaA}T${horaA}`);
 
         const fechaB = b.fecha_turno || '9999-12-31';
-        const horaB = b.hora_turno || '23:59';
+        // Prioriza hora_pickup, si no existe usa hora_turno
+        const horaB = (b.hora_pickup && b.hora_pickup.trim() !== '') ? b.hora_pickup : (b.hora_turno || '23:59');
         const dateTimeB = new Date(`${fechaB}T${horaB}`);
 
         return dateTimeA - dateTimeB; 
     });
+    // --- FIN DE LA LÓGICA DE ORDENAMIENTO ---
+   
 
     const ahora = new Date();
     const limite24hs = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
