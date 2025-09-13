@@ -265,17 +265,34 @@ function renderAllReservas(snapshot) {
         'tabla-asignados': document.querySelector('#tabla-asignados tbody'),
     };
     Object.values(bodies).forEach(body => { if (body) body.innerHTML = ''; });
+    
+    let reservas = [];
+    snapshot.forEach(doc => {
+        reservas.push({ id: doc.id, ...doc.data() });
+    });
+
+    reservas.sort((a, b) => {
+        const fechaA = a.fecha_turno || '9999-12-31';
+        const horaA = a.hora_turno || '23:59';
+        const dateTimeA = new Date(`${fechaA}T${horaA}`);
+
+        const fechaB = b.fecha_turno || '9999-12-31';
+        const horaB = b.hora_turno || '23:59';
+        const dateTimeB = new Date(`${fechaB}T${horaB}`);
+
+        return dateTimeA - dateTimeB; 
+    });
+
     const ahora = new Date();
     const limite24hs = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
-    snapshot.forEach(doc => {
-        const reserva = { id: doc.id, ...doc.data() };
+
+    reservas.forEach(reserva => {
         const fechaTurno = reserva.fecha_turno ? new Date(`${reserva.fecha_turno}T${reserva.hora_turno || '00:00'}`) : null;
-        
         const estadoPrincipal = typeof reserva.estado === 'object' ? reserva.estado.principal : reserva.estado;
 
         let targetTableId = '';
         if (['Finalizado', 'Anulado', 'Negativo'].includes(estadoPrincipal) && reserva.estado?.detalle !== 'Traslado negativo') {
-            // No hacer nada, ya no están en estas tablas
+            // No hacer nada
         } else if (estadoPrincipal === 'Asignado' || estadoPrincipal === 'En Origen' || estadoPrincipal === 'Viaje Iniciado') {
              targetTableId = 'tabla-asignados';
         } else if (fechaTurno && fechaTurno > limite24hs) {
@@ -1386,7 +1403,7 @@ function escucharUbicacionChoferes() {
                 return;
             }
 
-            const nuevaPos = new google.maps.LatLng(chofer.coordenadas.lat, chofer.coordenadas.lng);
+            const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A'; // Asegúrate que sea string
 
@@ -1597,4 +1614,3 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pasajerosBtnSiguiente) pasajerosBtnSiguiente.addEventListener('click', () => { if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) { pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible); } pasajerosPaginaActual++; cargarPasajeros(); });
     if (pasajerosBtnAnterior) pasajerosBtnAnterior.addEventListener('click', () => { if (pasajerosPaginaActual > 0) { pasajerosPaginaActual--; cargarPasajeros(); } });
 });
-
