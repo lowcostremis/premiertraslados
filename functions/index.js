@@ -11,15 +11,13 @@ const algoliasearch = require("algoliasearch");
 // INICIALIZACIÓN DE SERVICIOS
 // ===================================================================================
 admin.initializeApp();
+const db = admin.firestore();
 
 // --- INICIALIZACIÓN DIFERIDA (LAZY INITIALIZATION) ---
 let algoliaClient;
 let mapsClient;
 let pasajerosIndex, historicoIndex, reservasIndex;
 
-// Asegúrate de configurar estas variables en tu entorno de Firebase
-// firebase functions:config:set geocoding.key="TU_API_KEY_DE_GOOGLE_MAPS"
-// firebase functions:config:set algolia.app_id="TU_APP_ID" algolia.api_key="TU_API_KEY"
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
 
 function getMapsClient() {
@@ -38,102 +36,75 @@ function getAlgoliaIndices() {
     }
     return { pasajerosIndex, historicoIndex, reservasIndex };
 }
-// --- FIN DE LA INICIALIZACIÓN DIFERIDA ---
 
 // ===================================================================================
-// FUNCIONES PARA GESTIÓN DE CHOFERES (ESTADO Y UBICACIÓN)
+// FUNCIONES DE GESTIÓN DE CHOFERES
 // ===================================================================================
 
-exports.actualizarEstadoViaje = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'El usuario debe estar autenticado.');
+// --- FUNCIÓN QUE FALTABA ---
+exports.crearChoferConAcceso = onCall(async (request) => {
+    const { dni, nombre, email, password, domicilio, telefono, movil_actual_id } = request.data;
+    if (!dni || !nombre || !email || !password) {
+        throw new HttpsError('invalid-argument', 'DNI, Nombre, Email y Contraseña son obligatorios.');
     }
-
-    const { reservaId, nuevoEstado } = request.data;
-    
-    if (!reservaId || !nuevoEstado || typeof nuevoEstado !== 'object' || !nuevoEstado.principal) {
-        throw new HttpsError('invalid-argument', 'Faltan datos o el formato del nuevo estado es incorrecto.');
-    }
-
-    const authUid = request.auth.uid;
-    const db = admin.firestore();
-
     try {
-        const choferQuery = await db.collection('choferes').where('auth_uid', '==', authUid).limit(1).get();
-        if (choferQuery.empty) {
-            throw new HttpsError('not-found', 'No se encontró el perfil del chofer.');
-        }
-        const choferId = choferQuery.docs[0].id;
+        const userRecord = await admin.auth().createUser({
+            email: email,
+            password: password,
+            displayName: nombre,
+        });
 
-        const reservaRef = db.collection('reservas').doc(reservaId);
-        const reservaDoc = await reservaRef.get();
+        await db.collection('choferes').doc(dni).set({
+            auth_uid: userRecord.uid,
+            nombre: nombre,
+            email: email,
+            dni: dni,
+            domicilio: domicilio || '',
+            telefono: telefono || '',
+            movil_actual_id: movil_actual_id || null,
+            creadoEn: admin.firestore.FieldValue.serverTimestamp()
+        });
 
-        if (!reservaDoc.exists || reservaDoc.data().chofer_asignado_id !== choferId) {
-            throw new HttpsError('permission-denied', 'No tienes permiso para modificar este viaje.');
-        }
-
-        const estadosFinales = ['Finalizado', 'Negativo', 'Anulado'];
-        if (estadosFinales.includes(nuevoEstado.principal)) {
-            const reservaData = reservaDoc.data();
-            
-            reservaData.estado = nuevoEstado; 
-            reservaData.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
-
-            if (reservaData.cliente) {
-                const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
-                if (clienteDoc.exists) {
-                    reservaData.clienteNombre = clienteDoc.data().nombre;
-                }
-            }
-            const historicoRef = db.collection('historico').doc(reservaId);
-            await db.runTransaction(async (transaction) => {
-                transaction.set(historicoRef, reservaData);
-                transaction.delete(reservaRef);
-            });
-            return { status: 'success', message: 'Viaje finalizado y archivado.' };
-        } else {
-            await reservaRef.update({ estado: nuevoEstado });
-            return { status: 'success', message: `El estado del viaje se actualizó a ${nuevoEstado.principal}.` };
-        }
+        return { message: `Chofer ${nombre} creado con éxito.` };
     } catch (error) {
-        console.error("Error al actualizar estado del viaje:", error);
-        if (error instanceof HttpsError) throw error;
-        throw new HttpsError('internal', 'Ocurrió un error al actualizar el viaje.');
+        console.error("Error al crear chofer:", error);
+        if (error.code === 'auth/email-already-exists') {
+            throw new HttpsError('already-exists', 'El correo electrónico ya está en uso.');
+        }
+        throw new HttpsError('internal', 'Ocurrió un error interno al crear el chofer.');
     }
 });
 
-exports.actualizarUbicacionChofer = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'El usuario debe estar autenticado para actualizar su ubicación.');
+exports.resetearPasswordChofer = onCall(async (request) => {
+    const { auth_uid, nuevaPassword } = request.data;
+    if (!auth_uid || !nuevaPassword) {
+        throw new HttpsError('invalid-argument', 'Faltan datos para resetear la contraseña.');
     }
-    const { latitud, longitud } = request.data;
-    if (typeof latitud !== 'number' || typeof longitud !== 'number') {
-        throw new HttpsError('invalid-argument', 'Las coordenadas (latitud y longitud) deben ser números.');
-    }
-    const authUid = request.auth.uid;
     try {
-        const choferesRef = admin.firestore().collection('choferes');
-        const q = choferesRef.where('auth_uid', '==', authUid).limit(1);
-        const snapshot = await q.get();
-        if (snapshot.empty) {
-            throw new HttpsError('not-found', 'No se encontró un perfil de chofer para este usuario.');
-        }
-        const choferDoc = snapshot.docs[0];
-
-        // <<< ESTA ES LA LÍNEA CRÍTICA Y CORRECTA >>>
-        // Se asegura de guardar las coordenadas en el formato GeoPoint que Firestore y Google Maps necesitan.
-        await choferDoc.ref.update({
-            coordenadas: new admin.firestore.GeoPoint(latitud, longitud),
-            ultima_actualizacion: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        return { status: 'success', message: 'Ubicación actualizada correctamente.' };
+        await admin.auth().updateUser(auth_uid, { password: nuevaPassword });
+        return { message: "Contraseña actualizada con éxito." };
     } catch (error) {
-        console.error("Error al actualizar ubicación:", error);
-        if (error instanceof HttpsError) {
-            throw error;
+        console.error("Error al resetear contraseña:", error);
+        throw new HttpsError('internal', 'Ocurrió un error al actualizar la contraseña.');
+    }
+});
+
+exports.borrarChofer = onCall(async (request) => {
+    const { dni, auth_uid } = request.data;
+    if (!dni || !auth_uid) {
+        throw new HttpsError('invalid-argument', 'Faltan datos para borrar el chofer.');
+    }
+    try {
+        await admin.auth().deleteUser(auth_uid);
+        await db.collection('choferes').doc(dni).delete();
+        return { message: "Chofer borrado exitosamente." };
+    } catch (error) {
+        console.error("Error al borrar chofer:", error);
+        if (error.code === 'auth/user-not-found') {
+            await db.collection('choferes').doc(dni).delete();
+            return { message: "Chofer borrado de la base de datos (no en autenticación)." };
         }
-        throw new HttpsError('internal', 'Ocurrió un error al guardar la ubicación.');
+        throw new HttpsError('internal', 'Ocurrió un error al borrar el chofer.');
     }
 });
 

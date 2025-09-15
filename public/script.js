@@ -654,23 +654,33 @@ async function asignarMovil(reservaId, movilId) {
             if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
             return;
         }
+
+        // 1. Iniciar un batch
+        const batch = db.batch();
+
+        // 2. Definir las referencias
+        const reservaRef = db.collection('reservas').doc(reservaId);
+        const choferRef = db.collection('choferes').doc(choferAsignado.id);
+
+        // 3. Preparar la actualización de la reserva
         const updateData = {
             movil_asignado_id: movilId,
             chofer_asignado_id: choferAsignado.id,
             estado: {
                 principal: 'Asignado',
-                detalle: 'Enviada al chofer', // <-- CAMBIO DE ESTADO
+                detalle: 'Enviada al chofer',
                 actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
             }
         };
-        await db.collection('reservas').doc(reservaId).update(updateData);
+        batch.update(reservaRef, updateData);
 
-        // --- LÓGICA AGREGADA PARA LA NOTIFICACIÓN ---
-        const choferRef = db.collection('choferes').doc(choferAsignado.id);
-        await choferRef.update({
+        // 4. Preparar la actualización del chofer
+        batch.update(choferRef, {
             viajes_activos: firebase.firestore.FieldValue.arrayUnion(reservaId)
         });
-        // --- FIN DE LA LÓGICA AGREGADA ---
+
+        // 5. Ejecutar ambas operaciones de forma atómica
+        await batch.commit();
 
     } catch (err) {
         console.error("Error al asignar móvil:", err);
@@ -707,47 +717,42 @@ window.onclick = function(event) {
 
 async function quitarAsignacion(reservaId) {
       if (confirm("¿Estás seguro de que quieres quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
+        const reservaRef = db.collection('reservas').doc(reservaId);
+
         try {
-            const reservaRef = db.collection('reservas').doc(reservaId);
-            const reservaDoc = await reservaRef.get();
-            
-            // Si la reserva no existe, no se puede hacer nada
-            if (!reservaDoc.exists) {
-                console.warn("La reserva ya no existe, no se puede quitar la asignación.");
-                return;
-            }
+            await db.runTransaction(async (transaction) => {
+                // 1. Leer la reserva DENTRO de la transacción
+                const reservaDoc = await transaction.get(reservaRef);
 
-            const choferAsignadoId = reservaDoc.data().chofer_asignado_id;
+                if (!reservaDoc.exists) {
+                    console.warn("La reserva ya no existe, no se puede quitar la asignación.");
+                    return; // Termina la transacción
+                }
 
-            // LÓGICA DE ACTUALIZACIÓN - Solo si existe un chofer asignado
-            const batch = db.batch();
+                const reservaData = reservaDoc.data();
+                const choferAsignadoId = reservaData.chofer_asignado_id;
 
-            batch.update(reservaRef, {
-                estado: {
-                    principal: 'En Curso',
-                    detalle: 'Móvil des-asignado por operador',
-                    actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
-                },
-                chofer_asignado_id: firebase.firestore.FieldValue.delete(),
-                movil_asignado_id: firebase.firestore.FieldValue.delete()
-            });
+                // 2. Preparar la actualización de la reserva
+                transaction.update(reservaRef, {
+                    estado: {
+                        principal: 'En Curso',
+                        detalle: 'Móvil des-asignado por operador',
+                        actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
+                    },
+                    chofer_asignado_id: firebase.firestore.FieldValue.delete(),
+                    movil_asignado_id: firebase.firestore.FieldValue.delete()
+                });
 
-            // Verificar si hay un chofer asignado antes de intentar actualizar su documento
-            if (choferAsignadoId) {
-                const choferRef = db.collection('choferes').doc(choferAsignadoId);
-                const choferDoc = await choferRef.get();
-
-                // Solo si el documento del chofer existe, lo actualizamos.
-                if (choferDoc.exists) {
-                     batch.update(choferRef, {
+                // 3. Preparar la actualización del chofer (si existe) DENTRO de la transacción
+                if (choferAsignadoId) {
+                    const choferRef = db.collection('choferes').doc(choferAsignadoId);
+                    // No es necesario un get() extra aquí, la transacción fallará si el doc no existe
+                    // al momento de hacer el update, lo que es seguro.
+                    transaction.update(choferRef, {
                         viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
                     });
-                } else {
-                    console.warn(`El chofer con ID ${choferAsignadoId} no existe. No se puede actualizar su lista de viajes.`);
                 }
-            }
-
-            await batch.commit();
+            });
 
             console.log("Asignación de reserva quitada exitosamente.");
         } catch (error) {
@@ -760,36 +765,39 @@ async function quitarAsignacion(reservaId) {
 async function moverReservaAHistorico(reservaId, estadoFinal) {
     const reservaRef = db.collection('reservas').doc(reservaId);
     const historicoRef = db.collection('historico').doc(reservaId);
+
     try {
-        const doc = await reservaRef.get();
-        if (!doc.exists) {
-            console.error("No se encontró la reserva para archivar.");
-            return;
-        }
-        const reservaData = doc.data();
-        reservaData.estado = {
-            principal: estadoFinal,
-            detalle: `Viaje marcado como ${estadoFinal}`,
-            actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        reservaData.archivadoEn = firebase.firestore.FieldValue.serverTimestamp();
-        
-        if (clientesCache[reservaData.cliente]) {
-            reservaData.clienteNombre = clientesCache[reservaData.cliente].nombre;
-        } else {
-            reservaData.clienteNombre = 'Default';
-        }
-
-        // --- LÓGICA AGREGADA PARA LA NOTIFICACIÓN ---
-        if (reservaData.chofer_asignado_id) {
-            const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
-            await choferRef.update({
-                viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
-            });
-        }
-        // --- FIN DE LA LÓGICA AGREGADA ---
-
         await db.runTransaction(async (transaction) => {
+            // 1. Leer el documento de la reserva DENTRO de la transacción
+            const doc = await transaction.get(reservaRef);
+            if (!doc.exists) {
+                // Si la reserva no existe, no se puede hacer nada, la transacción termina.
+                throw "No se encontró la reserva para archivar.";
+            }
+
+            const reservaData = doc.data();
+            reservaData.estado = {
+                principal: estadoFinal,
+                detalle: `Viaje marcado como ${estadoFinal}`,
+                actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            reservaData.archivadoEn = firebase.firestore.FieldValue.serverTimestamp();
+
+            if (clientesCache[reservaData.cliente]) {
+                reservaData.clienteNombre = clientesCache[reservaData.cliente].nombre;
+            } else {
+                reservaData.clienteNombre = 'Default';
+            }
+
+            // 2. Lógica para actualizar al chofer, ahora DENTRO de la transacción
+            if (reservaData.chofer_asignado_id) {
+                const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
+                transaction.update(choferRef, {
+                    viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
+                });
+            }
+
+            // 3. Escribir en histórico y borrar la reserva original
             transaction.set(historicoRef, reservaData);
             transaction.delete(reservaRef);
         });
