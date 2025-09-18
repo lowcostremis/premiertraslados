@@ -649,19 +649,15 @@ function loadAuxData() {
 
     const choferesUnsubscribe = db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
         choferesCache = [];
-        const choferSelectMapa = document.getElementById('filtro-chofer-mapa');
-        if (choferSelectMapa) choferSelectMapa.innerHTML = '<option value="">Ver todos los móviles</option>';
+                
 
         snapshot.forEach(doc => {
             const chofer = { id: doc.id, ...doc.data() };
             choferesCache.push(chofer);
             
-            if (choferSelectMapa && chofer.movil_actual_id) { 
-                const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
-                const numeroMovil = movilAsignado ? `Móvil ${movilAsignado.numero}` : 'Sin móvil';
-                choferSelectMapa.innerHTML += `<option value="${chofer.id}">${numeroMovil} - ${chofer.nombre}</option>`;
-            }
+          
         });
+        actualizarFiltroChoferesMapa();
 
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
         if (map) cargarMarcadoresDeReservas();
@@ -703,8 +699,36 @@ function loadAuxData() {
         
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
         if (map) cargarMarcadoresDeReservas();
+
+        actualizarFiltroChoferesMapa(); 
+        
     }, err => console.error("Error cargando moviles:", err));
     auxDataListeners.push(movilesUnsubscribe);
+}
+
+function actualizarFiltroChoferesMapa() {
+    const choferSelectMapa = document.getElementById('filtro-chofer-mapa');
+    if (!choferSelectMapa) return; // Si el elemento no existe, no hacemos nada.
+
+    // Guardamos el valor seleccionado actualmente para intentar restaurarlo después
+    const valorSeleccionado = choferSelectMapa.value;
+
+    choferSelectMapa.innerHTML = '<option value="">Ver todos los móviles</option>';
+
+    choferesCache.forEach(chofer => {
+        // Solo añadimos al menú choferes que tengan un móvil asignado
+        if (chofer.movil_actual_id) {
+            const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
+            if (movilAsignado) { // Verificamos que el móvil se encontró en el cache
+                const numeroMovil = `Móvil ${movilAsignado.numero}`;
+                const optionHTML = `<option value="${chofer.id}">${numeroMovil} - ${chofer.nombre}</option>`;
+                choferSelectMapa.innerHTML += optionHTML;
+            }
+        }
+    });
+
+    // Restauramos la selección anterior si todavía existe en la lista
+    choferSelectMapa.value = valorSeleccionado;
 }
 
 async function openEditReservaModal(reservaId) {
