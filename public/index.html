@@ -112,24 +112,33 @@
         </div>
 
         <div id="Mapa" class="tab-content" style="display:none;">
+            <!-- --- SECCIÓN MODIFICADA --- -->
             <div id="map-filters">
                 <button class="map-filter-btn active" onclick="filtrarMapa('Todos')">Todos</button>
                 <button class="map-filter-btn" onclick="filtrarMapa('Pendiente')">Pendientes</button>
                 <button class="map-filter-btn" onclick="filtrarMapa('Asignado')">Asignados</button>
                 <button class="map-filter-btn" onclick="filtrarMapa('En Curso')">En Curso</button>
         
-                <span style="border-left: 1px solid #ccc; margin: 0 10px;"></span>
+                <span class="filter-separator"></span>
         
                 <button class="map-filter-btn" onclick="filtrarMapaPorHoras(null)">Todas las Horas</button>
                 <button class="map-filter-btn" onclick="filtrarMapaPorHoras(4)">Próximas 4H</button>
                 <button class="map-filter-btn" onclick="filtrarMapaPorHoras(8)">Próximas 8H</button>
                 <button class="map-filter-btn" onclick="filtrarMapaPorHoras(12)">Próximas 12H</button>
-        
-                <div class="map-toggle" style="margin-left: auto;">
+                
+                <span class="filter-separator"></span>
+
+                <!-- Menú desplegable para filtrar por chofer -->
+                <select id="filtro-chofer-mapa" class="map-filter-select" onchange="filtrarMapaPorChofer(this.value)">
+                    <option value="">Ver todos los móviles</option>
+                </select>
+
+                <div class="map-toggle">
                     <input type="checkbox" id="toggle-choferes" checked>
-                    <label for="toggle-choferes">Mostrar Choferes</label>
+                    <label for="toggle-choferes">Mostrar Móviles</label>
                 </div>
             </div>
+            <!-- --- FIN DE LA SECCIÓN MODIFICADA --- -->
             <div id="map-container"></div>
         </div>
         

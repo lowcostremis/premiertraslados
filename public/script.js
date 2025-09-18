@@ -1,4 +1,3 @@
-
 // ===================================================================================
 // CONFIGURACIÓN DE FIREBASE
 // ===================================================================================
@@ -286,6 +285,7 @@ let lastReservasSnapshot = null;
 let mapaModal, marcadorOrigenModal, marcadorDestinoModal, geocoder;
 let filtroMapaActual = 'Todos';
 let filtroHorasMapa = null;
+let filtroChoferMapaId = null; 
 let refrescoAutomaticoIntervalo;
 let marcadoresOrigen = {};
 let marcadoresChoferes = {};
@@ -548,7 +548,6 @@ auth.onAuthStateChanged(user => {
         authSection.style.display = 'none';
         appContent.style.display = 'block';
         document.getElementById('user-email-display').textContent = user.email;
-        // La llamada a initApp() ya no es necesaria aquí, Google Maps se encargará.
     } else {
         authSection.style.display = 'flex';
         appContent.style.display = 'none';
@@ -575,12 +574,11 @@ function initApp() {
     if (appInitialized) return; // Evita doble inicialización
     appInitialized = true;
 
-    // Lógica que depende del DOM y/o Google Maps
     loadAuxData();
     attachEventListeners();
     listenToReservas();
     initializeAdminLists();
-    initAutocomplete(); // Ahora es seguro llamar a esto
+    initAutocomplete(); 
     
     mapContextMenu = document.getElementById('map-context-menu');
     mapContextMenuItems = document.getElementById('map-context-menu-items');
@@ -603,8 +601,6 @@ function initApp() {
     openTab(null, 'Reservas');
     showReservasTab('en-curso');
 
-    // --- LÓGICA MOVIDA DESDE DOMContentLoaded ---
-    // Búsquedas
     const searchInput = document.getElementById('search-historial-input');
     if (searchInput) searchInput.addEventListener('input', (e) => buscarEnHistorial(e.target.value));
 
@@ -617,7 +613,6 @@ function initApp() {
     const choferesSearchInput = document.getElementById('busqueda-choferes');
     if (choferesSearchInput) choferesSearchInput.addEventListener('input', (e) => buscarEnChoferes(e.target.value));
 
-    // Paginación Históricos
     historialBody = document.getElementById('historial-body');
     btnAnterior = document.getElementById('btn-anterior');
     btnSiguiente = document.getElementById('btn-siguiente');
@@ -625,7 +620,6 @@ function initApp() {
     if (btnSiguiente) btnSiguiente.addEventListener('click', () => { if (paginaActual === historialDePaginas.length - 1) { historialDePaginas.push(ultimoDocVisible); } paginaActual++; cargarHistorial(); });
     if (btnAnterior) btnAnterior.addEventListener('click', () => { if (paginaActual > 0) { paginaActual--; cargarHistorial(); } });
     
-    // Paginación Pasajeros
     pasajerosBody = document.getElementById('lista-pasajeros');
     pasajerosBtnAnterior = document.getElementById('pasajeros-btn-anterior');
     pasajerosBtnSiguiente = document.getElementById('pasajeros-btn-siguiente');
@@ -655,7 +649,20 @@ function loadAuxData() {
 
     const choferesUnsubscribe = db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
         choferesCache = [];
-        snapshot.forEach(doc => choferesCache.push({ id: doc.id, ...doc.data() }));
+        const choferSelectMapa = document.getElementById('filtro-chofer-mapa');
+        if (choferSelectMapa) choferSelectMapa.innerHTML = '<option value="">Ver todos los móviles</option>';
+
+        snapshot.forEach(doc => {
+            const chofer = { id: doc.id, ...doc.data() };
+            choferesCache.push(chofer);
+            
+            if (choferSelectMapa) {
+                const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
+                const numeroMovil = movilAsignado ? `Móvil ${movilAsignado.numero}` : 'Sin móvil';
+                choferSelectMapa.innerHTML += `<option value="${chofer.id}">${numeroMovil} - ${chofer.nombre}</option>`;
+            }
+        });
+
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
         if (map) cargarMarcadoresDeReservas();
     }, err => console.error("Error cargando choferes:", err));
