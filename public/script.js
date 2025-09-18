@@ -656,7 +656,7 @@ function loadAuxData() {
             const chofer = { id: doc.id, ...doc.data() };
             choferesCache.push(chofer);
             
-            if (choferSelectMapa) {
+            if (choferSelectMapa && chofer.movil_actual_id) { 
                 const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
                 const numeroMovil = movilAsignado ? `Móvil ${movilAsignado.numero}` : 'Sin móvil';
                 choferSelectMapa.innerHTML += `<option value="${chofer.id}">${numeroMovil} - ${chofer.nombre}</option>`;
@@ -1704,7 +1704,6 @@ function filtrarMapa(estado) {
 }
 function filtrarMapaPorHoras(horas) {
     filtroHorasMapa = horas;
-    // Lógica para marcar el botón activo
     document.querySelectorAll('.time-filters-map .map-filter-btn').forEach(btn => btn.classList.remove('active'));
     let btnActivo;
     if (horas === null) btnActivo = document.querySelector('.time-filters-map button:nth-child(1)');
@@ -1712,9 +1711,12 @@ function filtrarMapaPorHoras(horas) {
     if (horas === 8) btnActivo = document.querySelector('.time-filters-map button:nth-child(3)');
     if (horas === 12) btnActivo = document.querySelector('.time-filters-map button:nth-child(4)');
     if (btnActivo) btnActivo.classList.add('active');
-
-    // Volvemos a dibujar los marcadores con el filtro aplicado
     cargarMarcadoresDeReservas();
+}
+
+function filtrarMapaPorChofer(choferId) {
+    filtroChoferMapaId = choferId || null;
+    toggleChoferesVisibility(document.getElementById('toggle-choferes').checked);
 }
 
 function initMapaModal(origenCoords, destinoCoords) { 
@@ -1769,3 +1771,4 @@ function actualizarInputDesdeCoordenadas(latLng, tipo) {
         } 
     });
 }
+
