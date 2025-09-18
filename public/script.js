@@ -1530,15 +1530,55 @@ function initAutocomplete() {
     });
 }
 
-function crearIconoDeMarcador(colorFondo, textoPrincipal, emoji = '') {
-    const svgIconConEmojiYNumero = `<svg width="50" height="40" viewBox="0 0 50 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="50" height="40" rx="10" fill="${colorFondo}"/>
-        ${emoji ? `<text x="15" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${emoji}</text>` : ''}
-        <text x="35" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${textoPrincipal}</text>
-    </svg>`;
+/**
+ * Crea un icono de marcador SVG con forma de pin clásico de mapa (TAMAÑO GRANDE).
+ * @param {string} colorFondo - El color principal del pin (ej: '#F54927').
+ * @param {string} textoPrincipal - El texto que irá dentro del pin (ej: '14:00' o el n° de móvil).
+ * @returns {google.maps.Icon} Objeto de icono para la API de Google Maps.
+ */
+function crearIconoDePin(colorFondo, textoPrincipal) {
+    // CAMBIO: Las dimensiones generales del SVG son más grandes para acomodar el texto.
+    const svgIcon = `
+        <svg width="42" height="56" viewBox="0 0 42 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* CAMBIO: La ruta del pin está re-escalada a las nuevas dimensiones. */}
+            <path d="M21 0C11.64 0 4 7.64 4 18c0 14 17 38 17 38s17-24 17-38C38 7.64 30.36 0 21 0Z" fill="${colorFondo}"/>
+            
+            {/* CAMBIO: El radio del círculo interior es mayor para dar más espacio. */}
+            <circle cx="21" cy="18" r="15" fill="white"/>
+            
+            {/* CAMBIO PRINCIPAL: El tamaño de la letra es más grande y su posición Y está ajustada. */}
+            <text x="21" y="24" font-family="Arial, sans-serif" font-size="15px" font-weight="bold" fill="#333" text-anchor="middle">${textoPrincipal}</text>
+        </svg>
+    `;
+
     return {
-        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIconConEmojiYNumero),
-        scaledSize: new google.maps.Size(50, 40)
+        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIcon),
+        // CAMBIO: El tamaño escalado coincide con las nuevas dimensiones del SVG.
+        scaledSize: new google.maps.Size(42, 56),
+        // CAMBIO: El punto de anclaje se actualiza a la nueva punta del pin.
+        anchor: new google.maps.Point(21, 56) 
+    };
+}
+/**
+ * Crea un icono de marcador SVG con forma de círculo para los choferes.
+ * @param {string} colorFondo - El color principal del círculo.
+ * @param {string} textoPrincipal - El número del móvil que irá dentro.
+ * @returns {google.maps.Icon} Objeto de icono para la API de Google Maps.
+ */
+function crearIconoDeChofer(colorFondo, textoPrincipal) {
+    // SVG que define un círculo con un borde y texto centrado.
+    const svgIcon = `
+        <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="17" cy="17" r="16" fill="${colorFondo}" stroke="white" stroke-width="2"/>
+            <text x="17" y="22" font-family="Arial, sans-serif" font-size="13px" font-weight="bold" fill="white" text-anchor="middle">${textoPrincipal}</text>
+        </svg>
+    `;
+
+    return {
+        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIcon),
+        scaledSize: new google.maps.Size(34, 34),
+        // Para un círculo, el anclaje es su centro exacto.
+        anchor: new google.maps.Point(17, 17) 
     };
 }
 
@@ -1576,7 +1616,7 @@ function escucharUbicacionChoferes() {
             const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
 
-            const iconoChofer = crearIconoDeMarcador('#1D7BFF', numeroMovil, '🚕');
+            const iconoChofer = crearIconoDeChofer('#1D7BFF', numeroMovil);
 
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
@@ -1656,7 +1696,7 @@ function cargarMarcadoresDeReservas() {
                     cM = '#C15DE8';
                     break;
             }
-            const i = crearIconoDeMarcador(cM, tM);
+            const i = crearIconoDePin(cM, tM);
             const nuevaPos = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
 
             if (marcadoresOrigen[r.id]) {
@@ -1686,7 +1726,7 @@ function cargarMarcadoresDeReservas() {
                     infoWindowActiva = new google.maps.InfoWindow({ content: cont }); 
                     infoWindowActiva.open(map, marker); 
                     if (r.destino_coords && r.destino_coords.latitude) { 
-                        const iD = crearIconoDeMarcador('#27DAF5', '');
+                        const iD = crearIconoDePin('#27DAF5', 'D');
                         marcadorDestinoActivo = new google.maps.Marker({ position: { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude }, map: map, title: `Destino: ${r.destino}`, icon: iD });
                     } 
                     infoWindowActiva.addListener('closeclick', () => { 
