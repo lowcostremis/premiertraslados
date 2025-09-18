@@ -1,3 +1,4 @@
+
 // ===================================================================================
 // CONFIGURACIÓN DE FIREBASE
 // ===================================================================================
@@ -21,8 +22,7 @@ const searchClient = algoliasearch('GOATTC1A5K', 'c2d6dbf6e25ca6507079dc12c95ddc
 const pasajerosSearchIndex = searchClient.initIndex('pasajeros');
 const historicoSearchIndex = searchClient.initIndex('historico');
 const reservasSearchIndex = searchClient.initIndex('reservas');
-// --- FIN INICIALIZACIÓN DE ALGOLIA ---
-
+const choferesSearchIndex = searchClient.initIndex('choferes');
 
 // ===================================================================================
 // LÓGICA PARA HISTÓRICO
@@ -218,6 +218,57 @@ async function buscarEnPasajeros(texto) {
     }
 }
 
+// --- FUNCIONES PARA BÚSQUEDA DE CHOFERES ---
+function renderChoferesTable(documentos) {
+    const container = document.getElementById('lista-choferes');
+    if (!container) return;
+
+    if (documentos.length === 0) {
+        container.innerHTML = '<p>No se encontraron choferes con ese criterio.</p>';
+        return;
+    }
+
+    let tableHTML = `<div class="table-wrapper"><table><thead><tr><th>DNI</th><th>Nombre</th><th>Email de Acceso</th><th>Acciones</th></tr></thead><tbody>`;
+    documentos.forEach(item => {
+        const id = typeof item.data === 'function' ? item.id : item.objectID;
+        const chofer = typeof item.data === 'function' ? item.data() : item;
+        
+        let accionesHTML = `<button onclick="editItem('choferes', '${id}')">Editar</button>`;
+        if (chofer.auth_uid) {
+            accionesHTML += `<button onclick="openResetPasswordModal('${chofer.auth_uid}', '${chofer.nombre}')">Resetear Contraseña</button>`;
+            accionesHTML += `<button class="btn-danger" onclick="deleteItem('choferes', '${id}', '${chofer.auth_uid}')">Borrar</button>`;
+        } else {
+             accionesHTML += `<button class="btn-danger" onclick="deleteItem('choferes', '${id}')">Borrar</button>`;
+        }
+        
+        tableHTML += `<tr>
+            <td>${chofer.dni || '-'}</td>
+            <td>${chofer.nombre || '-'}</td>
+            <td>${chofer.email || '-'}</td>
+            <td class="acciones">${accionesHTML}</td>
+        </tr>`;
+    });
+    tableHTML += `</tbody></table></div>`;
+    container.innerHTML = tableHTML;
+}
+
+async function buscarEnChoferes(texto) {
+    const container = document.getElementById('lista-choferes');
+    if (!texto) {
+        renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'email'], ['DNI', 'Nombre', 'Email de Acceso']);
+        return;
+    }
+    try {
+        container.innerHTML = '<p>Buscando...</p>';
+        const { hits } = await choferesSearchIndex.search(texto);
+        renderChoferesTable(hits);
+    } catch (error) {
+        console.error("Error buscando choferes en Algolia: ", error);
+        container.innerHTML = '<p style="color:red;">Error al realizar la búsqueda.</p>';
+    }
+}
+// --- FIN DE FUNCIONES DE CHOFERES ---
+
 
 // ===================================================================================
 // LÓGICA PARA RESERVAS Y MAPA
@@ -319,16 +370,19 @@ function renderAllReservas(snapshot) {
         if (targetTableId === 'tabla-en-curso' && filtroHoras !== null) {
             const horaReferencia = reserva.hora_pickup || reserva.hora_turno;
             if (!reserva.fecha_turno || !horaReferencia) {
+                return; // No se puede filtrar si faltan datos
+            }
+        
+            const fechaHoraReserva = parsearFechaHoraLocal(reserva.fecha_turno, horaReferencia);
+            const ahora = new Date();
+            const diferenciaMilisegundos = fechaHoraReserva.getTime() - ahora.getTime();
+            const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
+        
+            // Si la reserva ya pasó o está más allá del filtro, se omite.
+            if (horasDiferencia < 0 || horasDiferencia > filtroHoras) {
                 return;
             }
-            const fechaHoraReserva = new Date(`${reserva.fecha_turno}T${horaReferencia}`);
-            const diferenciaMilisegundos = fechaHoraReserva - ahora;
-            const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
-            if (horasDiferencia < 0 || horasDiferencia > filtroHoras) {
-                return; 
-            }
         }
-        
         if (targetTableId && bodies[targetTableId]) {
             renderFilaReserva(bodies[targetTableId], reserva);
         }
@@ -559,6 +613,9 @@ function initApp() {
     
     const reservasSearchInput = document.getElementById('busqueda-reservas');
     if (reservasSearchInput) reservasSearchInput.addEventListener('input', (e) => buscarEnReservas(e.target.value));
+
+    const choferesSearchInput = document.getElementById('busqueda-choferes');
+    if (choferesSearchInput) choferesSearchInput.addEventListener('input', (e) => buscarEnChoferes(e.target.value));
 
     // Paginación Históricos
     historialBody = document.getElementById('historial-body');
@@ -965,6 +1022,12 @@ function setupExportControls() {
     } 
 }
 
+function parsearFechaHoraLocal(fechaStr, horaStr) {
+    const [year, month, day] = fechaStr.split('-').map(Number);
+    const [hours, minutes] = horaStr.split(':').map(Number);
+    return new Date(year, month - 1, day, hours, minutes);
+}
+
 async function handleSaveReserva(e) {
     e.preventDefault();
     const f = e.target;
@@ -1189,6 +1252,7 @@ function initializeAdminLists() {
     renderAdminList('zonas', 'lista-zonas', ['numero', 'descripcion'], ['Número', 'Descripción']);
     renderUsersList();
 }
+
 
 async function renderUsersList() { 
     const c = document.getElementById('lista-usuarios'); 
@@ -1518,19 +1582,20 @@ function cargarMarcadoresDeReservas() {
         if (filtroMapaActual !== 'Todos' && e !== filtroMapaActual) return;
         
         if (filtroHorasMapa !== null) {
-            const horaReferencia = r.hora_pickup || r.hora_turno;
-            if (!r.fecha_turno || !horaReferencia) {
-                return;
-            }
-    
-            const ahora = new Date();
-            const fechaHoraReserva = new Date(`${r.fecha_turno}T${horaReferencia}`);
-            const diferenciaMilisegundos = fechaHoraReserva - ahora;
-            const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
-    
-            if (horasDiferencia < 0 || horasDiferencia > filtroHorasMapa) {
-                return;
-            }
+    const horaReferencia = r.hora_pickup || r.hora_turno;
+    if (!r.fecha_turno || !horaReferencia) {
+        return; // No se puede filtrar si faltan datos
+    }
+
+    const fechaHoraReserva = parsearFechaHoraLocal(r.fecha_turno, horaReferencia);
+    const ahora = new Date();
+    const diferenciaMilisegundos = fechaHoraReserva.getTime() - ahora.getTime();
+    const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
+
+    // Si la reserva ya pasó o está más allá del filtro, se omite.
+    if (horasDiferencia < 0 || horasDiferencia > filtroHorasMapa) {
+        return;
+    }
         }
     
         if (r.origen_coords && r.origen_coords.latitude) {

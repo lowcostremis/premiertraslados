@@ -16,7 +16,7 @@ const db = admin.firestore();
 // --- INICIALIZACIÓN DIFERIDA (LAZY INITIALIZATION) ---
 let algoliaClient;
 let mapsClient;
-let pasajerosIndex, historicoIndex, reservasIndex;
+let pasajerosIndex, historicoIndex, reservasIndex, choferesIndex; // <-- AÑADIDO choferesIndex
 
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
 
@@ -33,8 +33,9 @@ function getAlgoliaIndices() {
         pasajerosIndex = algoliaClient.initIndex('pasajeros');
         historicoIndex = algoliaClient.initIndex('historico');
         reservasIndex = algoliaClient.initIndex('reservas');
+        choferesIndex = algoliaClient.initIndex('choferes'); // <-- AÑADIDO
     }
-    return { pasajerosIndex, historicoIndex, reservasIndex };
+    return { pasajerosIndex, historicoIndex, reservasIndex, choferesIndex }; // <-- AÑADIDO choferesIndex
 }
 
 // ===================================================================================
@@ -161,6 +162,21 @@ exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{reservaId}"
     return reservasIndex.saveObject(record);
 });
 
+// --- FUNCIÓN AÑADIDA PARA SINCRONIZAR CHOFERES ---
+exports.sincronizarChoferesConAlgolia = onDocumentWritten("choferes/{choferId}", (event) => {
+    const { choferesIndex } = getAlgoliaIndices();
+    const choferId = event.params.choferId;
+
+    if (!event.data.after.exists) {
+        // El documento fue eliminado
+        return choferesIndex.deleteObject(choferId);
+    }
+
+    // El documento fue creado o actualizado
+    const record = { objectID: choferId, ...event.data.after.data() };
+    return choferesIndex.saveObject(record);
+});
+
 // ===================================================================================
 // FUNCIONES DE ADMINISTRACIÓN (USUARIOS, EXPORTACIÓN)
 // ===================================================================================
@@ -244,8 +260,6 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
     const historicoRef = db.collection('historico').doc(reservaId);
 
     try {
-        // --- CORRECCIÓN INICIA ---
-        // 1. Leer los datos necesarios ANTES de la transacción
         const doc = await reservaRef.get();
         if (!doc.exists) {
             throw new HttpsError('not-found', 'No se encontró la reserva para archivar.');
@@ -253,7 +267,6 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
 
         const reservaData = doc.data();
 
-        // 2. Asegurarse de que el chofer que llama es el asignado (seguridad extra)
         if (reservaData.chofer_asignado_id) {
             const choferDoc = await db.collection('choferes').doc(reservaData.chofer_asignado_id).get();
             if (choferDoc.exists && choferDoc.data().auth_uid !== request.auth.uid) {
@@ -261,7 +274,6 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
             }
         }
 
-        // 3. Obtener el nombre del cliente (si es posible) ANTES de la transacción
         if (reservaData.cliente) {
             const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
             if (clienteDoc.exists) {
@@ -271,9 +283,7 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
             }
         }
 
-        // 4. Ahora, ejecutar la transacción solo para escrituras
         await db.runTransaction(async (transaction) => {
-            // Actualizar datos de la reserva para el histórico
             reservaData.estado = {
                 principal: 'Finalizado',
                 detalle: 'Traslado Concluido (desde App)',
@@ -281,7 +291,6 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
             };
             reservaData.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
 
-            // Actualizar el documento del chofer
             if (reservaData.chofer_asignado_id) {
                 const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
                 transaction.update(choferRef, {
@@ -289,11 +298,9 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
                 });
             }
 
-            // Mover la reserva
             transaction.set(historicoRef, reservaData);
             transaction.delete(reservaRef);
         });
-        // --- CORRECCIÓN TERMINA ---
 
         return { message: 'Viaje finalizado y archivado con éxito.' };
     } catch (error) {

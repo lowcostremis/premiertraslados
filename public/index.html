@@ -149,6 +149,7 @@
         
         <div id="Choferes" class="tab-content" style="display:none;">
             <h2>Gestión de Choferes</h2>
+            <input type="search" id="busqueda-choferes" class="search-input" placeholder="🔎 Buscar por nombre, DNI o email del chofer...">
             <form id="form-choferes" class="admin-form"><input type="text" name="dni" placeholder="DNI (obligatorio)" required><input type="text" name="nombre" placeholder="Nombre completo (obligatorio)" required><input type="email" name="email" placeholder="Email de acceso (obligatorio)" required><input type="password" name="password" placeholder="Contraseña (mín. 6 caracteres)" required><input type="text" name="domicilio" placeholder="Domicilio"><input type="text" name="telefono" placeholder="Teléfono"><select name="movil_actual_id"><option value="">Asignar Móvil...</option></select><button type="submit">Guardar Chofer</button></form>
             <div id="lista-choferes" class="lista-admin"></div>
         </div>
