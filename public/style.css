@@ -16,11 +16,12 @@ header h1 { margin: 0; font-size: 24px; color: #1877f2; }
 .tab-link { background: none; border: none; color: white; padding: 15px 20px; cursor: pointer; font-size: 16px; transition: background-color 0.2s; }
 .tab-link:hover, .tab-link.active { background-color: #166fe5; }
 .tab-content { padding: 20px;
-    flex-grow: 1;
-    overflow-y: hidden; /* MODIFICADO: Evita que este contenedor tenga scroll */
-    display: flex; /* AÑADIDO: Lo convertimos en un contenedor flex */
-    flex-direction: column; /* AÑADIDO: Para apilar sus hijos verticalmente */}
-
+   padding: 20px;
+    flex-grow: 1; /* Ocupa el espacio vertical restante del viewport */
+    display: flex;
+    flex-direction: column; /* Apila los elementos (toolbar, tabla) verticalmente */
+    overflow: hidden; /* CRÍTICO: Evita que esta sección tenga su propio scroll */
+}
 /* --- Autenticación --- */
 #auth-section { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #1877f2; }
 .auth-container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); text-align: center; }
@@ -33,12 +34,14 @@ header h1 { margin: 0; font-size: 24px; color: #1877f2; }
 .sub-nav { border-bottom: 2px solid #ddd; margin-bottom: 15px; }
 .sub-tab-btn { background: none; border: none; padding: 10px 15px; font-size: 15px; cursor: pointer; color: #555; border-bottom: 2px solid transparent; }
 .sub-tab-btn.active { color: #1877f2; border-bottom-color: #1877f2; }
-.table-wrapper { overflow-x: auto;
-    overflow-y: auto; 
-    flex-grow: 1; 
+.table-wrapper { overflow: auto; /* Mágico: Gestiona AMBOS scrolls (vertical y horizontal) */
+    flex-grow: 1; /* CRÍTICO: Hace que este contenedor crezca para llenar el espacio disponible */
     border: 1px solid #e0e0e0;
     border-radius: 5px;
-    padding-bottom: 150px; /* AÑADIDO: Espacio extra al final para los menús */}
+    /* El padding-bottom que tenías se puede quitar o reducir si lo deseas */
+    padding-bottom: 150px; /* AÑADIDO: Espacio extra al final para los menús */
+}
+    
 table { width: 100%; border-collapse: collapse; }
 th, td { padding: 10px 5px; /* Reduce el espacio interno (padding) */
     font-size: 13px; /* Reduce un poco el tamaño de la letra */

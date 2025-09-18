@@ -1543,8 +1543,16 @@ function crearIconoDeMarcador(colorFondo, textoPrincipal, emoji = '') {
 }
 
 function toggleChoferesVisibility(mostrar) {
-    for (const choferId in marcadoresChoferes) {
-        marcadoresChoferes[choferId].setVisible(mostrar);
+     for (const choferId in marcadoresChoferes) {
+        const marcador = marcadoresChoferes[choferId];
+        if (!marcador) continue;
+
+        // Nueva lógica: El marcador es visible si...
+        // 1. El toggle "Mostrar Móviles" está activado.
+        // 2. Y (no hay un filtro de chofer aplicado O el ID de este marcador coincide con el del filtro).
+        const esVisible = mostrar && (!filtroChoferMapaId || choferId === filtroChoferMapaId);
+        
+        marcador.setVisible(esVisible);
     }
 }
 
