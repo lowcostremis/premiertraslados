@@ -40,8 +40,6 @@ function getAlgoliaIndices() {
 // ===================================================================================
 // FUNCIONES DE GESTIÓN DE CHOFERES
 // ===================================================================================
-
-// --- FUNCIÓN QUE FALTABA ---
 exports.crearChoferConAcceso = onCall(async (request) => {
     const { dni, nombre, email, password, domicilio, telefono, movil_actual_id } = request.data;
     if (!dni || !nombre || !email || !password) {
@@ -225,5 +223,84 @@ exports.exportarHistorico = onCall(async (request) => {
     } catch (error) {
         console.error("Error crítico al generar el histórico:", error);
         throw new HttpsError('internal', 'Error interno del servidor al generar el archivo.', error.message);
+    }
+});
+
+
+// ===================================================================================
+// NUEVA FUNCIÓN PARA FINALIZAR VIAJE DESDE LA APP
+// ===================================================================================
+exports.finalizarViajeDesdeApp = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'El usuario no está autenticado.');
+    }
+
+    const { reservaId } = request.data;
+    if (!reservaId) {
+        throw new HttpsError('invalid-argument', 'Falta el ID de la reserva.');
+    }
+
+    const reservaRef = db.collection('reservas').doc(reservaId);
+    const historicoRef = db.collection('historico').doc(reservaId);
+
+    try {
+        // --- CORRECCIÓN INICIA ---
+        // 1. Leer los datos necesarios ANTES de la transacción
+        const doc = await reservaRef.get();
+        if (!doc.exists) {
+            throw new HttpsError('not-found', 'No se encontró la reserva para archivar.');
+        }
+
+        const reservaData = doc.data();
+
+        // 2. Asegurarse de que el chofer que llama es el asignado (seguridad extra)
+        if (reservaData.chofer_asignado_id) {
+            const choferDoc = await db.collection('choferes').doc(reservaData.chofer_asignado_id).get();
+            if (choferDoc.exists && choferDoc.data().auth_uid !== request.auth.uid) {
+                throw new HttpsError('permission-denied', 'No tienes permiso para finalizar este viaje.');
+            }
+        }
+
+        // 3. Obtener el nombre del cliente (si es posible) ANTES de la transacción
+        if (reservaData.cliente) {
+            const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
+            if (clienteDoc.exists) {
+                reservaData.clienteNombre = clienteDoc.data().nombre || 'Default';
+            } else {
+                reservaData.clienteNombre = 'Default';
+            }
+        }
+
+        // 4. Ahora, ejecutar la transacción solo para escrituras
+        await db.runTransaction(async (transaction) => {
+            // Actualizar datos de la reserva para el histórico
+            reservaData.estado = {
+                principal: 'Finalizado',
+                detalle: 'Traslado Concluido (desde App)',
+                actualizado_en: admin.firestore.FieldValue.serverTimestamp()
+            };
+            reservaData.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
+
+            // Actualizar el documento del chofer
+            if (reservaData.chofer_asignado_id) {
+                const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
+                transaction.update(choferRef, {
+                    viajes_activos: admin.firestore.FieldValue.arrayRemove(reservaId)
+                });
+            }
+
+            // Mover la reserva
+            transaction.set(historicoRef, reservaData);
+            transaction.delete(reservaRef);
+        });
+        // --- CORRECCIÓN TERMINA ---
+
+        return { message: 'Viaje finalizado y archivado con éxito.' };
+    } catch (error) {
+        console.error("Error al finalizar viaje desde app:", error);
+        if (error instanceof HttpsError) {
+            throw error;
+        }
+        throw new HttpsError('internal', 'Ocurrió un error al procesar la solicitud.', error.message);
     }
 });

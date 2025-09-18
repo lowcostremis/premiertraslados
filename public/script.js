@@ -116,7 +116,7 @@ function actualizarEstadoBotonesPaginacion(cantidadDocsRecibidos) {
 async function buscarEnHistorial(texto) {
     const paginacionContainer = document.getElementById('paginacion-historico');
     if (!texto) {
-        if (paginacionContainer) paginacionContainer.style.display = 'block';
+        if (paginacionContainer) paginacionContainer.style.display = 'flex';
         paginaActual = 0;
         historialDePaginas = [null];
         cargarHistorial();
@@ -130,7 +130,7 @@ async function buscarEnHistorial(texto) {
     } catch (error) {
         console.error("Error buscando en Algolia: ", error);
         historialBody.innerHTML = '<tr><td colspan="11">Error al realizar la búsqueda.</td></tr>';
-        if (paginacionContainer) paginacionContainer.style.display = 'block';
+        if (paginacionContainer) paginacionContainer.style.display = 'flex';
     }
 }
 
@@ -151,7 +151,7 @@ function renderPasajerosTable(documentos) {
     }
     let tableHTML = `<div class="table-wrapper"><table><thead><tr><th>DNI</th><th>Nombre y Apellido</th><th>Teléfono</th><th>Domicilios</th><th>Acciones</th></tr></thead><tbody>`;
     documentos.forEach(doc => {
-        const item = typeof doc.data === 'function' ? doc.data() : item;
+        const item = typeof doc.data === 'function' ? doc.data() : doc;
         const id = typeof doc.data === 'function' ? doc.id : doc.objectID;
         const domicilios = Array.isArray(item.domicilios) ? item.domicilios.join(', ') : (item.domicilios || '-');
         tableHTML += `<tr>
@@ -201,7 +201,7 @@ async function cargarPasajeros() {
 async function buscarEnPasajeros(texto) {
     const paginacionContainer = document.getElementById('paginacion-pasajeros');
     if (!texto) {
-        if (paginacionContainer) paginacionContainer.style.display = 'block';
+        if (paginacionContainer) paginacionContainer.style.display = 'flex';
         pasajerosPaginaActual = 0;
         pasajerosHistorialDePaginas = [null];
         cargarPasajeros();
@@ -234,12 +234,29 @@ let auxDataListeners = [];
 let lastReservasSnapshot = null;
 let mapaModal, marcadorOrigenModal, marcadorDestinoModal, geocoder;
 let filtroMapaActual = 'Todos';
+let filtroHorasMapa = null;
 let refrescoAutomaticoIntervalo;
 let marcadoresOrigen = {};
 let marcadoresChoferes = {};
 let marcadorDestinoActivo = null;
 let infoWindowActiva = null;
 let mapContextMenu, mapContextMenuItems;
+let filtroHoras = null;
+let appInitialized = false;
+
+function filtrarPorHoras(horas) {
+    filtroHoras = horas;
+    document.querySelectorAll('.time-filters .map-filter-btn').forEach(btn => btn.classList.remove('active'));
+    let btnActivo;
+    if (horas === null) btnActivo = document.querySelector('.time-filters button:nth-child(1)');
+    if (horas === 4) btnActivo = document.querySelector('.time-filters button:nth-child(2)');
+    if (horas === 8) btnActivo = document.querySelector('.time-filters button:nth-child(3)');
+    if (horas === 12) btnActivo = document.querySelector('.time-filters button:nth-child(4)');
+    if (btnActivo) btnActivo.classList.add('active');
+    if (lastReservasSnapshot) {
+        renderAllReservas(lastReservasSnapshot);
+    }
+}
 
 function hideMapContextMenu() {
     if (mapContextMenu) {
@@ -271,23 +288,16 @@ function renderAllReservas(snapshot) {
         reservas.push({ id: doc.id, ...doc.data() });
     });
 
-     // --- INICIO DE LA LÓGICA DE ORDENAMIENTO CORREGIDA ---
     reservas.sort((a, b) => {
         const fechaA = a.fecha_turno || '9999-12-31';
-        // Prioriza hora_pickup, si no existe usa hora_turno
         const horaA = (a.hora_pickup && a.hora_pickup.trim() !== '') ? a.hora_pickup : (a.hora_turno || '23:59');
         const dateTimeA = new Date(`${fechaA}T${horaA}`);
-
         const fechaB = b.fecha_turno || '9999-12-31';
-        // Prioriza hora_pickup, si no existe usa hora_turno
         const horaB = (b.hora_pickup && b.hora_pickup.trim() !== '') ? b.hora_pickup : (b.hora_turno || '23:59');
         const dateTimeB = new Date(`${fechaB}T${horaB}`);
-
         return dateTimeA - dateTimeB; 
     });
-    // --- FIN DE LA LÓGICA DE ORDENAMIENTO ---
    
-
     const ahora = new Date();
     const limite24hs = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
 
@@ -305,6 +315,19 @@ function renderAllReservas(snapshot) {
         } else {
             targetTableId = 'tabla-en-curso';
         }
+
+        if (targetTableId === 'tabla-en-curso' && filtroHoras !== null) {
+            const horaReferencia = reserva.hora_pickup || reserva.hora_turno;
+            if (!reserva.fecha_turno || !horaReferencia) {
+                return;
+            }
+            const fechaHoraReserva = new Date(`${reserva.fecha_turno}T${horaReferencia}`);
+            const diferenciaMilisegundos = fechaHoraReserva - ahora;
+            const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
+            if (horasDiferencia < 0 || horasDiferencia > filtroHoras) {
+                return; 
+            }
+        }
         
         if (targetTableId && bodies[targetTableId]) {
             renderFilaReserva(bodies[targetTableId], reserva);
@@ -319,14 +342,15 @@ function renderFilaReserva(tbody, reserva) {
     const estadoPrincipal = (typeof reserva.estado === 'object' && reserva.estado.principal) ? reserva.estado.principal : reserva.estado;
     const estadoDetalle = (typeof reserva.estado === 'object' && reserva.estado.detalle) ? reserva.estado.detalle : '---';
 
+    // --- Lógica de estilos de fila ---
     if (reserva.es_exclusivo) {
         row.style.backgroundColor = '#51ED8D';
         row.style.color = '#333';
     } else if (estadoPrincipal === 'Negativo' || estadoDetalle === 'Traslado negativo') {
-        row.style.backgroundColor = '#FFDE59'; // Amarillo para negativos
+        row.style.backgroundColor = '#FFDE59';
         row.style.color = '#333';
-    } else if (estadoDetalle.startsWith('Rechazado por')) { // <-- NUEVO: Identificador visual para rechazados
-        row.style.backgroundColor = '#f8d7da'; // Un rojo claro para destacar
+    } else if (estadoDetalle.startsWith('Rechazado por')) {
+        row.style.backgroundColor = '#f8d7da';
         row.style.color = '#721c24';
     } else if (estadoPrincipal === 'Anulado') {
         row.className = 'estado-anulado';
@@ -351,15 +375,20 @@ function renderFilaReserva(tbody, reserva) {
         movilAsignadoTexto = textoMovil + textoChofer;
     }
     
-    let detalleFinalHTML = `<strong>${estadoDetalle}</strong>`;
+    // --- Columna de Estado Combinado ---
+    let estadoCombinadoHTML = `<strong>${estadoPrincipal || 'Pendiente'}</strong>`;
+    if (estadoDetalle !== '---' && estadoDetalle !== `Estado cambiado a ${estadoPrincipal}`) {
+        estadoCombinadoHTML += `<br><small style="color: #777;">${estadoDetalle}</small>`;
+    }
     if (movilAsignadoTexto) {
-        detalleFinalHTML += `<br><small style="color: #ccc;">${movilAsignadoTexto}</small>`;
+         estadoCombinadoHTML += `<br><small style="color: #555;">${movilAsignadoTexto}</small>`;
     }
     
     const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
-    const isAsignable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes';
+    const isAsignable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes' || tbody.parentElement.id === 'tabla-resultados-busqueda';
     const isAsignado = tbody.parentElement.id === 'tabla-asignados';
     
+    // --- Menú de Acciones ---
     let menuItems = `<a href="#" onclick="openEditReservaModal('${reserva.id || reserva.objectID}'); return false;">Editar</a>`;
     if (isAsignable) {
         let movilesOptions = movilesCache.map(movil => {
@@ -368,6 +397,7 @@ function renderFilaReserva(tbody, reserva) {
             return `<option value="${movil.id}">N° ${movil.numero}${nombreChofer}</option>`;
         }).join('');
         menuItems += `<select onchange="asignarMovil('${reserva.id}', this.value)"><option value="">Asignar Móvil...</option>${movilesOptions}</select>`;
+        menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Negativo'); return false;">Marcar Negativo</a>`;
         menuItems += `<a href="#" onclick="changeReservaState('${reserva.id}', 'Anulado'); return false;">Anular</a>`;
     } else if (isAsignado) {
         menuItems += `<a href="#" onclick="finalizarReserva('${reserva.id}'); return false;">Finalizar</a>`;
@@ -383,6 +413,7 @@ function renderFilaReserva(tbody, reserva) {
             </div>
         </td>`;
 
+    // --- HTML Final de la Fila ---
     row.innerHTML = `
         <td>${reserva.autorizacion || ''}</td>
         <td>${reserva.siniestro || ''}</td>
@@ -395,8 +426,7 @@ function renderFilaReserva(tbody, reserva) {
         <td>${reserva.cantidad_pasajeros || 1}</td>
         <td class="editable-cell zona-cell"></td>
         <td>${cliente.nombre}</td>
-        <td><strong>${estadoPrincipal || 'Pendiente'}</strong></td>
-        <td>${detalleFinalHTML}</td>
+        <td>${estadoCombinadoHTML}</td>
         ${accionesHTML}
     `;
 
@@ -436,11 +466,11 @@ async function buscarEnReservas(texto) {
         subNav.style.display = 'none';
         containersOriginales.forEach(c => c.style.display = 'none');
         resultadosContainer.style.display = 'block';
-        resultadosTbody.innerHTML = '<tr><td colspan="14">Buscando...</td></tr>';
+        resultadosTbody.innerHTML = '<tr><td colspan="13">Buscando...</td></tr>';
         const { hits } = await reservasSearchIndex.search(texto);
         resultadosTbody.innerHTML = '';
         if (hits.length === 0) {
-            resultadosTbody.innerHTML = '<tr><td colspan="14">No se encontraron reservas.</td></tr>';
+            resultadosTbody.innerHTML = '<tr><td colspan="13">No se encontraron reservas.</td></tr>';
             return;
         }
         hits.forEach(reserva => {
@@ -449,7 +479,7 @@ async function buscarEnReservas(texto) {
         });
     } catch (error) {
         console.error("Error buscando reservas en Algolia: ", error);
-        resultadosTbody.innerHTML = '<tr><td colspan="14">Error al realizar la búsqueda.</td></tr>';
+        resultadosTbody.innerHTML = '<tr><td colspan="13">Error al realizar la búsqueda.</td></tr>';
     }
 }
 
@@ -464,7 +494,7 @@ auth.onAuthStateChanged(user => {
         authSection.style.display = 'none';
         appContent.style.display = 'block';
         document.getElementById('user-email-display').textContent = user.email;
-        initApp();
+        // La llamada a initApp() ya no es necesaria aquí, Google Maps se encargará.
     } else {
         authSection.style.display = 'flex';
         appContent.style.display = 'none';
@@ -486,11 +516,18 @@ document.getElementById('login-btn').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
+// --- FUNCIÓN DE INICIALIZACIÓN PRINCIPAL (LLAMADA POR GOOGLE MAPS) ---
 function initApp() {
+    if (appInitialized) return; // Evita doble inicialización
+    appInitialized = true;
+
+    // Lógica que depende del DOM y/o Google Maps
     loadAuxData();
     attachEventListeners();
     listenToReservas();
     initializeAdminLists();
+    initAutocomplete(); // Ahora es seguro llamar a esto
+    
     mapContextMenu = document.getElementById('map-context-menu');
     mapContextMenuItems = document.getElementById('map-context-menu-items');
     
@@ -508,9 +545,38 @@ function initApp() {
             renderAllReservas(lastReservasSnapshot);
         }
     }, 60000);
+    
     openTab(null, 'Reservas');
     showReservasTab('en-curso');
+
+    // --- LÓGICA MOVIDA DESDE DOMContentLoaded ---
+    // Búsquedas
+    const searchInput = document.getElementById('search-historial-input');
+    if (searchInput) searchInput.addEventListener('input', (e) => buscarEnHistorial(e.target.value));
+
+    const pasajerosSearchInput = document.getElementById('busqueda-pasajeros');
+    if(pasajerosSearchInput) pasajerosSearchInput.addEventListener('input', (e) => buscarEnPasajeros(e.target.value));
+    
+    const reservasSearchInput = document.getElementById('busqueda-reservas');
+    if (reservasSearchInput) reservasSearchInput.addEventListener('input', (e) => buscarEnReservas(e.target.value));
+
+    // Paginación Históricos
+    historialBody = document.getElementById('historial-body');
+    btnAnterior = document.getElementById('btn-anterior');
+    btnSiguiente = document.getElementById('btn-siguiente');
+    indicadorPagina = document.getElementById('indicador-pagina');
+    if (btnSiguiente) btnSiguiente.addEventListener('click', () => { if (paginaActual === historialDePaginas.length - 1) { historialDePaginas.push(ultimoDocVisible); } paginaActual++; cargarHistorial(); });
+    if (btnAnterior) btnAnterior.addEventListener('click', () => { if (paginaActual > 0) { paginaActual--; cargarHistorial(); } });
+    
+    // Paginación Pasajeros
+    pasajerosBody = document.getElementById('lista-pasajeros');
+    pasajerosBtnAnterior = document.getElementById('pasajeros-btn-anterior');
+    pasajerosBtnSiguiente = document.getElementById('pasajeros-btn-siguiente');
+    pasajerosIndicadorPagina = document.getElementById('pasajeros-indicador-pagina');
+    if (pasajerosBtnSiguiente) pasajerosBtnSiguiente.addEventListener('click', () => { if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) { pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible); } pasajerosPaginaActual++; cargarPasajeros(); });
+    if (pasajerosBtnAnterior) pasajerosBtnAnterior.addEventListener('click', () => { if (pasajerosPaginaActual > 0) { pasajerosPaginaActual--; cargarPasajeros(); } });
 }
+
 
 function loadAuxData() {
     auxDataListeners.forEach(unsubscribe => unsubscribe());
@@ -554,15 +620,23 @@ function loadAuxData() {
 
     const movilesUnsubscribe = db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         movilesCache = [];
-        const movilSelect = document.querySelector("#form-choferes select[name='movil_actual_id']");
-        if (movilSelect) {
-            movilSelect.innerHTML = '<option value="">Asignar Móvil...</option>';
-            snapshot.forEach(doc => {
-                const movil = { id: doc.id, ...doc.data() };
-                movilesCache.push(movil);
-                movilSelect.innerHTML += `<option value="${movil.id}">N° ${movil.numero} (${movil.patente})</option>`;
-            });
-        }
+        const movilSelectAdmin = document.querySelector("#form-choferes select[name='movil_actual_id']");
+        const movilSelectModal = document.getElementById('asignar_movil'); 
+
+        if (movilSelectAdmin) movilSelectAdmin.innerHTML = '<option value="">Asignar Móvil...</option>';
+        if (movilSelectModal) movilSelectModal.innerHTML = '<option value="">No asignar móvil aún</option>';
+
+        snapshot.forEach(doc => {
+            const movil = { id: doc.id, ...doc.data() };
+            movilesCache.push(movil);
+            const choferDelMovil = choferesCache.find(c => c.movil_actual_id === movil.id);
+            const nombreChofer = choferDelMovil ? ` (${choferDelMovil.nombre})` : ' (Sin chofer)';
+            const optionHTML = `<option value="${movil.id}">N° ${movil.numero}${nombreChofer}</option>`;
+
+            if (movilSelectAdmin) movilSelectAdmin.innerHTML += optionHTML;
+            if (movilSelectModal) movilSelectModal.innerHTML += optionHTML;
+        });
+        
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
         if (map) cargarMarcadoresDeReservas();
     }, err => console.error("Error cargando moviles:", err));
@@ -590,6 +664,7 @@ async function openEditReservaModal(reservaId) {
     form.cantidad_pasajeros.value = data.cantidad_pasajeros || '1';
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
+    form.asignar_movil.value = data.movil_asignado_id || '';
     if (data.es_exclusivo) {
         form.viaje_exclusivo.checked = true;
         form.cantidad_pasajeros.value = '4';
@@ -655,14 +730,10 @@ async function asignarMovil(reservaId, movilId) {
             return;
         }
 
-        // 1. Iniciar un batch
         const batch = db.batch();
-
-        // 2. Definir las referencias
         const reservaRef = db.collection('reservas').doc(reservaId);
         const choferRef = db.collection('choferes').doc(choferAsignado.id);
 
-        // 3. Preparar la actualización de la reserva
         const updateData = {
             movil_asignado_id: movilId,
             chofer_asignado_id: choferAsignado.id,
@@ -674,12 +745,10 @@ async function asignarMovil(reservaId, movilId) {
         };
         batch.update(reservaRef, updateData);
 
-        // 4. Preparar la actualización del chofer
         batch.update(choferRef, {
             viajes_activos: firebase.firestore.FieldValue.arrayUnion(reservaId)
         });
 
-        // 5. Ejecutar ambas operaciones de forma atómica
         await batch.commit();
 
     } catch (err) {
@@ -721,18 +790,14 @@ async function quitarAsignacion(reservaId) {
 
         try {
             await db.runTransaction(async (transaction) => {
-                // 1. Leer la reserva DENTRO de la transacción
                 const reservaDoc = await transaction.get(reservaRef);
-
                 if (!reservaDoc.exists) {
-                    console.warn("La reserva ya no existe, no se puede quitar la asignación.");
-                    return; // Termina la transacción
+                    console.warn("La reserva ya no existe.");
+                    return;
                 }
-
                 const reservaData = reservaDoc.data();
                 const choferAsignadoId = reservaData.chofer_asignado_id;
 
-                // 2. Preparar la actualización de la reserva
                 transaction.update(reservaRef, {
                     estado: {
                         principal: 'En Curso',
@@ -743,18 +808,13 @@ async function quitarAsignacion(reservaId) {
                     movil_asignado_id: firebase.firestore.FieldValue.delete()
                 });
 
-                // 3. Preparar la actualización del chofer (si existe) DENTRO de la transacción
                 if (choferAsignadoId) {
                     const choferRef = db.collection('choferes').doc(choferAsignadoId);
-                    // No es necesario un get() extra aquí, la transacción fallará si el doc no existe
-                    // al momento de hacer el update, lo que es seguro.
                     transaction.update(choferRef, {
                         viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
                     });
                 }
             });
-
-            console.log("Asignación de reserva quitada exitosamente.");
         } catch (error) {
             console.error("Error al quitar asignación:", error);
             alert("Hubo un error al actualizar la reserva.");
@@ -768,10 +828,8 @@ async function moverReservaAHistorico(reservaId, estadoFinal) {
 
     try {
         await db.runTransaction(async (transaction) => {
-            // 1. Leer el documento de la reserva DENTRO de la transacción
             const doc = await transaction.get(reservaRef);
             if (!doc.exists) {
-                // Si la reserva no existe, no se puede hacer nada, la transacción termina.
                 throw "No se encontró la reserva para archivar.";
             }
 
@@ -789,7 +847,6 @@ async function moverReservaAHistorico(reservaId, estadoFinal) {
                 reservaData.clienteNombre = 'Default';
             }
 
-            // 2. Lógica para actualizar al chofer, ahora DENTRO de la transacción
             if (reservaData.chofer_asignado_id) {
                 const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
                 transaction.update(choferRef, {
@@ -797,7 +854,6 @@ async function moverReservaAHistorico(reservaId, estadoFinal) {
                 });
             }
 
-            // 3. Escribir en histórico y borrar la reserva original
             transaction.set(historicoRef, reservaData);
             transaction.delete(reservaRef);
         });
@@ -823,7 +879,8 @@ function attachEventListeners() {
     if(resetModal && closeResetBtn) closeResetBtn.onclick = () => resetModal.style.display = 'none';
 
     safeAddEventListener('btn-nueva-reserva', 'click', () => { 
-        document.getElementById('reserva-form').reset(); 
+        document.getElementById('reserva-form').reset();
+        document.getElementById('asignar_movil').value = '';
         document.getElementById('viaje_exclusivo').checked = false; 
         const p = document.getElementById('cantidad_pasajeros'); p.value = '1'; p.disabled = false; 
         document.getElementById('modal-title').textContent = 'Nueva Reserva'; 
@@ -908,56 +965,64 @@ function setupExportControls() {
     } 
 }
 
-async function handleSaveReserva(e) { 
-    e.preventDefault(); 
-    const f = e.target; 
+async function handleSaveReserva(e) {
+    e.preventDefault();
+    const f = e.target;
     const rId = f['reserva-id'].value;
-    const esX = f.viaje_exclusivo.checked; 
+    const movilIdParaAsignar = f.asignar_movil.value;
+    const esX = f.viaje_exclusivo.checked;
     const cP = esX ? '4' : f.cantidad_pasajeros.value;
-    const d = { 
-        cliente: f.cliente.value, 
-        siniestro: f.siniestro.value, 
-        autorizacion: f.autorizacion.value, 
-        dni_pasajero: f.dni_pasajero.value.trim(), 
-        nombre_pasajero: f.nombre_pasajero.value, 
-        telefono_pasajero: f.telefono_pasajero.value, 
-        fecha_turno: f.fecha_turno.value, 
-        hora_turno: f.hora_turno.value, 
-        hora_pickup: f.hora_pickup.value, 
-        origen: f.origen.value, 
-        destino: f.destino.value, 
-        cantidad_pasajeros: cP, 
-        zona: f.zona.value, 
-        observaciones: f.observaciones.value, 
-        es_exclusivo: esX 
+    const d = {
+        cliente: f.cliente.value,
+        siniestro: f.siniestro.value,
+        autorizacion: f.autorizacion.value,
+        dni_pasajero: f.dni_pasajero.value.trim(),
+        nombre_pasajero: f.nombre_pasajero.value,
+        telefono_pasajero: f.telefono_pasajero.value,
+        fecha_turno: f.fecha_turno.value,
+        hora_turno: f.hora_turno.value,
+        hora_pickup: f.hora_pickup.value,
+        origen: f.origen.value,
+        destino: f.destino.value,
+        cantidad_pasajeros: cP,
+        zona: f.zona.value,
+        observaciones: f.observaciones.value,
+        es_exclusivo: esX
     };
-    if (!rId) { 
-        d.estado = {
-            principal: 'Pendiente',
-            detalle: 'Recién creada',
-            actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
-        };
-        d.creadoEn = firebase.firestore.FieldValue.serverTimestamp(); 
-    } 
-    try { 
-        if (rId) { 
+    if (!rId) {
+        d.estado = { principal: 'Pendiente', detalle: 'Recién creada', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() };
+        d.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
+    }
+    try {
+        let reservaGuardadaId = rId;
+        if (rId) {
             await db.collection('reservas').doc(rId).update(d);
-        } else { 
-            await db.collection('reservas').add(d); 
-        } 
-        if (d.dni_pasajero && d.origen) { 
+        } else {
+            const nuevaReservaRef = await db.collection('reservas').add(d);
+            reservaGuardadaId = nuevaReservaRef.id;
+        }
+
+        if (movilIdParaAsignar && reservaGuardadaId) {
+            const reservaDoc = await db.collection('reservas').doc(reservaGuardadaId).get();
+            const reservaActual = reservaDoc.data();
+            if (reservaActual.movil_asignado_id !== movilIdParaAsignar) {
+                await asignarMovil(reservaGuardadaId, movilIdParaAsignar);
+            }
+        }
+
+        if (d.dni_pasajero && d.origen) {
             const pRef = db.collection('pasajeros').doc(d.dni_pasajero);
-            const pData = { 
-                nombre_apellido: d.nombre_pasajero, 
-                telefono: d.telefono_pasajero, 
-                domicilios: firebase.firestore.FieldValue.arrayUnion(d.origen) 
-            }; 
+            const pData = {
+                nombre_apellido: d.nombre_pasajero,
+                telefono: d.telefono_pasajero,
+                domicilios: firebase.firestore.FieldValue.arrayUnion(d.origen)
+            };
             await pRef.set(pData, { merge: true });
-        } 
-        document.getElementById('reserva-modal').style.display = 'none'; 
-    } catch (error) { 
-        alert("Error al guardar: " + error.message); 
-    } 
+        }
+        document.getElementById('reserva-modal').style.display = 'none';
+    } catch (error) {
+        alert("Error al guardar: " + error.message);
+    }
 }
 
 async function handleSaveCliente(e) { 
@@ -1303,7 +1368,7 @@ async function deleteItem(collection, id, auth_uid = null) {
 function openTab(evt, tabName) { 
     document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none"); 
     document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active')); 
-    document.getElementById(tabName).style.display = "block";
+    document.getElementById(tabName).style.display = "flex";
     const activeLink = evt ? evt.currentTarget : document.querySelector(`.tab-link[onclick*="'${tabName}'"]`); 
     if(activeLink) activeLink.classList.add('active'); 
     if (tabName === 'Mapa' && !map) { 
@@ -1370,27 +1435,15 @@ function initAutocomplete() {
     });
 }
 
-// Asegúrate de que tu función crearIconoDeMarcador pueda manejar un texto principal y un emoji.
-// Ejemplo de cómo podría ser tu función (ajusta si es necesario):
 function crearIconoDeMarcador(colorFondo, textoPrincipal, emoji = '') {
-    const svgIcon = `<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="0" y="0" width="40" height="40" rx="10" fill="${colorFondo}"/>
-        <text x="20" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${textoPrincipal}</text>
-        ${emoji ? `<text x="10" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${emoji}</text>` : ''}
-    </svg>`;
-    
-    // Si necesitas el emoji a la derecha, ajusta la posición x del textoPrincipal y del emoji.
-    // Ejemplo para emoji a la izquierda y número de móvil a la derecha
     const svgIconConEmojiYNumero = `<svg width="50" height="40" viewBox="0 0 50 40" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect x="0" y="0" width="50" height="40" rx="10" fill="${colorFondo}"/>
         ${emoji ? `<text x="15" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${emoji}</text>` : ''}
         <text x="35" y="26" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">${textoPrincipal}</text>
     </svg>`;
-
-
     return {
         url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIconConEmojiYNumero),
-        scaledSize: new google.maps.Size(50, 40) // Ajusta el tamaño según sea necesario
+        scaledSize: new google.maps.Size(50, 40)
     };
 }
 
@@ -1418,24 +1471,21 @@ function escucharUbicacionChoferes() {
 
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
-            const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A'; // Asegúrate que sea string
+            const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
 
-            // Creamos un ícono personalizado para el chofer con el número de móvil y un emoji
-            const iconoChofer = crearIconoDeMarcador('#1D7BFF', numeroMovil, '🚕'); // Color azul, número y taxi
+            const iconoChofer = crearIconoDeMarcador('#1D7BFF', numeroMovil, '🚕');
 
             if (marcadorExistente) {
-                // Actualiza la posición y el ícono si es necesario
                 marcadorExistente.setPosition(nuevaPos);
                 marcadorExistente.setIcon(iconoChofer);
-                marcadorExistente.setLabel(null); // No necesitamos etiqueta adicional
                 marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`);
             } else {
                 const marcador = new google.maps.Marker({
                     position: nuevaPos,
                     map: map,
                     title: `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`,
-                    icon: iconoChofer, // Usamos el ícono personalizado con el número de móvil
-                    zIndex: 101 // Asegura que los choferes estén por encima de otras cosas
+                    icon: iconoChofer,
+                    zIndex: 101
                 });
                 
                 marcador.setVisible(mostrar);
@@ -1445,96 +1495,133 @@ function escucharUbicacionChoferes() {
     });
 }
 
-
-function cargarMarcadoresDeReservas() { 
-    if (!map || !lastReservasSnapshot) return; 
-    Object.values(marcadoresOrigen).forEach(m => m.setMap(null)); 
-    marcadoresOrigen = {}; 
+function cargarMarcadoresDeReservas() {
+    if (!map || !lastReservasSnapshot) return;
+    
+    const idsDeReservasEnMapa = new Set(Object.keys(marcadoresOrigen));
+    const idsDeReservasProcesadas = new Set();
     const ahora = new Date();
     const lim = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
-    
-    lastReservasSnapshot.forEach(doc => { 
-        const r = { id: doc.id, ...doc.data() }; 
-        let e = (typeof r.estado === 'object') ? r.estado.principal : r.estado;
-        
-        const est = ['En Curso', 'Asignado', 'Pendiente', 'En Origen', 'Viaje Iniciado']; 
-        if (!est.includes(e)) return; 
 
-        if (!r.chofer_asignado_id && e === 'Pendiente') { 
-            const fT = r.fecha_turno ? new Date(`${r.fecha_turno}T${r.hora_turno || '00:00'}`) : null; 
-            if (fT && fT <= lim) { 
-                e = 'En Curso'; 
-            } 
-        } 
+    lastReservasSnapshot.forEach(doc => {
+        const r = { id: doc.id, ...doc.data() };
+        let e = (typeof r.estado === 'object') ? r.estado.principal : r.estado;
+
+        const estValidos = ['En Curso', 'Asignado', 'Pendiente', 'En Origen', 'Viaje Iniciado'];
+        if (!estValidos.includes(e)) return;
+
+        if (!r.chofer_asignado_id && e === 'Pendiente') {
+            const fT = r.fecha_turno ? new Date(`${r.fecha_turno}T${r.hora_turno || '00:00'}`) : null;
+            if (fT && fT <= lim) e = 'En Curso';
+        }
+
+        if (filtroMapaActual !== 'Todos' && e !== filtroMapaActual) return;
         
-        if (filtroMapaActual !== 'Todos' && e !== filtroMapaActual) return; 
-        if (r.origen_coords && r.origen_coords.latitude) { 
-            let cM, tM = ''; 
-            switch (e) { 
-                case 'En Curso': 
-                case 'En Origen':
-                case 'Viaje Iniciado':
-                    cM = '#F54927'; 
-                    const h = r.hora_pickup || r.hora_turno; 
-                    if (h) { tM = h.substring(0, 5); } 
-                    break; 
-                case 'Asignado': 
-                    cM = '#4DF527'; 
-                    const m = movilesCache.find(mov => mov.id === r.movil_asignado_id); 
-                    if(m && m.numero) { tM = m.numero.toString(); } 
-                    break; 
-                case 'Pendiente': 
-                    cM = '#C15DE8'; 
-                    break; 
-            } 
-            const i = crearIconoDeMarcador(cM, tM); 
-            const marker = new google.maps.Marker({ position: { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude }, map: map, title: `Origen: ${r.origen} (${e})`, icon: i });
-            marcadoresOrigen[r.id] = marker; 
-            
-            marker.addListener('click', () => { 
-                if (infoWindowActiva) infoWindowActiva.close(); 
-                if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null); 
-                const cli = clientesCache[r.cliente] || { nombre: 'N/A' }; 
-                const cho = choferesCache.find(c => c.id === r.chofer_asignado_id) || { nombre: 'No asignado' }; 
-                let obs = ''; 
-                if (r.observaciones) { 
-                    obs = `<p style="background-color:#fffbe6;border-left:4px solid #ffc107;padding:8px;margin-top:5px;"><strong>Obs:</strong> ${r.observaciones}</p>`; 
-                } 
-                const cont = `<div class="info-window"><h4>Reserva de: ${cli.nombre}</h4><p><strong>Pasajero:</strong> ${r.nombre_pasajero||'N/A'}</p><p><strong>Origen:</strong> ${r.origen}</p><p><strong>Destino:</strong> ${r.destino}</p><p><strong>Turno:</strong> ${new Date(r.fecha_turno + 'T' + (r.hora_turno||'00:00')).toLocaleString('es-AR')}</p><p><strong>Chofer:</strong> ${cho.nombre}</p>${obs}</div>`; 
-                infoWindowActiva = new google.maps.InfoWindow({ content: cont }); 
-                infoWindowActiva.open(map, marker); 
-                if (r.destino_coords && r.destino_coords.latitude) { 
-                    const iD = crearIconoDeMarcador('#27DAF5', '');
-                    marcadorDestinoActivo = new google.maps.Marker({ position: { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude }, map: map, title: `Destino: ${r.destino}`, icon: iD });
-                } 
-                infoWindowActiva.addListener('closeclick', () => { 
-                    if (marcadorDestinoActivo) { 
-                        marcadorDestinoActivo.setMap(null); 
-                        marcadorDestinoActivo = null; 
+        if (filtroHorasMapa !== null) {
+            const horaReferencia = r.hora_pickup || r.hora_turno;
+            if (!r.fecha_turno || !horaReferencia) {
+                return;
+            }
+    
+            const ahora = new Date();
+            const fechaHoraReserva = new Date(`${r.fecha_turno}T${horaReferencia}`);
+            const diferenciaMilisegundos = fechaHoraReserva - ahora;
+            const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
+    
+            if (horasDiferencia < 0 || horasDiferencia > filtroHorasMapa) {
+                return;
+            }
+        }
+    
+        if (r.origen_coords && r.origen_coords.latitude) {
+            idsDeReservasProcesadas.add(r.id);
+
+            let cM, tM = '';
+            switch (e) {
+                case 'En Curso': case 'En Origen': case 'Viaje Iniciado':
+                    cM = '#F54927';
+                    const h = r.hora_pickup || r.hora_turno;
+                    if (h) { tM = h.substring(0, 5); }
+                    break;
+                case 'Asignado':
+                    cM = '#4DF527';
+                    const m = movilesCache.find(mov => mov.id === r.movil_asignado_id);
+                    if (m && m.numero) { tM = m.numero.toString(); }
+                    break;
+                case 'Pendiente':
+                    cM = '#C15DE8';
+                    break;
+            }
+            const i = crearIconoDeMarcador(cM, tM);
+            const nuevaPos = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
+
+            if (marcadoresOrigen[r.id]) {
+                const marker = marcadoresOrigen[r.id];
+                marker.setPosition(nuevaPos);
+                marker.setIcon(i);
+                marker.setTitle(`Origen: ${r.origen} (${e})`);
+            } else {
+                const marker = new google.maps.Marker({
+                    position: nuevaPos,
+                    map: map,
+                    title: `Origen: ${r.origen} (${e})`,
+                    icon: i
+                });
+                marcadoresOrigen[r.id] = marker;
+
+                marker.addListener('click', () => { 
+                    if (infoWindowActiva) infoWindowActiva.close(); 
+                    if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null); 
+                    const cli = clientesCache[r.cliente] || { nombre: 'N/A' }; 
+                    const cho = choferesCache.find(c => c.id === r.chofer_asignado_id) || { nombre: 'No asignado' }; 
+                    let obs = ''; 
+                    if (r.observaciones) { 
+                        obs = `<p style="background-color:#fffbe6;border-left:4px solid #ffc107;padding:8px;margin-top:5px;"><strong>Obs:</strong> ${r.observaciones}</p>`; 
                     } 
-                }); 
-            });
-            
-            marker.addListener('rightclick', (event) => { 
-                event.domEvent.preventDefault(); 
-                hideMapContextMenu(); 
-                let menuHTML = ''; 
-                const rId = r.id; 
-                if (e === 'En Curso' || e === 'Pendiente') { 
-                    menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><select onchange="asignarMovil('${rId}', this.value); hideMapContextMenu()"><option value="">Asignar Móvil...</option>${movilesCache.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="changeReservaState('${rId}', 'Anulado'); return false;">Anular</a></li>`; 
-                } else if (e === 'Asignado' || e === 'En Origen' || e === 'Viaje Iniciado') { 
-                    menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><a onclick="finalizarReserva('${rId}'); hideMapContextMenu()">Finalizar</a></li><li><a onclick="quitarAsignacion('${rId}'); hideMapContextMenu()">Quitar Móvil</a></li>`; 
-                } 
-                if (menuHTML) { 
-                    mapContextMenuItems.innerHTML = menuHTML; 
-                    mapContextMenu.style.left = `${event.domEvent.clientX}px`;
-                    mapContextMenu.style.top = `${event.domEvent.clientY}px`; 
-                    mapContextMenu.style.display = 'block'; 
-                } 
-            }); 
-        } 
-    }); 
+                    const cont = `<div class="info-window"><h4>Reserva de: ${cli.nombre}</h4><p><strong>Pasajero:</strong> ${r.nombre_pasajero||'N/A'}</p><p><strong>Origen:</strong> ${r.origen}</p><p><strong>Destino:</strong> ${r.destino}</p><p><strong>Turno:</strong> ${new Date(r.fecha_turno + 'T' + (r.hora_turno||'00:00')).toLocaleString('es-AR')}</p><p><strong>Chofer:</strong> ${cho.nombre}</p>${obs}</div>`; 
+                    infoWindowActiva = new google.maps.InfoWindow({ content: cont }); 
+                    infoWindowActiva.open(map, marker); 
+                    if (r.destino_coords && r.destino_coords.latitude) { 
+                        const iD = crearIconoDeMarcador('#27DAF5', '');
+                        marcadorDestinoActivo = new google.maps.Marker({ position: { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude }, map: map, title: `Destino: ${r.destino}`, icon: iD });
+                    } 
+                    infoWindowActiva.addListener('closeclick', () => { 
+                        if (marcadorDestinoActivo) { 
+                            marcadorDestinoActivo.setMap(null); 
+                            marcadorDestinoActivo = null; 
+                        } 
+                    }); 
+                });
+                
+                marker.addListener('rightclick', (event) => { 
+                    event.domEvent.preventDefault(); 
+                    hideMapContextMenu(); 
+                    let menuHTML = ''; 
+                    const rId = r.id; 
+                    if (e === 'En Curso' || e === 'Pendiente') { 
+                        menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><select onchange="asignarMovil('${rId}', this.value); hideMapContextMenu()"><option value="">Asignar Móvil...</option>${movilesCache.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="changeReservaState('${rId}', 'Anulado'); return false;">Anular</a></li>`; 
+                    } else if (e === 'Asignado' || e === 'En Origen' || e === 'Viaje Iniciado') { 
+                        menuHTML = `<li><a onclick="openEditReservaModal('${rId}'); hideMapContextMenu()">Editar</a></li><li><a onclick="finalizarReserva('${rId}'); hideMapContextMenu()">Finalizar</a></li><li><a onclick="quitarAsignacion('${rId}'); hideMapContextMenu()">Quitar Móvil</a></li>`; 
+                    } 
+                    if (menuHTML) { 
+                        mapContextMenuItems.innerHTML = menuHTML; 
+                        mapContextMenu.style.left = `${event.domEvent.clientX}px`;
+                        mapContextMenu.style.top = `${event.domEvent.clientY}px`; 
+                        mapContextMenu.style.display = 'block'; 
+                    } 
+                });
+            }
+        }
+    });
+    
+    idsDeReservasEnMapa.forEach(id => {
+        if (!idsDeReservasProcesadas.has(id)) {
+            marcadoresOrigen[id].setMap(null);
+            delete marcadoresOrigen[id];
+        }
+    });
 }
+
 
 function filtrarMapa(estado) { 
     filtroMapaActual = estado; 
@@ -1542,6 +1629,20 @@ function filtrarMapa(estado) {
     const botonActivo = Array.from(document.querySelectorAll('.map-filter-btn')).find(btn => btn.textContent.includes(estado)); 
     if (botonActivo) botonActivo.classList.add('active'); 
     cargarMarcadoresDeReservas(); 
+}
+function filtrarMapaPorHoras(horas) {
+    filtroHorasMapa = horas;
+    // Lógica para marcar el botón activo
+    document.querySelectorAll('.time-filters-map .map-filter-btn').forEach(btn => btn.classList.remove('active'));
+    let btnActivo;
+    if (horas === null) btnActivo = document.querySelector('.time-filters-map button:nth-child(1)');
+    if (horas === 4) btnActivo = document.querySelector('.time-filters-map button:nth-child(2)');
+    if (horas === 8) btnActivo = document.querySelector('.time-filters-map button:nth-child(3)');
+    if (horas === 12) btnActivo = document.querySelector('.time-filters-map button:nth-child(4)');
+    if (btnActivo) btnActivo.classList.add('active');
+
+    // Volvemos a dibujar los marcadores con el filtro aplicado
+    cargarMarcadoresDeReservas();
 }
 
 function initMapaModal(origenCoords, destinoCoords) { 
@@ -1596,34 +1697,3 @@ function actualizarInputDesdeCoordenadas(latLng, tipo) {
         } 
     });
 }
-
-// ===================================================================================
-// INICIALIZACIÓN
-// ===================================================================================
-document.addEventListener('DOMContentLoaded', () => {
-    // Búsquedas
-    const searchInput = document.getElementById('search-historial-input');
-    if (searchInput) searchInput.addEventListener('input', (e) => buscarEnHistorial(e.target.value));
-
-    const pasajerosSearchInput = document.getElementById('busqueda-pasajeros');
-    if(pasajerosSearchInput) pasajerosSearchInput.addEventListener('input', (e) => buscarEnPasajeros(e.target.value));
-    
-    const reservasSearchInput = document.getElementById('busqueda-reservas');
-    if (reservasSearchInput) reservasSearchInput.addEventListener('input', (e) => buscarEnReservas(e.target.value));
-
-    // Paginación Históricos
-    historialBody = document.getElementById('historial-body');
-    btnAnterior = document.getElementById('btn-anterior');
-    btnSiguiente = document.getElementById('btn-siguiente');
-    indicadorPagina = document.getElementById('indicador-pagina');
-    if (btnSiguiente) btnSiguiente.addEventListener('click', () => { if (paginaActual === historialDePaginas.length - 1) { historialDePaginas.push(ultimoDocVisible); } paginaActual++; cargarHistorial(); });
-    if (btnAnterior) btnAnterior.addEventListener('click', () => { if (paginaActual > 0) { paginaActual--; cargarHistorial(); } });
-    
-    // Paginación Pasajeros
-    pasajerosBody = document.getElementById('lista-pasajeros');
-    pasajerosBtnAnterior = document.getElementById('pasajeros-btn-anterior');
-    pasajerosBtnSiguiente = document.getElementById('pasajeros-btn-siguiente');
-    pasajerosIndicadorPagina = document.getElementById('pasajeros-indicador-pagina');
-    if (pasajerosBtnSiguiente) pasajerosBtnSiguiente.addEventListener('click', () => { if (pasajerosPaginaActual === pasajerosHistorialDePaginas.length - 1) { pasajerosHistorialDePaginas.push(pasajerosUltimoDocVisible); } pasajerosPaginaActual++; cargarPasajeros(); });
-    if (pasajerosBtnAnterior) pasajerosBtnAnterior.addEventListener('click', () => { if (pasajerosPaginaActual > 0) { pasajerosPaginaActual--; cargarPasajeros(); } });
-});

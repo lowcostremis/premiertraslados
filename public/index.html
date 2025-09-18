@@ -45,13 +45,22 @@
 
         <div id="Reservas" class="tab-content">
             <div class="toolbar"><button id="btn-nueva-reserva" class="btn-primary">+ Nueva Reserva</button></div>
+            
             <nav class="sub-nav">
                 <button class="sub-tab-btn active" data-tab="en-curso" onclick="showReservasTab('en-curso')">En Curso</button>
                 <button class="sub-tab-btn" data-tab="pendientes" onclick="showReservasTab('pendientes')">Pendientes</button>
                 <button class="sub-tab-btn" data-tab="asignados" onclick="showReservasTab('asignados')">Asignados</button>
+                
+                <div class="time-filters" style="margin-left: auto;">
+                    <button class="map-filter-btn" onclick="filtrarPorHoras(null)">Todas</button>
+                    <button class="map-filter-btn" onclick="filtrarPorHoras(4)">Próximas 4H</button>
+                    <button class="map-filter-btn" onclick="filtrarPorHoras(8)">Próximas 8H</button>
+                    <button class="map-filter-btn" onclick="filtrarPorHoras(12)">Próximas 12H</button>
+                </div>
             </nav>
 
             <input type="search" id="busqueda-reservas" class="search-input" placeholder="🔎 Buscar por pasajero, origen, destino, siniestro...">
+            
             <div id="resultados-busqueda-reservas" style="display:none;" class="table-wrapper">
                 <table id="tabla-resultados-busqueda">
                     <thead>
@@ -68,7 +77,6 @@
                             <th>Zona</th>
                             <th>Cliente</th>
                             <th>Estado</th>
-                            <th>Detalle Estado</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
@@ -76,50 +84,26 @@
                 </table>
             </div>
 
-            <div class="reservas-container" id="reservas-en-curso"><div class="table-wrapper"><table id="tabla-en-curso"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Detalle Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
-            <div class="reservas-container" id="reservas-pendientes" style="display:none;"><div class="table-wrapper"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Detalle Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
-            
-            <div class="reservas-container" id="reservas-asignados" style="display:none;"><div class="table-wrapper"><table id="tabla-asignados"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Detalle Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="reservas-container" id="reservas-en-curso"><div class="table-wrapper"><table id="tabla-en-curso"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="reservas-container" id="reservas-pendientes" style="display:none;"><div class="table-wrapper"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
+            <div class="reservas-container" id="reservas-asignados" style="display:none;"><div class="table-wrapper"><table id="tabla-asignados"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
         </div>
 
         <div id="Historico" class="tab-content" style="display:none;">
             <h2>Historial de Viajes</h2>
-
             <input type="search" id="search-historial-input" class="search-input" placeholder="🔎 Buscar en historial por cliente, origen, destino...">
-            
             <div class="export-controls admin-form">
-                <label>Desde:</label>
-                <input type="date" id="export-fecha-desde" name="export-fecha-desde">
-                <label>Hasta:</label>
-                <input type="date" id="export-fecha-hasta" name="export-fecha-hasta">
-                <select id="export-cliente" name="export-cliente">
-                    <option value="">Todos los Clientes</option>
-                </select>
+                <label>Desde:</label><input type="date" id="export-fecha-desde" name="export-fecha-desde">
+                <label>Hasta:</label><input type="date" id="export-fecha-hasta" name="export-fecha-hasta">
+                <select id="export-cliente" name="export-cliente"><option value="">Todos los Clientes</option></select>
                 <button id="btn-exportar-excel" class="btn-primary">Exportar a Excel</button>
             </div>
-            
             <div class="table-wrapper" id="contenedor-historico-original">
                 <table id="tabla-historico">
-                    <thead>
-                        <tr>
-                             <th>Fecha</th>
-                            <th>Turno</th>
-                            <th>PickUp</th>
-                            <th>Pasajero</th>
-                            <th>Autorización</th>
-                            <th>Siniestro</th>
-                            <th>Cliente</th>
-                            <th>Origen</th>
-                            <th>Destino</th>
-                            <th>Chofer Asignado</th>
-                            <th>Estado</th>
-                        </tr>
-                    </thead>
-                    <tbody id="historial-body">
-                    </tbody>
+                    <thead><tr><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Autorización</th><th>Siniestro</th><th>Cliente</th><th>Origen</th><th>Destino</th><th>Chofer Asignado</th><th>Estado</th></tr></thead>
+                    <tbody id="historial-body"></tbody>
                 </table>
             </div>
-
             <div class="pagination-controls" id="paginacion-historico">
                 <button id="btn-anterior" disabled>Anterior</button>
                 <span id="indicador-pagina">Página 1</span>
@@ -129,15 +113,23 @@
 
         <div id="Mapa" class="tab-content" style="display:none;">
             <div id="map-filters">
-                <button id="btn-filtro-todos" class="map-filter-btn active" onclick="filtrarMapa('Todos')">Ver Todos</button>
-                <button class="map-filter-btn" onclick="filtrarMapa('Pendiente')">Ver Pendientes</button>
-                <button class="map-filter-btn" onclick="filtrarMapa('Asignado')">Ver Asignados</button>
-                <button class="map-filter-btn" onclick="filtrarMapa('En Curso')">Ver en Curso</button>
-                <div class="map-toggle">
+                <button class="map-filter-btn active" onclick="filtrarMapa('Todos')">Todos</button>
+                <button class="map-filter-btn" onclick="filtrarMapa('Pendiente')">Pendientes</button>
+                <button class="map-filter-btn" onclick="filtrarMapa('Asignado')">Asignados</button>
+                <button class="map-filter-btn" onclick="filtrarMapa('En Curso')">En Curso</button>
+        
+                <span style="border-left: 1px solid #ccc; margin: 0 10px;"></span>
+        
+                <button class="map-filter-btn" onclick="filtrarMapaPorHoras(null)">Todas las Horas</button>
+                <button class="map-filter-btn" onclick="filtrarMapaPorHoras(4)">Próximas 4H</button>
+                <button class="map-filter-btn" onclick="filtrarMapaPorHoras(8)">Próximas 8H</button>
+                <button class="map-filter-btn" onclick="filtrarMapaPorHoras(12)">Próximas 12H</button>
+        
+                <div class="map-toggle" style="margin-left: auto;">
                     <input type="checkbox" id="toggle-choferes" checked>
                     <label for="toggle-choferes">Mostrar Choferes</label>
                 </div>
-                </div>
+            </div>
             <div id="map-container"></div>
         </div>
         
@@ -157,18 +149,7 @@
         
         <div id="Choferes" class="tab-content" style="display:none;">
             <h2>Gestión de Choferes</h2>
-            <form id="form-choferes" class="admin-form">
-                <input type="text" name="dni" placeholder="DNI (obligatorio)" required>
-                <input type="text" name="nombre" placeholder="Nombre completo (obligatorio)" required>
-                <input type="email" name="email" placeholder="Email de acceso (obligatorio)" required>
-                <input type="password" name="password" placeholder="Contraseña (mín. 6 caracteres)" required>
-                <input type="text" name="domicilio" placeholder="Domicilio">
-                <input type="text" name="telefono" placeholder="Teléfono">
-                <select name="movil_actual_id">
-                    <option value="">Asignar Móvil...</option>
-                </select>
-                <button type="submit">Guardar Chofer</button>
-            </form>
+            <form id="form-choferes" class="admin-form"><input type="text" name="dni" placeholder="DNI (obligatorio)" required><input type="text" name="nombre" placeholder="Nombre completo (obligatorio)" required><input type="email" name="email" placeholder="Email de acceso (obligatorio)" required><input type="password" name="password" placeholder="Contraseña (mín. 6 caracteres)" required><input type="text" name="domicilio" placeholder="Domicilio"><input type="text" name="telefono" placeholder="Teléfono"><select name="movil_actual_id"><option value="">Asignar Móvil...</option></select><button type="submit">Guardar Chofer</button></form>
             <div id="lista-choferes" class="lista-admin"></div>
         </div>
         
@@ -203,12 +184,14 @@
                         <input type="text" id="origen" name="origen" placeholder="Domicilio Origen" required>
                         <input type="text" id="destino" name="destino" placeholder="Domicilio Destino">
                         <select id="cantidad_pasajeros" name="cantidad_pasajeros">
-                            <option value="1">1 Pasajero</option>
-                            <option value="2">2 Pasajeros</option>
-                            <option value="3">3 Pasajeros</option>
-                            <option value="4">4 Pasajeros</option>
+                            <option value="1">1 Pasajero</option><option value="2">2 Pasajeros</option><option value="3">3 Pasajeros</option><option value="4">4 Pasajeros</option>
                         </select>
                         <select id="zona" name="zona"><option value="">Seleccionar Zona...</option></select>
+                        
+                        <select id="asignar_movil" name="asignar_movil">
+                            <option value="">No asignar móvil aún</option>
+                        </select>
+                        
                         <div style="display: flex; align-items: center; gap: 10px; grid-column: 1 / -1;">
                             <input type="checkbox" id="viaje_exclusivo" name="viaje_exclusivo" style="width: auto;">
                             <label for="viaje_exclusivo" style="margin: 0;">Viaje Exclusivo</label>
@@ -237,11 +220,9 @@
         </div>
     </div>
 
-    <div id="map-context-menu" class="context-menu">
-        <ul id="map-context-menu-items"></ul>
-    </div>
+    <div id="map-context-menu" class="context-menu"><ul id="map-context-menu-items"></ul></div>
 
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places" async defer></script>
     <script src="script.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places&callback=initApp" async defer></script>
 </body>
 </html>

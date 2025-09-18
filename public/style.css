@@ -40,7 +40,11 @@ header h1 { margin: 0; font-size: 24px; color: #1877f2; }
     border-radius: 5px;
     padding-bottom: 150px; /* AÑADIDO: Espacio extra al final para los menús */}
 table { width: 100%; border-collapse: collapse; }
-th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #e0e0e0; white-space: nowrap; }
+th, td { padding: 10px 5px; /* Reduce el espacio interno (padding) */
+    font-size: 13px; /* Reduce un poco el tamaño de la letra */
+    text-align: left;
+    border-bottom: 1px solid #e0e0e0;
+    white-space: nowrap; }
 th { background-color: #f7f7f7; font-weight: 600; }
 tbody tr:hover { background-color: #f5f5f5; }
 .estado-negativo { background-color: #ffdddd !important; }
