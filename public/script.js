@@ -294,6 +294,7 @@ let infoWindowActiva = null;
 let mapContextMenu, mapContextMenuItems;
 let filtroHoras = null;
 let appInitialized = false;
+let unsubscribeChoferes = null;
 
 function filtrarPorHoras(horas) {
     filtroHoras = horas;
@@ -557,6 +558,13 @@ auth.onAuthStateChanged(user => {
         auxDataListeners.forEach(unsubscribe => unsubscribe());
         auxDataListeners = [];
         if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
+        // --- AÑADIR ESTAS LÍNEAS ---
+        // Para detener el oyente de choferes y limpiar la variable al cerrar sesión.
+        if (unsubscribeChoferes) {
+            unsubscribeChoferes();
+            unsubscribeChoferes = null;
+        }
+        // --- FIN DE LÍNEAS A AÑADIR ---
     }
 });
 
@@ -571,7 +579,7 @@ document.getElementById('logout-btn').addEventListener('click', () => auth.signO
 
 // --- FUNCIÓN DE INICIALIZACIÓN PRINCIPAL (LLAMADA POR GOOGLE MAPS) ---
 function initApp() {
-    if (appInitialized) return; // Evita doble inicialización
+     if (appInitialized) return; 
     appInitialized = true;
 
     loadAuxData();
@@ -589,7 +597,7 @@ function initApp() {
             toggleChoferesVisibility(e.target.checked);
         });
     }
-    escucharUbicacionChoferes();
+    // escucharUbicacionChoferes(); // <-- ELIMINAR O COMENTAR ESTA LÍNEA
 
     if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     refrescoAutomaticoIntervalo = setInterval(() => {
@@ -1466,10 +1474,15 @@ function openTab(evt, tabName) {
     document.getElementById(tabName).style.display = "flex";
     const activeLink = evt ? evt.currentTarget : document.querySelector(`.tab-link[onclick*="'${tabName}'"]`); 
     if(activeLink) activeLink.classList.add('active'); 
-    if (tabName === 'Mapa' && !map) { 
-        initMap();
-    } else if (tabName === 'Mapa' && map) { 
-        cargarMarcadoresDeReservas(); 
+     if (tabName === 'Mapa') {
+        if (!map) {
+            initMap(); // Crea el mapa como antes
+        }
+        // Ahora, nos aseguramos de que el oyente se active solo una vez
+        if (!unsubscribeChoferes) {
+            escucharUbicacionChoferes();
+        }
+        cargarMarcadoresDeReservas();
     } 
     if (tabName === 'Historico') { 
         paginaActual = 0;
@@ -1590,8 +1603,9 @@ function toggleChoferesVisibility(mostrar) {
 }
 
 function escucharUbicacionChoferes() {
-    db.collection('choferes').onSnapshot(snapshot => {
-        if (!map) return;
+    // Asignamos la función de "des-suscripción" a nuestra variable global
+    unsubscribeChoferes = db.collection('choferes').onSnapshot(snapshot => {
+        // La comprobación 'if (!map) return;' ya no es necesaria aquí.
         const mostrar = document.getElementById('toggle-choferes').checked;
         snapshot.docChanges().forEach(change => {
             const chofer = { id: change.doc.id, ...change.doc.data() };
@@ -1608,7 +1622,6 @@ function escucharUbicacionChoferes() {
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
-
             const iconoChofer = crearIconoDeChofer('#23477b', numeroMovil);
 
             if (marcadorExistente) {
@@ -1624,7 +1637,9 @@ function escucharUbicacionChoferes() {
                     zIndex: 101
                 });
                 
-                marcador.setVisible(mostrar);
+                // Aplicamos visibilidad según el filtro
+                const esVisible = mostrar && (!filtroChoferMapaId || chofer.id === filtroChoferMapaId);
+                marcador.setVisible(esVisible);
                 marcadoresChoferes[chofer.id] = marcador;
             }
         });
