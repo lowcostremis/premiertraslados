@@ -1609,7 +1609,7 @@ function escucharUbicacionChoferes() {
             const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
 
-            const iconoChofer = crearIconoDeChofer('#1D7BFF', numeroMovil);
+            const iconoChofer = crearIconoDeChofer('#23477bff', numeroMovil);
 
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
