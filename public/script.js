@@ -1568,17 +1568,21 @@ function crearIconoDePin(colorFondo, textoPrincipal) {
 function crearIconoDeChofer(colorFondo, textoPrincipal) {
     // SVG que define un círculo con un borde y texto centrado.
     const svgIcon = `
-        <svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="17" cy="17" r="16" fill="${colorFondo}" stroke="white" stroke-width="2"/>
-            <text x="17" y="22" font-family="Arial, sans-serif" font-size="13px" font-weight="bold" fill="white" text-anchor="middle">${textoPrincipal}</text>
+        <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* CAMBIO: El radio y el centro del círculo se ajustan al nuevo tamaño. */}
+            <circle cx="22" cy="22" r="21" fill="${colorFondo}" stroke="white" stroke-width="2"/>
+            
+            {/* CAMBIO: La letra es más grande y su posición 'y' se re-centra verticalmente. */}
+            <text x="22" y="28" font-family="Arial, sans-serif" font-size="17px" font-weight="bold" fill="white" text-anchor="middle">${textoPrincipal}</text>
         </svg>
     `;
 
     return {
         url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIcon),
-        scaledSize: new google.maps.Size(34, 34),
-        // Para un círculo, el anclaje es su centro exacto.
-        anchor: new google.maps.Point(17, 17) 
+        // CAMBIO: El tamaño general del marcador ahora es 44x44px.
+        scaledSize: new google.maps.Size(44, 44),
+        // CAMBIO: El anclaje se ajusta al nuevo centro del círculo.
+        anchor: new google.maps.Point(22, 22) 
     };
 }
 
