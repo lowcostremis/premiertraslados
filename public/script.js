@@ -1537,51 +1537,40 @@ function initAutocomplete() {
  * @returns {google.maps.Icon} Objeto de icono para la API de Google Maps.
  */
 function crearIconoDePin(colorFondo, textoPrincipal) {
-    // CAMBIO: Las dimensiones generales del SVG son más grandes para acomodar el texto.
     const svgIcon = `
         <svg width="42" height="56" viewBox="0 0 42 56" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* CAMBIO: La ruta del pin está re-escalada a las nuevas dimensiones. */}
             <path d="M21 0C11.64 0 4 7.64 4 18c0 14 17 38 17 38s17-24 17-38C38 7.64 30.36 0 21 0Z" fill="${colorFondo}"/>
             
-            {/* CAMBIO: El radio del círculo interior es mayor para dar más espacio. */}
             <circle cx="21" cy="18" r="15" fill="white"/>
             
-            {/* CAMBIO PRINCIPAL: El tamaño de la letra es más grande y su posición Y está ajustada. */}
             <text x="21" y="24" font-family="Arial, sans-serif" font-size="15px" font-weight="bold" fill="#333" text-anchor="middle">${textoPrincipal}</text>
         </svg>
     `;
 
     return {
         url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIcon),
-        // CAMBIO: El tamaño escalado coincide con las nuevas dimensiones del SVG.
         scaledSize: new google.maps.Size(42, 56),
-        // CAMBIO: El punto de anclaje se actualiza a la nueva punta del pin.
         anchor: new google.maps.Point(21, 56) 
     };
 }
 /**
- * Crea un icono de marcador SVG con forma de círculo para los choferes.
+ * Crea un icono de marcador SVG con forma de círculo para los choferes (TAMAÑO GRANDE).
  * @param {string} colorFondo - El color principal del círculo.
  * @param {string} textoPrincipal - El número del móvil que irá dentro.
  * @returns {google.maps.Icon} Objeto de icono para la API de Google Maps.
  */
 function crearIconoDeChofer(colorFondo, textoPrincipal) {
-    // SVG que define un círculo con un borde y texto centrado.
     const svgIcon = `
         <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* CAMBIO: El radio y el centro del círculo se ajustan al nuevo tamaño. */}
             <circle cx="22" cy="22" r="21" fill="${colorFondo}" stroke="white" stroke-width="2"/>
             
-            {/* CAMBIO: La letra es más grande y su posición 'y' se re-centra verticalmente. */}
             <text x="22" y="28" font-family="Arial, sans-serif" font-size="17px" font-weight="bold" fill="white" text-anchor="middle">${textoPrincipal}</text>
         </svg>
     `;
 
     return {
         url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIcon),
-        // CAMBIO: El tamaño general del marcador ahora es 44x44px.
         scaledSize: new google.maps.Size(44, 44),
-        // CAMBIO: El anclaje se ajusta al nuevo centro del círculo.
         anchor: new google.maps.Point(22, 22) 
     };
 }
