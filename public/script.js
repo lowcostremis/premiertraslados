@@ -641,7 +641,6 @@ function initApp() {
 function loadAuxData() {
    auxDataListeners.forEach(unsubscribe => unsubscribe());
     auxDataListeners = [];
-    const choferesUnsubscribe = db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
 
     const clientesUnsubscribe = db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
@@ -663,16 +662,40 @@ function loadAuxData() {
             choferesCache.push({ id: doc.id, ...doc.data() });
         });
         
-        // --- LÓGICA DE ACTUALIZACIÓN ---
-        rebuildMobileSelects(); // Actualiza los menús de móviles
+        rebuildMobileSelects();
         actualizarFiltroChoferesMapa();
-        actualizarFiltroChoferesAsignados();
+        actualizarFiltroChoferesAsignados(); // <-- LÍNEA CORREGIDA Y AÑADIDA
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);    
-    
+    }, err => console.error("Error cargando choferes:", err));
+    auxDataListeners.push(choferesUnsubscribe);
 
+    const zonasUnsubscribe = db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
+        const zonaSelect = document.getElementById('zona');
+        if (!zonaSelect) return;
+        zonaSelect.innerHTML = '<option value="">Seleccionar Zona...</option>';
+        zonasCache = [];
+        snapshot.forEach(doc => {
+            zonasCache.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            zonaSelect.innerHTML += `<option value="${data.descripcion}">${data.numero} - ${data.descripcion}</option>`;
+        });
+        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
+    }, err => console.error("Error cargando zonas:", err));
+    auxDataListeners.push(zonasUnsubscribe);
+
+    const movilesUnsubscribe = db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
+        movilesCache = [];
+        snapshot.forEach(doc => {
+            movilesCache.push({ id: doc.id, ...doc.data() });
+        });
+
+        rebuildMobileSelects();
+        actualizarFiltroChoferesMapa();
+        actualizarFiltroChoferesAsignados(); // <-- LÍNEA CORREGIDA Y AÑADIDA
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
     }, err => console.error("Error cargando moviles:", err));
     auxDataListeners.push(movilesUnsubscribe);
+}
 
     const zonasUnsubscribe = db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
         const zonaSelect = document.getElementById('zona');
