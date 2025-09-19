@@ -219,7 +219,7 @@ async function buscarEnPasajeros(texto) {
 
 // --- FUNCIONES PARA BÚSQUEDA DE CHOFERES ---
 function renderChoferesTable(documentos) {
-    const container = document.getElementById('lista-choferes');
+   const container = document.getElementById('lista-choferes');
     if (!container) return;
 
     if (documentos.length === 0) {
@@ -1460,32 +1460,21 @@ async function handleUpdateItem(e) {
     }
 
     try {
-        // --- LÓGICA MEJORADA PARA ASIGNACIÓN DE MÓVILES ---
         if (collection === 'choferes' && updatedData.movil_actual_id !== undefined) {
             const batch = db.batch();
             const choferRef = db.collection('choferes').doc(id);
 
-            // 1. Obtener el estado actual del chofer para saber cuál era su móvil anterior.
             const choferActualDoc = await choferRef.get();
             const movilAnteriorId = choferActualDoc.data().movil_actual_id;
-            const nuevoMovilId = updatedData.movil_actual_id || null; // Si es un string vacío, lo convertimos a null.
-
-            // 2. Si el chofer tenía un móvil antes y ahora se le asigna uno diferente (o ninguno).
-            if (movilAnteriorId && movilAnteriorId !== nuevoMovilId) {
-                // Dejamos el móvil anterior como "sin chofer" (opcional pero buena práctica)
-                // En este modelo de datos, no es necesario, ya que la verdad está en el chofer.
-            }
+            const nuevoMovilId = updatedData.movil_actual_id || null;
             
-            // 3. Si se le está asignando un móvil nuevo.
             if (nuevoMovilId) {
-                // Buscamos si otro chofer ya tiene asignado este nuevo móvil.
                 const q = db.collection('choferes').where('movil_actual_id', '==', nuevoMovilId);
                 const snapshot = await q.get();
 
                 if (!snapshot.empty) {
-                    // Si encontramos a otro chofer, le quitamos la asignación.
                     snapshot.forEach(doc => {
-                        if (doc.id !== id) { // Nos aseguramos de no des-asignarnos a nosotros mismos
+                        if (doc.id !== id) {
                            const otroChoferRef = db.collection('choferes').doc(doc.id);
                            batch.update(otroChoferRef, { movil_actual_id: null });
                            console.log(`Móvil des-asignado del chofer anterior: ${doc.id}`);
@@ -1494,13 +1483,11 @@ async function handleUpdateItem(e) {
                 }
             }
 
-            // 4. Finalmente, actualizamos el chofer que estamos editando.
             batch.update(choferRef, updatedData);
             
-            await batch.commit(); // Ejecutamos todas las operaciones en una sola transacción.
+            await batch.commit();
 
         } else {
-            // Para cualquier otra colección, usamos el método de actualización simple.
             await db.collection(collection).doc(id).update(updatedData);
         }
         
@@ -1554,9 +1541,8 @@ function openTab(evt, tabName) {
     if(activeLink) activeLink.classList.add('active'); 
      if (tabName === 'Mapa') {
         if (!map) {
-            initMap(); // Crea el mapa como antes
+            initMap();
         }
-        // Ahora, nos aseguramos de que el oyente se active solo una vez
         if (!unsubscribeChoferes) {
             escucharUbicacionChoferes();
         }
@@ -1621,12 +1607,6 @@ function initAutocomplete() {
     });
 }
 
-/**
- * Crea un icono de marcador SVG con forma de pin clásico de mapa (TAMAÑO GRANDE).
- * @param {string} colorFondo - El color principal del pin (ej: '#F54927').
- * @param {string} textoPrincipal - El texto que irá dentro del pin (ej: '14:00' o el n° de móvil).
- * @returns {google.maps.Icon} Objeto de icono para la API de Google Maps.
- */
 function crearIconoDePin(colorFondo, textoPrincipal) {
     const svgIcon = `
         <svg width="42" height="56" viewBox="0 0 42 56" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1644,12 +1624,7 @@ function crearIconoDePin(colorFondo, textoPrincipal) {
         anchor: new google.maps.Point(21, 56) 
     };
 }
-/**
- * Crea un icono de marcador SVG con forma de círculo para los choferes (TAMAÑO GRANDE).
- * @param {string} colorFondo - El color principal del círculo.
- * @param {string} textoPrincipal - El número del móvil que irá dentro.
- * @returns {google.maps.Icon} Objeto de icono para la API de Google Maps.
- */
+
 function crearIconoDeChofer(colorFondo, textoPrincipal) {
     const svgIcon = `
         <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1671,9 +1646,6 @@ function toggleChoferesVisibility(mostrar) {
         const marcador = marcadoresChoferes[choferId];
         if (!marcador) continue;
 
-        // Nueva lógica: El marcador es visible si...
-        // 1. El toggle "Mostrar Móviles" está activado.
-        // 2. Y (no hay un filtro de chofer aplicado O el ID de este marcador coincide con el del filtro).
         const esVisible = mostrar && (!filtroChoferMapaId || choferId === filtroChoferMapaId);
         
         marcador.setVisible(esVisible);
@@ -1681,9 +1653,7 @@ function toggleChoferesVisibility(mostrar) {
 }
 
 function escucharUbicacionChoferes() {
-    // Asignamos la función de "des-suscripción" a nuestra variable global
     unsubscribeChoferes = db.collection('choferes').onSnapshot(snapshot => {
-        // La comprobación 'if (!map) return;' ya no es necesaria aquí.
         const mostrar = document.getElementById('toggle-choferes').checked;
         snapshot.docChanges().forEach(change => {
             const chofer = { id: change.doc.id, ...change.doc.data() };
@@ -1715,7 +1685,6 @@ function escucharUbicacionChoferes() {
                     zIndex: 101
                 });
                 
-                // Aplicamos visibilidad según el filtro
                 const esVisible = mostrar && (!filtroChoferMapaId || chofer.id === filtroChoferMapaId);
                 marcador.setVisible(esVisible);
                 marcadoresChoferes[chofer.id] = marcador;
@@ -1747,20 +1716,19 @@ function cargarMarcadoresDeReservas() {
         if (filtroMapaActual !== 'Todos' && e !== filtroMapaActual) return;
         
         if (filtroHorasMapa !== null) {
-    const horaReferencia = r.hora_pickup || r.hora_turno;
-    if (!r.fecha_turno || !horaReferencia) {
-        return; // No se puede filtrar si faltan datos
-    }
+            const horaReferencia = r.hora_pickup || r.hora_turno;
+            if (!r.fecha_turno || !horaReferencia) {
+                return;
+            }
 
-    const fechaHoraReserva = parsearFechaHoraLocal(r.fecha_turno, horaReferencia);
-    const ahora = new Date();
-    const diferenciaMilisegundos = fechaHoraReserva.getTime() - ahora.getTime();
-    const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
+            const fechaHoraReserva = parsearFechaHoraLocal(r.fecha_turno, horaReferencia);
+            const ahora = new Date();
+            const diferenciaMilisegundos = fechaHoraReserva.getTime() - ahora.getTime();
+            const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
 
-    // Si la reserva ya pasó o está más allá del filtro, se omite.
-    if (horasDiferencia < 0 || horasDiferencia > filtroHorasMapa) {
-        return;
-    }
+            if (horasDiferencia < 0 || horasDiferencia > filtroHorasMapa) {
+                return;
+            }
         }
     
         if (r.origen_coords && r.origen_coords.latitude) {
@@ -1929,4 +1897,3 @@ function actualizarInputDesdeCoordenadas(latLng, tipo) {
         } 
     });
 }
-
