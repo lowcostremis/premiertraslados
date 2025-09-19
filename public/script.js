@@ -1160,9 +1160,25 @@ async function handleSavePasajero(e) {
 }
 
 async function handleSaveMovil(e) { 
-    e.preventDefault(); 
-    const f=e.target; 
-    const d={numero:f.numero.value,patente:f.patente.value,marca:f.marca.value,modelo:f.modelo.value,capacidad_pasajeros:f.capacidad_pasajeros.value,titular_nombre:f.titular_nombre.value,titular_domicilio:f.titular_domicilio.value,titular_telefono:f.titular_telefono.value};
+     e.preventDefault(); 
+    const f = e.target; 
+    
+    // Y reemplaza la siguiente línea:
+    // const d = {numero: f.numero.value, ... }; 
+    
+    // Por esta versión corregida:
+    const d = {
+        numero: parseInt(f.numero.value, 10), // <-- LÍNEA CORREGIDA
+        patente: f.patente.value,
+        marca: f.marca.value,
+        modelo: f.modelo.value,
+        capacidad_pasajeros: f.capacidad_pasajeros.value,
+        titular_nombre: f.titular_nombre.value,
+        titular_domicilio: f.titular_domicilio.value,
+        titular_telefono: f.titular_telefono.value
+    };
+
+    // ... el resto de la función no cambia ...
     if(!d.numero||!d.patente){alert("N° y patente son obligatorios.");return} 
     try{
         await db.collection('moviles').add(d);
@@ -1415,24 +1431,70 @@ async function editItem(collection, id) {
 }
 
 async function handleUpdateItem(e) { 
-    e.preventDefault(); 
-    const form = e.target; 
-    const collection = form.dataset.collection; 
+     e.preventDefault();
+    const form = e.target;
+    const collection = form.dataset.collection;
     const id = form.dataset.id;
-    const updatedData = {}; 
-    const formData = new FormData(form); 
-    for (let [key, value] of formData.entries()) { 
+    const updatedData = {};
+    const formData = new FormData(form);
+
+    for (let [key, value] of formData.entries()) {
         if (form.querySelector(`[name="${key}"]`) && form.querySelector(`[name="${key}"]`).disabled) continue;
-        updatedData[key] = value; 
-    } 
-    try { 
-        await db.collection(collection).doc(id).update(updatedData); 
-        alert("Item actualizado."); 
+        updatedData[key] = value;
+    }
+
+    try {
+        // --- LÓGICA MEJORADA PARA ASIGNACIÓN DE MÓVILES ---
+        if (collection === 'choferes' && updatedData.movil_actual_id !== undefined) {
+            const batch = db.batch();
+            const choferRef = db.collection('choferes').doc(id);
+
+            // 1. Obtener el estado actual del chofer para saber cuál era su móvil anterior.
+            const choferActualDoc = await choferRef.get();
+            const movilAnteriorId = choferActualDoc.data().movil_actual_id;
+            const nuevoMovilId = updatedData.movil_actual_id || null; // Si es un string vacío, lo convertimos a null.
+
+            // 2. Si el chofer tenía un móvil antes y ahora se le asigna uno diferente (o ninguno).
+            if (movilAnteriorId && movilAnteriorId !== nuevoMovilId) {
+                // Dejamos el móvil anterior como "sin chofer" (opcional pero buena práctica)
+                // En este modelo de datos, no es necesario, ya que la verdad está en el chofer.
+            }
+            
+            // 3. Si se le está asignando un móvil nuevo.
+            if (nuevoMovilId) {
+                // Buscamos si otro chofer ya tiene asignado este nuevo móvil.
+                const q = db.collection('choferes').where('movil_actual_id', '==', nuevoMovilId);
+                const snapshot = await q.get();
+
+                if (!snapshot.empty) {
+                    // Si encontramos a otro chofer, le quitamos la asignación.
+                    snapshot.forEach(doc => {
+                        if (doc.id !== id) { // Nos aseguramos de no des-asignarnos a nosotros mismos
+                           const otroChoferRef = db.collection('choferes').doc(doc.id);
+                           batch.update(otroChoferRef, { movil_actual_id: null });
+                           console.log(`Móvil des-asignado del chofer anterior: ${doc.id}`);
+                        }
+                    });
+                }
+            }
+
+            // 4. Finalmente, actualizamos el chofer que estamos editando.
+            batch.update(choferRef, updatedData);
+            
+            await batch.commit(); // Ejecutamos todas las operaciones en una sola transacción.
+
+        } else {
+            // Para cualquier otra colección, usamos el método de actualización simple.
+            await db.collection(collection).doc(id).update(updatedData);
+        }
+        
+        alert("Item actualizado.");
         document.getElementById('edit-modal').style.display = 'none';
-    } catch (error) { 
-        console.error("Error al actualizar:", error); 
-        alert("Error al guardar.");
-    } 
+
+    } catch (error) {
+        console.error("Error al actualizar:", error);
+        alert("Error al guardar: " + error.message);
+    }
 }
 
 async function deleteItem(collection, id, auth_uid = null) { 

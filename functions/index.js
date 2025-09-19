@@ -16,7 +16,7 @@ const db = admin.firestore();
 // --- INICIALIZACIÓN DIFERIDA (LAZY INITIALIZATION) ---
 let algoliaClient;
 let mapsClient;
-let pasajerosIndex, historicoIndex, reservasIndex, choferesIndex; // <-- AÑADIDO choferesIndex
+let pasajerosIndex, historicoIndex, reservasIndex, choferesIndex;
 
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
 
@@ -33,9 +33,9 @@ function getAlgoliaIndices() {
         pasajerosIndex = algoliaClient.initIndex('pasajeros');
         historicoIndex = algoliaClient.initIndex('historico');
         reservasIndex = algoliaClient.initIndex('reservas');
-        choferesIndex = algoliaClient.initIndex('choferes'); // <-- AÑADIDO
+        choferesIndex = algoliaClient.initIndex('choferes');
     }
-    return { pasajerosIndex, historicoIndex, reservasIndex, choferesIndex }; // <-- AÑADIDO choferesIndex
+    return { pasajerosIndex, historicoIndex, reservasIndex, choferesIndex };
 }
 
 // ===================================================================================
@@ -162,17 +162,10 @@ exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{reservaId}"
     return reservasIndex.saveObject(record);
 });
 
-// --- FUNCIÓN AÑADIDA PARA SINCRONIZAR CHOFERES ---
 exports.sincronizarChoferesConAlgolia = onDocumentWritten("choferes/{choferId}", (event) => {
     const { choferesIndex } = getAlgoliaIndices();
     const choferId = event.params.choferId;
-
-    if (!event.data.after.exists) {
-        // El documento fue eliminado
-        return choferesIndex.deleteObject(choferId);
-    }
-
-    // El documento fue creado o actualizado
+    if (!event.data.after.exists) { return choferesIndex.deleteObject(choferId); }
     const record = { objectID: choferId, ...event.data.after.data() };
     return choferesIndex.saveObject(record);
 });
@@ -242,47 +235,36 @@ exports.exportarHistorico = onCall(async (request) => {
     }
 });
 
+// ===================================================================================
+// FUNCIONES LLAMADAS DESDE LA APP DEL CHOFER
+// ===================================================================================
 
-// ===================================================================================
-// NUEVA FUNCIÓN PARA FINALIZAR VIAJE DESDE LA APP
-// ===================================================================================
 exports.finalizarViajeDesdeApp = onCall(async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'El usuario no está autenticado.');
     }
-
     const { reservaId } = request.data;
     if (!reservaId) {
         throw new HttpsError('invalid-argument', 'Falta el ID de la reserva.');
     }
-
     const reservaRef = db.collection('reservas').doc(reservaId);
     const historicoRef = db.collection('historico').doc(reservaId);
-
     try {
         const doc = await reservaRef.get();
         if (!doc.exists) {
             throw new HttpsError('not-found', 'No se encontró la reserva para archivar.');
         }
-
         const reservaData = doc.data();
-
         if (reservaData.chofer_asignado_id) {
             const choferDoc = await db.collection('choferes').doc(reservaData.chofer_asignado_id).get();
             if (choferDoc.exists && choferDoc.data().auth_uid !== request.auth.uid) {
                 throw new HttpsError('permission-denied', 'No tienes permiso para finalizar este viaje.');
             }
         }
-
         if (reservaData.cliente) {
             const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
-            if (clienteDoc.exists) {
-                reservaData.clienteNombre = clienteDoc.data().nombre || 'Default';
-            } else {
-                reservaData.clienteNombre = 'Default';
-            }
+            reservaData.clienteNombre = clienteDoc.exists ? (clienteDoc.data().nombre || 'Default') : 'Default';
         }
-
         await db.runTransaction(async (transaction) => {
             reservaData.estado = {
                 principal: 'Finalizado',
@@ -290,21 +272,78 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
                 actualizado_en: admin.firestore.FieldValue.serverTimestamp()
             };
             reservaData.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
-
             if (reservaData.chofer_asignado_id) {
                 const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
                 transaction.update(choferRef, {
                     viajes_activos: admin.firestore.FieldValue.arrayRemove(reservaId)
                 });
             }
-
             transaction.set(historicoRef, reservaData);
             transaction.delete(reservaRef);
         });
-
         return { message: 'Viaje finalizado y archivado con éxito.' };
     } catch (error) {
         console.error("Error al finalizar viaje desde app:", error);
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError('internal', 'Ocurrió un error al procesar la solicitud.', error.message);
+    }
+});
+
+// --- FUNCIÓN NUEVA PARA GESTIONAR RECHAZO / NEGATIVO ---
+exports.gestionarRechazoDesdeApp = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'El usuario no está autenticado.');
+    }
+
+    const { reservaId, esNegativo } = request.data;
+    if (!reservaId) {
+        throw new HttpsError('invalid-argument', 'Falta el ID de la reserva.');
+    }
+
+    const reservaRef = db.collection('reservas').doc(reservaId);
+
+    try {
+        await db.runTransaction(async (transaction) => {
+            const reservaDoc = await transaction.get(reservaRef);
+            if (!reservaDoc.exists) {
+                console.log(`La reserva ${reservaId} no fue encontrada. Posiblemente ya fue procesada.`);
+                return;
+            }
+
+            const reservaData = reservaDoc.data();
+            const choferAsignadoId = reservaData.chofer_asignado_id;
+
+            if (choferAsignadoId) {
+                 const choferDoc = await db.collection('choferes').doc(choferAsignadoId).get();
+                 if (!choferDoc.exists || choferDoc.data().auth_uid !== request.auth.uid) {
+                     throw new HttpsError('permission-denied', 'No tienes permiso para modificar este viaje.');
+                 }
+            } else {
+                 throw new HttpsError('failed-precondition', 'La reserva ya no tiene un chofer asignado.');
+            }
+
+            const nuevoDetalle = esNegativo ? 'Traslado negativo' : 'Rechazado desde App';
+
+            transaction.update(reservaRef, {
+                estado: {
+                    principal: 'En Curso',
+                    detalle: nuevoDetalle,
+                    actualizado_en: admin.firestore.FieldValue.serverTimestamp(),
+                },
+                chofer_asignado_id: admin.firestore.FieldValue.delete(),
+                movil_asignado_id: admin.firestore.FieldValue.delete(),
+            });
+
+            const choferRef = db.collection('choferes').doc(choferAsignadoId);
+            transaction.update(choferRef, {
+                viajes_activos: admin.firestore.FieldValue.arrayRemove(reservaId)
+            });
+        });
+
+        return { message: 'La reserva ha sido actualizada correctamente.' };
+
+    } catch (error) {
+        console.error("Error al gestionar rechazo desde app:", error);
         if (error instanceof HttpsError) {
             throw error;
         }
