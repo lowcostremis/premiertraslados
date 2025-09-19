@@ -695,7 +695,7 @@ function loadAuxData() {
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
     }, err => console.error("Error cargando moviles:", err));
     auxDataListeners.push(movilesUnsubscribe);
-}
+
 
     const zonasUnsubscribe = db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
         const zonaSelect = document.getElementById('zona');
