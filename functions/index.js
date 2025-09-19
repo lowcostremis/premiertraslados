@@ -1,11 +1,14 @@
 // ===================================================================================
 // IMPORTACIONES
 // ===================================================================================
-const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+// <-- 1. MODIFICADO: Cambiamos la importación a la versión v1
+const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const { Client } = require("@googlemaps/google-maps-services-js");
 const algoliasearch = require("algoliasearch");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+
 
 // ===================================================================================
 // INICIALIZACIÓN DE SERVICIOS
@@ -13,6 +16,7 @@ const algoliasearch = require("algoliasearch");
 admin.initializeApp();
 const db = admin.firestore();
 
+// ... (El resto de tus funciones no necesitan cambios, se quedan como están) ...
 // --- INICIALIZACIÓN DIFERIDA (LAZY INITIALIZATION) ---
 let algoliaClient;
 let mapsClient;
@@ -215,15 +219,15 @@ exports.exportarHistorico = onCall(async (request) => {
             const viaje = doc.data();
             const escapeCSV = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
             const fila = [
-                viaje.fecha_turno || 'N/A', 
-                viaje.hora_turno || 'N/A', 
-                viaje.hora_pickup || 'N/A', 
-                escapeCSV(viaje.nombre_pasajero), 
-                escapeCSV(viaje.clienteNombre), 
-                escapeCSV(viaje.origen), 
-                escapeCSV(viaje.destino), 
-                (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A', 
-                viaje.siniestro || 'N/A', 
+                viaje.fecha_turno || 'N/A',
+                viaje.hora_turno || 'N/A',
+                viaje.hora_pickup || 'N/A',
+                escapeCSV(viaje.nombre_pasajero),
+                escapeCSV(viaje.clienteNombre),
+                escapeCSV(viaje.origen),
+                escapeCSV(viaje.destino),
+                (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A',
+                viaje.siniestro || 'N/A',
                 viaje.autorizacion || 'N/A'
             ].join(',');
             csvContent += fila + "\n";
@@ -350,3 +354,63 @@ exports.gestionarRechazoDesdeApp = onCall(async (request) => {
         throw new HttpsError('internal', 'Ocurrió un error al procesar la solicitud.', error.message);
     }
 });
+
+
+// ===================================================================================
+// <-- 2. MODIFICADO: Trigger de notificaciones reescrito con sintaxis v1
+// ===================================================================================
+exports.enviarNotificacionNuevoViaje = functions.firestore
+    .document("reservas/{reservaId}")
+    .onUpdate(async (change, context) => {
+        const beforeData = change.before.data();
+        const afterData = change.after.data();
+        const reservaId = context.params.reservaId;
+
+        // La condición clave: se dispara solo cuando un viaje que NO tenía chofer, AHORA sí lo tiene.
+        if (!beforeData.chofer_asignado_id && afterData.chofer_asignado_id) {
+            const choferId = afterData.chofer_asignado_id;
+            
+            // Buscamos el documento del chofer para obtener su token de notificación (fcm_token)
+            const choferDoc = await db.collection('choferes').doc(choferId).get();
+            if (!choferDoc.exists || !choferDoc.data().fcm_token) {
+                console.log(`El chofer ${choferId} no tiene un token de notificación (FCM), no se puede notificar.`);
+                return null;
+            }
+
+            const fcmToken = choferDoc.data().fcm_token;
+
+            // Construimos el mensaje que se enviará al dispositivo
+            const message = {
+                notification: {
+                    title: '¡Nuevo Viaje Asignado!',
+                    body: `Origen: ${afterData.origen || 'N/A'}. Tienes una nueva reserva pendiente.`
+                },
+                android: {
+                  notification: {
+                    sound: 'reserva_sound' // El nombre del archivo de sonido sin extensión
+                  }
+                },
+                apns: { // Configuración para dispositivos Apple
+                  payload: {
+                    aps: {
+                      sound: 'reserva_sound.aiff' // Apple a menudo requiere la extensión
+                    }
+                  }
+                },
+                token: fcmToken,
+                data: { // Datos extra que la app puede usar al recibir la notificación
+                    reservaId: reservaId,
+                    click_action: 'FLUTTER_NOTIFICATION_CLICK', // Identificador estándar
+                },
+            };
+
+            // Enviamos el mensaje a través de Firebase Cloud Messaging
+            try {
+                await admin.messaging().send(message);
+                console.log(`Notificación de nuevo viaje enviada con éxito al chofer ${choferId}`);
+            } catch (error) {
+                console.error(`Error al enviar notificación al chofer ${choferId}:`, error);
+            }
+        }
+        return null;
+    });
