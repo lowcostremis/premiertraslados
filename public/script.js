@@ -638,7 +638,7 @@ function initApp() {
 
 
 function loadAuxData() {
-    auxDataListeners.forEach(unsubscribe => unsubscribe());
+   auxDataListeners.forEach(unsubscribe => unsubscribe());
     auxDataListeners = [];
 
     const clientesUnsubscribe = db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
@@ -657,18 +657,15 @@ function loadAuxData() {
 
     const choferesUnsubscribe = db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
         choferesCache = [];
-                
-
         snapshot.forEach(doc => {
-            const chofer = { id: doc.id, ...doc.data() };
-            choferesCache.push(chofer);
-            
-          
+            choferesCache.push({ id: doc.id, ...doc.data() });
         });
+        
+        // --- LÓGICA DE ACTUALIZACIÓN ---
+        rebuildMobileSelects(); // Actualiza los menús de móviles
         actualizarFiltroChoferesMapa();
-
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
-        if (map) cargarMarcadoresDeReservas();
+
     }, err => console.error("Error cargando choferes:", err));
     auxDataListeners.push(choferesUnsubscribe);
 
@@ -678,8 +675,8 @@ function loadAuxData() {
         zonaSelect.innerHTML = '<option value="">Seleccionar Zona...</option>';
         zonasCache = [];
         snapshot.forEach(doc => {
+            zonasCache.push({ id: doc.id, ...doc.data() });
             const data = doc.data();
-            zonasCache.push({ id: doc.id, ...data });
             zonaSelect.innerHTML += `<option value="${data.descripcion}">${data.numero} - ${data.descripcion}</option>`;
         });
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
@@ -688,30 +685,37 @@ function loadAuxData() {
 
     const movilesUnsubscribe = db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         movilesCache = [];
-        const movilSelectAdmin = document.querySelector("#form-choferes select[name='movil_actual_id']");
-        const movilSelectModal = document.getElementById('asignar_movil'); 
-
-        if (movilSelectAdmin) movilSelectAdmin.innerHTML = '<option value="">Asignar Móvil...</option>';
-        if (movilSelectModal) movilSelectModal.innerHTML = '<option value="">No asignar móvil aún</option>';
-
         snapshot.forEach(doc => {
-            const movil = { id: doc.id, ...doc.data() };
-            movilesCache.push(movil);
-            const choferDelMovil = choferesCache.find(c => c.movil_actual_id === movil.id);
-            const nombreChofer = choferDelMovil ? ` (${choferDelMovil.nombre})` : ' (Sin chofer)';
-            const optionHTML = `<option value="${movil.id}">N° ${movil.numero}${nombreChofer}</option>`;
-
-            if (movilSelectAdmin) movilSelectAdmin.innerHTML += optionHTML;
-            if (movilSelectModal) movilSelectModal.innerHTML += optionHTML;
+            movilesCache.push({ id: doc.id, ...doc.data() });
         });
-        
-        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
-        if (map) cargarMarcadoresDeReservas();
 
-        actualizarFiltroChoferesMapa(); 
-        
+        // --- LÓGICA DE ACTUALIZACIÓN ---
+        rebuildMobileSelects(); // Actualiza los menús de móviles
+        actualizarFiltroChoferesMapa();
+        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
+
     }, err => console.error("Error cargando moviles:", err));
     auxDataListeners.push(movilesUnsubscribe);
+}
+function rebuildMobileSelects() {
+    const movilSelectAdmin = document.querySelector("#form-choferes select[name='movil_actual_id']");
+    const movilSelectModal = document.getElementById('asignar_movil');
+
+    if (movilSelectAdmin) movilSelectAdmin.innerHTML = '<option value="">Asignar Móvil...</option>';
+    if (movilSelectModal) movilSelectModal.innerHTML = '<option value="">No asignar móvil aún</option>';
+
+    // Se asegura que los móviles estén ordenados numéricamente
+    const movilesOrdenados = [...movilesCache].sort((a, b) => a.numero - b.numero);
+
+    movilesOrdenados.forEach(movil => {
+        // Buscamos si un chofer tiene este móvil
+        const choferDelMovil = choferesCache.find(c => c.movil_actual_id === movil.id);
+        const nombreChofer = choferDelMovil ? ` (${choferDelMovil.nombre})` : ' (Sin chofer)';
+        const optionHTML = `<option value="${movil.id}">N° ${movil.numero}${nombreChofer}</option>`;
+
+        if (movilSelectAdmin) movilSelectAdmin.innerHTML += optionHTML;
+        if (movilSelectModal) movilSelectModal.innerHTML += optionHTML;
+    });
 }
 
 function actualizarFiltroChoferesMapa() {
