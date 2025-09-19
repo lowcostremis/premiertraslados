@@ -189,13 +189,28 @@ exports.crearUsuario = onCall(async (request) => {
 
 exports.listUsers = onCall(async (request) => {
     try {
-        const listUsersResult = await admin.auth().listUsers(1000);
-        const users = listUsersResult.users.map((userRecord) => {
-            const user = userRecord.toJSON();
-            return { uid: user.uid, email: user.email, nombre: user.displayName };
+         // Obtenemos directamente los documentos de la colección 'users'
+        const usersSnapshot = await db.collection('users').get();
+        if (usersSnapshot.empty) {
+            return { users: [] };
+        }
+
+        // Mapeamos los datos para que tengan el formato que el frontend espera
+        const users = usersSnapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                uid: doc.id, // El ID del documento es el UID del usuario
+                email: data.email || 'N/A',
+                nombre: data.nombre || 'N/A'
+            };
         });
+        
         return { users };
-    } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al listar.'); }
+
+    } catch (error) {
+        console.error("Error al listar usuarios de la colección 'users':", error);
+        throw new HttpsError('internal', 'Ocurrió un error al listar los usuarios.');
+    }
 });
 
 exports.exportarHistorico = onCall(async (request) => {
