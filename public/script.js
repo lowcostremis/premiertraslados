@@ -369,6 +369,12 @@ function renderAllReservas(snapshot) {
             targetTableId = 'tabla-en-curso';
         }
 
+        if (targetTableId === 'tabla-asignados' && filtroChoferAsignadosId) {
+            if (reserva.chofer_asignado_id !== filtroChoferAsignadosId) {
+                return;
+            }
+        }
+
         if (targetTableId === 'tabla-en-curso' && filtroHoras !== null) {
             const horaReferencia = reserva.hora_pickup || reserva.hora_turno;
             if (!reserva.fecha_turno || !horaReferencia) {
@@ -380,7 +386,6 @@ function renderAllReservas(snapshot) {
             const diferenciaMilisegundos = fechaHoraReserva.getTime() - ahora.getTime();
             const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
         
-            // Si la reserva ya pasó o está más allá del filtro, se omite.
             if (horasDiferencia < 0 || horasDiferencia > filtroHoras) {
                 return;
             }
@@ -398,7 +403,6 @@ function renderFilaReserva(tbody, reserva) {
     const estadoPrincipal = (typeof reserva.estado === 'object' && reserva.estado.principal) ? reserva.estado.principal : reserva.estado;
     const estadoDetalle = (typeof reserva.estado === 'object' && reserva.estado.detalle) ? reserva.estado.detalle : '---';
 
-    // --- Lógica de estilos de fila ---
     if (reserva.es_exclusivo) {
         row.style.backgroundColor = '#51ED8D';
         row.style.color = '#333';
@@ -431,7 +435,6 @@ function renderFilaReserva(tbody, reserva) {
         movilAsignadoTexto = textoMovil + textoChofer;
     }
     
-    // --- Columna de Estado Combinado ---
     let estadoCombinadoHTML = `<strong>${estadoPrincipal || 'Pendiente'}</strong>`;
     if (estadoDetalle !== '---' && estadoDetalle !== `Estado cambiado a ${estadoPrincipal}`) {
         estadoCombinadoHTML += `<br><small style="color: #777;">${estadoDetalle}</small>`;
@@ -444,7 +447,6 @@ function renderFilaReserva(tbody, reserva) {
     const isAsignable = tbody.parentElement.id === 'tabla-en-curso' || tbody.parentElement.id === 'tabla-pendientes' || tbody.parentElement.id === 'tabla-resultados-busqueda';
     const isAsignado = tbody.parentElement.id === 'tabla-asignados';
     
-    // --- Menú de Acciones ---
     let menuItems = `<a href="#" onclick="openEditReservaModal('${reserva.id || reserva.objectID}'); return false;">Editar</a>`;
     if (isAsignable) {
         let movilesOptions = movilesCache.map(movil => {
@@ -469,7 +471,6 @@ function renderFilaReserva(tbody, reserva) {
             </div>
         </td>`;
 
-    // --- HTML Final de la Fila ---
     row.innerHTML = `
         <td>${reserva.autorizacion || ''}</td>
         <td>${reserva.siniestro || ''}</td>
@@ -559,13 +560,10 @@ auth.onAuthStateChanged(user => {
         auxDataListeners.forEach(unsubscribe => unsubscribe());
         auxDataListeners = [];
         if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
-        // --- AÑADIR ESTAS LÍNEAS ---
-        // Para detener el oyente de choferes y limpiar la variable al cerrar sesión.
         if (unsubscribeChoferes) {
             unsubscribeChoferes();
             unsubscribeChoferes = null;
         }
-        // --- FIN DE LÍNEAS A AÑADIR ---
     }
 });
 
@@ -578,7 +576,6 @@ document.getElementById('login-btn').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
-// --- FUNCIÓN DE INICIALIZACIÓN PRINCIPAL (LLAMADA POR GOOGLE MAPS) ---
 function initApp() {
      if (appInitialized) return; 
     appInitialized = true;
@@ -598,7 +595,6 @@ function initApp() {
             toggleChoferesVisibility(e.target.checked);
         });
     }
-    // escucharUbicacionChoferes(); // <-- ELIMINAR O COMENTAR ESTA LÍNEA
 
     if (refrescoAutomaticoIntervalo) clearInterval(refrescoAutomaticoIntervalo);
     refrescoAutomaticoIntervalo = setInterval(() => {
@@ -664,7 +660,7 @@ function loadAuxData() {
         
         rebuildMobileSelects();
         actualizarFiltroChoferesMapa();
-        actualizarFiltroChoferesAsignados(); // <-- LÍNEA CORREGIDA Y AÑADIDA
+        actualizarFiltroChoferesAsignados();
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);    
     }, err => console.error("Error cargando choferes:", err));
     auxDataListeners.push(choferesUnsubscribe);
@@ -691,60 +687,12 @@ function loadAuxData() {
 
         rebuildMobileSelects();
         actualizarFiltroChoferesMapa();
-        actualizarFiltroChoferesAsignados(); // <-- LÍNEA CORREGIDA Y AÑADIDA
+        actualizarFiltroChoferesAsignados();
         if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
     }, err => console.error("Error cargando moviles:", err));
     auxDataListeners.push(movilesUnsubscribe);
-
-
-    const zonasUnsubscribe = db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
-        const zonaSelect = document.getElementById('zona');
-        if (!zonaSelect) return;
-        zonaSelect.innerHTML = '<option value="">Seleccionar Zona...</option>';
-        zonasCache = [];
-        snapshot.forEach(doc => {
-            zonasCache.push({ id: doc.id, ...doc.data() });
-            const data = doc.data();
-            zonaSelect.innerHTML += `<option value="${data.descripcion}">${data.numero} - ${data.descripcion}</option>`;
-        });
-        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
-    }, err => console.error("Error cargando zonas:", err));
-    auxDataListeners.push(zonasUnsubscribe);
-
-    const movilesUnsubscribe = db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
-        movilesCache = [];
-        snapshot.forEach(doc => {
-            movilesCache.push({ id: doc.id, ...doc.data() });
-        });
-
-        // --- LÓGICA DE ACTUALIZACIÓN ---
-        rebuildMobileSelects(); // Actualiza los menús de móviles
-        actualizarFiltroChoferesMapa();
-        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
-
-    }, err => console.error("Error cargando moviles:", err));
-    auxDataListeners.push(movilesUnsubscribe);
 }
-function rebuildMobileSelects() {
-    const movilSelectAdmin = document.querySelector("#form-choferes select[name='movil_actual_id']");
-    const movilSelectModal = document.getElementById('asignar_movil');
 
-    if (movilSelectAdmin) movilSelectAdmin.innerHTML = '<option value="">Asignar Móvil...</option>';
-    if (movilSelectModal) movilSelectModal.innerHTML = '<option value="">No asignar móvil aún</option>';
-
-    // Se asegura que los móviles estén ordenados numéricamente
-    const movilesOrdenados = [...movilesCache].sort((a, b) => a.numero - b.numero);
-
-    movilesOrdenados.forEach(movil => {
-        // Buscamos si un chofer tiene este móvil
-        const choferDelMovil = choferesCache.find(c => c.movil_actual_id === movil.id);
-        const nombreChofer = choferDelMovil ? ` (${choferDelMovil.nombre})` : ' (Sin chofer)';
-        const optionHTML = `<option value="${movil.id}">N° ${movil.numero}${nombreChofer}</option>`;
-
-        if (movilSelectAdmin) movilSelectAdmin.innerHTML += optionHTML;
-        if (movilSelectModal) movilSelectModal.innerHTML += optionHTML;
-    });
-}
 function actualizarFiltroChoferesAsignados() {
     const choferSelect = document.getElementById('filtro-chofer-asignados');
     if (!choferSelect) return;
@@ -765,30 +713,44 @@ function actualizarFiltroChoferesAsignados() {
     choferSelect.value = valorSeleccionado;
 }
 
-// --- FUNCIÓN NUEVA QUE SE EJECUTA AL CAMBIAR LA SELECCIÓN ---
 function filtrarReservasAsignadasPorChofer(choferId) {
-    // Guardamos el ID del chofer seleccionado en nuestra variable global
     filtroChoferAsignadosId = choferId || null;
-    // Volvemos a renderizar toda la lista de reservas para que el filtro se aplique
     if (lastReservasSnapshot) {
         renderAllReservas(lastReservasSnapshot);
     }
 }
 
+function rebuildMobileSelects() {
+    const movilSelectAdmin = document.querySelector("#form-choferes select[name='movil_actual_id']");
+    const movilSelectModal = document.getElementById('asignar_movil');
+
+    if (movilSelectAdmin) movilSelectAdmin.innerHTML = '<option value="">Asignar Móvil...</option>';
+    if (movilSelectModal) movilSelectModal.innerHTML = '<option value="">No asignar móvil aún</option>';
+
+    const movilesOrdenados = [...movilesCache].sort((a, b) => a.numero - b.numero);
+
+    movilesOrdenados.forEach(movil => {
+        const choferDelMovil = choferesCache.find(c => c.movil_actual_id === movil.id);
+        const nombreChofer = choferDelMovil ? ` (${choferDelMovil.nombre})` : ' (Sin chofer)';
+        const optionHTML = `<option value="${movil.id}">N° ${movil.numero}${nombreChofer}</option>`;
+
+        if (movilSelectAdmin) movilSelectAdmin.innerHTML += optionHTML;
+        if (movilSelectModal) movilSelectModal.innerHTML += optionHTML;
+    });
+}
+
+
 function actualizarFiltroChoferesMapa() {
     const choferSelectMapa = document.getElementById('filtro-chofer-mapa');
-    if (!choferSelectMapa) return; // Si el elemento no existe, no hacemos nada.
+    if (!choferSelectMapa) return;
 
-    // Guardamos el valor seleccionado actualmente para intentar restaurarlo después
     const valorSeleccionado = choferSelectMapa.value;
-
     choferSelectMapa.innerHTML = '<option value="">Ver todos los móviles</option>';
 
     choferesCache.forEach(chofer => {
-        // Solo añadimos al menú choferes que tengan un móvil asignado
         if (chofer.movil_actual_id) {
             const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
-            if (movilAsignado) { // Verificamos que el móvil se encontró en el cache
+            if (movilAsignado) {
                 const numeroMovil = `Móvil ${movilAsignado.numero}`;
                 const optionHTML = `<option value="${chofer.id}">${numeroMovil} - ${chofer.nombre}</option>`;
                 choferSelectMapa.innerHTML += optionHTML;
@@ -796,7 +758,6 @@ function actualizarFiltroChoferesMapa() {
         }
     });
 
-    // Restauramos la selección anterior si todavía existe en la lista
     choferSelectMapa.value = valorSeleccionado;
 }
 
@@ -1223,13 +1184,8 @@ async function handleSavePasajero(e) {
 async function handleSaveMovil(e) { 
      e.preventDefault(); 
     const f = e.target; 
-    
-    // Y reemplaza la siguiente línea:
-    // const d = {numero: f.numero.value, ... }; 
-    
-    // Por esta versión corregida:
     const d = {
-        numero: parseInt(f.numero.value, 10), // <-- LÍNEA CORREGIDA
+        numero: parseInt(f.numero.value, 10),
         patente: f.patente.value,
         marca: f.marca.value,
         modelo: f.modelo.value,
@@ -1239,7 +1195,6 @@ async function handleSaveMovil(e) {
         titular_telefono: f.titular_telefono.value
     };
 
-    // ... el resto de la función no cambia ...
     if(!d.numero||!d.patente){alert("N° y patente son obligatorios.");return} 
     try{
         await db.collection('moviles').add(d);
