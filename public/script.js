@@ -286,6 +286,7 @@ let mapaModal, marcadorOrigenModal, marcadorDestinoModal, geocoder;
 let filtroMapaActual = 'Todos';
 let filtroHorasMapa = null;
 let filtroChoferMapaId = null; 
+let filtroChoferAsignadosId = null; 
 let refrescoAutomaticoIntervalo;
 let marcadoresOrigen = {};
 let marcadoresChoferes = {};
@@ -640,6 +641,7 @@ function initApp() {
 function loadAuxData() {
    auxDataListeners.forEach(unsubscribe => unsubscribe());
     auxDataListeners = [];
+    const choferesUnsubscribe = db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
 
     const clientesUnsubscribe = db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
@@ -664,10 +666,13 @@ function loadAuxData() {
         // --- LÓGICA DE ACTUALIZACIÓN ---
         rebuildMobileSelects(); // Actualiza los menús de móviles
         actualizarFiltroChoferesMapa();
-        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
+        actualizarFiltroChoferesAsignados();
+        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);    
+    
 
-    }, err => console.error("Error cargando choferes:", err));
-    auxDataListeners.push(choferesUnsubscribe);
+        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);
+    }, err => console.error("Error cargando moviles:", err));
+    auxDataListeners.push(movilesUnsubscribe);
 
     const zonasUnsubscribe = db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
         const zonaSelect = document.getElementById('zona');
@@ -716,6 +721,35 @@ function rebuildMobileSelects() {
         if (movilSelectAdmin) movilSelectAdmin.innerHTML += optionHTML;
         if (movilSelectModal) movilSelectModal.innerHTML += optionHTML;
     });
+}
+function actualizarFiltroChoferesAsignados() {
+    const choferSelect = document.getElementById('filtro-chofer-asignados');
+    if (!choferSelect) return;
+
+    const valorSeleccionado = choferSelect.value;
+    choferSelect.innerHTML = '<option value="">Ver todos los móviles</option>';
+
+    choferesCache.forEach(chofer => {
+        if (chofer.movil_actual_id) {
+            const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
+            if (movilAsignado) {
+                const numeroMovil = `Móvil ${movilAsignado.numero}`;
+                const optionHTML = `<option value="${chofer.id}">${numeroMovil} - ${chofer.nombre}</option>`;
+                choferSelect.innerHTML += optionHTML;
+            }
+        }
+    });
+    choferSelect.value = valorSeleccionado;
+}
+
+// --- FUNCIÓN NUEVA QUE SE EJECUTA AL CAMBIAR LA SELECCIÓN ---
+function filtrarReservasAsignadasPorChofer(choferId) {
+    // Guardamos el ID del chofer seleccionado en nuestra variable global
+    filtroChoferAsignadosId = choferId || null;
+    // Volvemos a renderizar toda la lista de reservas para que el filtro se aplique
+    if (lastReservasSnapshot) {
+        renderAllReservas(lastReservasSnapshot);
+    }
 }
 
 function actualizarFiltroChoferesMapa() {

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Gestión de Reservas</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Premier Traslados - Panel de Operador</title>
+    <link rel="stylesheet" href="styles.css">
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -14,7 +14,7 @@
 <body>
 
     <div id="auth-section">
-        <div class="auth-container">
+        <div class="login-container">
             <h2>Iniciar Sesión</h2>
             <input type="email" id="email" placeholder="Correo electrónico">
             <input type="password" id="password" placeholder="Contraseña">
@@ -22,9 +22,9 @@
         </div>
     </div>
 
-    <div id="app-content" style="display:none;">
+    <div id="app-content" style="display: none;">
         <header>
-            <h1>Central de Gestión</h1>
+            <h1>Panel de Operador - Premier Traslados</h1>
             <div class="user-info">
                 <span id="user-email-display"></span>
                 <button id="logout-btn">Cerrar Sesión</button>
@@ -34,205 +34,412 @@
         <nav class="main-nav">
             <button class="tab-link active" onclick="openTab(event, 'Reservas')">Reservas</button>
             <button class="tab-link" onclick="openTab(event, 'Mapa')">Mapa</button>
+            <button class="tab-link" onclick="openTab(event, 'Administracion')">Administración</button>
             <button class="tab-link" onclick="openTab(event, 'Historico')">Histórico</button>
-            <button class="tab-link" onclick="openTab(event, 'Clientes')">Clientes</button>
             <button class="tab-link" onclick="openTab(event, 'Pasajeros')">Pasajeros</button>
-            <button class="tab-link" onclick="openTab(event, 'Choferes')">Choferes</button>
-            <button class="tab-link" onclick="openTab(event, 'Moviles')">Móviles</button>
-            <button class="tab-link" onclick="openTab(event, 'Zonas')">Zonas</button>
-            <button class="tab-link" onclick="openTab(event, 'Admin')">Admin</button>
         </nav>
 
-        <div id="Reservas" class="tab-content">
-            <div class="toolbar"><button id="btn-nueva-reserva" class="btn-primary">+ Nueva Reserva</button></div>
-            
-            <nav class="sub-nav">
-                <button class="sub-tab-btn active" data-tab="en-curso" onclick="showReservasTab('en-curso')">En Curso</button>
-                <button class="sub-tab-btn" data-tab="pendientes" onclick="showReservasTab('pendientes')">Pendientes</button>
-                <button class="sub-tab-btn" data-tab="asignados" onclick="showReservasTab('asignados')">Asignados</button>
-                
-                <div class="time-filters" style="margin-left: auto;">
-                    <button class="map-filter-btn" onclick="filtrarPorHoras(null)">Todas</button>
-                    <button class="map-filter-btn" onclick="filtrarPorHoras(4)">Próximas 4H</button>
-                    <button class="map-filter-btn" onclick="filtrarPorHoras(8)">Próximas 8H</button>
-                    <button class="map-filter-btn" onclick="filtrarPorHoras(12)">Próximas 12H</button>
+        <main>
+            <div id="Reservas" class="tab-content">
+                <div class="reservas-header">
+                    <button id="btn-nueva-reserva">Nueva Reserva</button>
+                    <div class="search-container">
+                        <input type="text" id="busqueda-reservas" placeholder="Buscar pasajero, origen, destino...">
+                    </div>
                 </div>
-            </nav>
 
-            <input type="search" id="busqueda-reservas" class="search-input" placeholder="🔎 Buscar por pasajero, origen, destino, siniestro...">
-            
-            <div id="resultados-busqueda-reservas" style="display:none;" class="table-wrapper">
-                <table id="tabla-resultados-busqueda">
-                    <thead>
-                        <tr>
-                            <th>Autorización</th>
-                            <th>Siniestro</th>
-                            <th>Fecha</th>
-                            <th>Turno</th>
-                            <th>PickUp</th>
-                            <th>Pasajero</th>
-                            <th>Origen</th>
-                            <th>Destino</th>
-                            <th>Cant.</th>
-                            <th>Zona</th>
-                            <th>Cliente</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+                <nav class="sub-nav">
+                    <button class="sub-tab-btn active" onclick="showReservasTab('en-curso')" data-tab="en-curso">En Curso (Próximas 24hs)</button>
+                    <button class="sub-tab-btn" onclick="showReservasTab('pendientes')" data-tab="pendientes">Pendientes (+24hs)</button>
+                    <button class="sub-tab-btn" onclick="showReservasTab('asignados')" data-tab="asignados">Asignados</button>
+                </nav>
+                <div class="time-filters">
+                    <button class="map-filter-btn active" onclick="filtrarPorHoras(null)">Todas</button>
+                    <button class="map-filter-btn" onclick="filtrarPorHoras(4)">Próximas 4hs</button>
+                    <button class="map-filter-btn" onclick="filtrarPorHoras(8)">Próximas 8hs</button>
+                    <button class="map-filter-btn" onclick="filtrarPorHoras(12)">Próximas 12hs</button>
+                </div>
 
-            <div class="reservas-container" id="reservas-en-curso"><div class="table-wrapper"><table id="tabla-en-curso"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
-            <div class="reservas-container" id="reservas-pendientes" style="display:none;"><div class="table-wrapper"><table id="tabla-pendientes"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
-            <div class="reservas-container" id="reservas-asignados" style="display:none;"><div class="table-wrapper"><table id="tabla-asignados"><thead><tr><th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Cliente</th><th>Estado</th><th>Acciones</th></tr></thead><tbody></tbody></table></div></div>
-        </div>
+                <div id="reservas-en-curso" class="reservas-container">
+                    <h2>En Curso (Próximas 24hs)</h2>
+                    <div class="table-container">
+                        <table id="tabla-en-curso">
+                            <thead>
+                                <tr>
+                                    <th>Autorización</th>
+                                    <th>Siniestro</th>
+                                    <th>Fecha</th>
+                                    <th>Hora Turno</th>
+                                    <th>Hora Pickup</th>
+                                    <th>Pasajero</th>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                    <th>Cant.</th>
+                                    <th>Zona</th>
+                                    <th>Cliente</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <div id="Historico" class="tab-content" style="display:none;">
-            <h2>Historial de Viajes</h2>
-            <input type="search" id="search-historial-input" class="search-input" placeholder="🔎 Buscar en historial por cliente, origen, destino...">
-            <div class="export-controls admin-form">
-                <label>Desde:</label><input type="date" id="export-fecha-desde" name="export-fecha-desde">
-                <label>Hasta:</label><input type="date" id="export-fecha-hasta" name="export-fecha-hasta">
-                <select id="export-cliente" name="export-cliente"><option value="">Todos los Clientes</option></select>
-                <button id="btn-exportar-excel" class="btn-primary">Exportar a Excel</button>
-            </div>
-            <div class="table-wrapper" id="contenedor-historico-original">
-                <table id="tabla-historico">
-                    <thead><tr><th>Fecha</th><th>Turno</th><th>PickUp</th><th>Pasajero</th><th>Autorización</th><th>Siniestro</th><th>Cliente</th><th>Origen</th><th>Destino</th><th>Chofer Asignado</th><th>Estado</th></tr></thead>
-                    <tbody id="historial-body"></tbody>
-                </table>
-            </div>
-            <div class="pagination-controls" id="paginacion-historico">
-                <button id="btn-anterior" disabled>Anterior</button>
-                <span id="indicador-pagina">Página 1</span>
-                <button id="btn-siguiente">Siguiente</button>
-            </div>
-        </div>
+                <div id="reservas-pendientes" class="reservas-container" style="display: none;">
+                    <h2>Pendientes (+24hs)</h2>
+                    <div class="table-container">
+                        <table id="tabla-pendientes">
+                             <thead>
+                                <tr>
+                                    <th>Autorización</th>
+                                    <th>Siniestro</th>
+                                    <th>Fecha</th>
+                                    <th>Hora Turno</th>
+                                    <th>Hora Pickup</th>
+                                    <th>Pasajero</th>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                    <th>Cant.</th>
+                                    <th>Zona</th>
+                                    <th>Cliente</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
 
-        <div id="Mapa" class="tab-content" style="display:none;">
-            <!-- --- SECCIÓN MODIFICADA --- -->
-            <div id="map-filters">
-                <button class="map-filter-btn active" onclick="filtrarMapa('Todos')">Todos</button>
-                <button class="map-filter-btn" onclick="filtrarMapa('Pendiente')">Pendientes</button>
-                <button class="map-filter-btn" onclick="filtrarMapa('Asignado')">Asignados</button>
-                <button class="map-filter-btn" onclick="filtrarMapa('En Curso')">En Curso</button>
-        
-                <span class="filter-separator"></span>
-        
-                <button class="map-filter-btn" onclick="filtrarMapaPorHoras(null)">Todas las Horas</button>
-                <button class="map-filter-btn" onclick="filtrarMapaPorHoras(4)">Próximas 4H</button>
-                <button class="map-filter-btn" onclick="filtrarMapaPorHoras(8)">Próximas 8H</button>
-                <button class="map-filter-btn" onclick="filtrarMapaPorHoras(12)">Próximas 12H</button>
-                
-                <span class="filter-separator"></span>
-
-                <!-- Menú desplegable para filtrar por chofer -->
-                <select id="filtro-chofer-mapa" class="map-filter-select" onchange="filtrarMapaPorChofer(this.value)">
-                    <option value="">Ver todos los móviles</option>
-                </select>
-
-                <div class="map-toggle">
-                    <input type="checkbox" id="toggle-choferes" checked>
-                    <label for="toggle-choferes">Mostrar Móviles</label>
+                <div id="reservas-asignados" class="reservas-container" style="display: none;">
+                    <h2>Viajes Asignados</h2>
+                    
+                    <div class="filter-container" style="margin-bottom: 15px; text-align: left;">
+                        <label for="filtro-chofer-asignados" style="margin-right: 10px;">Filtrar por móvil:</label>
+                        <select id="filtro-chofer-asignados" onchange="filtrarReservasAsignadasPorChofer(this.value)"></select>
+                    </div>
+                    <div class="table-container">
+                        <table id="tabla-asignados">
+                             <thead>
+                                <tr>
+                                    <th>Autorización</th>
+                                    <th>Siniestro</th>
+                                    <th>Fecha</th>
+                                    <th>Hora Turno</th>
+                                    <th>Hora Pickup</th>
+                                    <th>Pasajero</th>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                    <th>Cant.</th>
+                                    <th>Zona</th>
+                                    <th>Cliente</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                 <div id="resultados-busqueda-reservas" class="reservas-container" style="display: none;">
+                    <h2>Resultados de Búsqueda</h2>
+                    <div class="table-container">
+                        <table id="tabla-resultados-busqueda">
+                             <thead>
+                                <tr>
+                                    <th>Autorización</th>
+                                    <th>Siniestro</th>
+                                    <th>Fecha</th>
+                                    <th>Hora Turno</th>
+                                    <th>Hora Pickup</th>
+                                    <th>Pasajero</th>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                    <th>Cant.</th>
+                                    <th>Zona</th>
+                                    <th>Cliente</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-            <!-- --- FIN DE LA SECCIÓN MODIFICADA --- -->
-            <div id="map-container"></div>
-        </div>
-        
-        <div id="Clientes" class="tab-content" style="display:none;"><h2>Gestión de Clientes</h2><form id="form-clientes" class="admin-form"><input type="text" name="nombre" placeholder="Nombre de la empresa" required><input type="text" name="cuit" placeholder="CUIT"><input type="text" name="domicilio" placeholder="Domicilio"><input type="text" name="telefono" placeholder="Teléfono"><label for="color_cliente">Color:</label><input type="color" name="color" id="color_cliente" value="#ffffff"><button type="submit">Guardar Cliente</button></form><div id="lista-clientes" class="lista-admin"></div></div>
-        
-        <div id="Pasajeros" class="tab-content" style="display:none;">
-            <h2>Gestión de Pasajeros</h2>
-            <input type="search" id="busqueda-pasajeros" class="search-input" placeholder="🔎 Buscar por nombre, DNI, domicilio...">
-            <form id="form-pasajeros" class="admin-form"><input type="text" name="dni" placeholder="DNI del Pasajero (obligatorio)" required><input type="text" name="nombre_apellido" placeholder="Nombre y Apellido"><input type="text" name="telefono" placeholder="Teléfono"><input type="text" name="domicilio" placeholder="Domicilio Principal"><button type="submit">Guardar Pasajero</button></form>
-            <div id="lista-pasajeros" class="lista-admin"></div>
-            <div class="pagination-controls" id="paginacion-pasajeros">
-                <button id="pasajeros-btn-anterior" disabled>Anterior</button>
-                <span id="pasajeros-indicador-pagina">Página 1</span>
-                <button id="pasajeros-btn-siguiente">Siguiente</button>
+
+            <div id="Mapa" class="tab-content" style="display: none;">
+                <div class="map-controls">
+                    <div class="map-filters">
+                        <button class="map-filter-btn active" onclick="filtrarMapa('Todos')">Todos</button>
+                        <button class="map-filter-btn" onclick="filtrarMapa('En Curso')">En Curso</button>
+                        <button class="map-filter-btn" onclick="filtrarMapa('Asignado')">Asignados</button>
+                        <button class="map-filter-btn" onclick="filtrarMapa('Pendiente')">Pendientes</button>
+                    </div>
+                    <div class="time-filters-map">
+                        <button class="map-filter-btn active" onclick="filtrarMapaPorHoras(null)">24hs</button>
+                        <button class="map-filter-btn" onclick="filtrarMapaPorHoras(4)">4hs</button>
+                        <button class="map-filter-btn" onclick="filtrarMapaPorHoras(8)">8hs</button>
+                        <button class="map-filter-btn" onclick="filtrarMapaPorHoras(12)">12hs</button>
+                    </div>
+                    <div class="chofer-filter">
+                        <select id="filtro-chofer-mapa" onchange="filtrarMapaPorChofer(this.value)">
+                            <option value="">Ver todos los móviles</option>
+                        </select>
+                    </div>
+                    <div class="toggle-switch">
+                        <label for="toggle-choferes">Mostrar Móviles</label>
+                        <input type="checkbox" id="toggle-choferes" checked>
+                    </div>
+                </div>
+                <div id="map-container"></div>
+                <div id="map-context-menu" style="display:none; position:absolute; background-color:white; border:1px solid #ccc; z-index:1000;">
+                    <ul id="map-context-menu-items" style="list-style:none; margin:0; padding:5px;"></ul>
+                </div>
             </div>
-        </div>
-        
-        <div id="Choferes" class="tab-content" style="display:none;">
-            <h2>Gestión de Choferes</h2>
-            <input type="search" id="busqueda-choferes" class="search-input" placeholder="🔎 Buscar por nombre, DNI o email del chofer...">
-            <form id="form-choferes" class="admin-form"><input type="text" name="dni" placeholder="DNI (obligatorio)" required><input type="text" name="nombre" placeholder="Nombre completo (obligatorio)" required><input type="email" name="email" placeholder="Email de acceso (obligatorio)" required><input type="password" name="password" placeholder="Contraseña (mín. 6 caracteres)" required><input type="text" name="domicilio" placeholder="Domicilio"><input type="text" name="telefono" placeholder="Teléfono"><select name="movil_actual_id"><option value="">Asignar Móvil...</option></select><button type="submit">Guardar Chofer</button></form>
-            <div id="lista-choferes" class="lista-admin"></div>
-        </div>
-        
-        <div id="Moviles" class="tab-content" style="display:none;"><h2>Gestión de Móviles</h2><form id="form-moviles" class="admin-form"><input type="text" name="numero" placeholder="N° de Móvil (obligatorio)" required><input type="text" name="patente" placeholder="Patente (obligatorio)" required><input type="text" name="marca" placeholder="Marca"><input type="text" name="modelo" placeholder="Modelo"><input type="number" name="capacidad_pasajeros" placeholder="Capacidad Pasajeros" min="1" max="8"><input type="text" name="titular_nombre" placeholder="Nombre del Titular"><input type="text" name="titular_domicilio" placeholder="Domicilio del Titular"><input type="text" name="titular_telefono" placeholder="Teléfono del Titular"><button type="submit">Guardar Móvil</button></form><div id="lista-moviles" class="lista-admin"></div></div>
-        
-        <div id="Zonas" class="tab-content" style="display:none;"><h2>Gestión de Zonas</h2><form id="form-zonas" class="admin-form"><input type="number" name="numero" placeholder="Número de Zona" required><input type="text" name="descripcion" placeholder="Descripción de la Zona" required><button type="submit">Guardar Zona</button></form><div id="lista-zonas" class="lista-admin"></div></div>
-        
-        <div id="Admin" class="tab-content" style="display:none;">
-            <h2>Gestión de Usuarios</h2>
-            <form id="form-usuarios" class="admin-form"><input type="text" name="nombre" placeholder="Nombre del Usuario" required><input type="email" name="email" placeholder="Email de Login" required><input type="password" name="password" placeholder="Contraseña" required><button type="submit">Crear Usuario</button></form>
-            <div id="lista-usuarios" class="lista-admin"></div>
-        </div>
+            
+            <div id="Administracion" class="tab-content" style="display: none;">
+                <div class="admin-section">
+                    <h2>Clientes</h2>
+                    <form id="form-clientes" class="admin-form">
+                        <input type="text" name="nombre" placeholder="Nombre del Cliente" required>
+                        <input type="text" name="cuit" placeholder="CUIT">
+                        <input type="text" name="domicilio" placeholder="Domicilio">
+                        <input type="text" name="telefono" placeholder="Teléfono">
+                        <input type="color" name="color" value="#FFFFFF">
+                        <button type="submit">Guardar Cliente</button>
+                    </form>
+                    <div id="lista-clientes"></div>
+                </div>
+                 <div class="admin-section">
+                    <h2>Choferes</h2>
+                    <form id="form-choferes" class="admin-form">
+                        <input type="text" name="dni" placeholder="DNI (será el ID)" required>
+                        <input type="text" name="nombre" placeholder="Nombre y Apellido" required>
+                        <input type="email" name="email" placeholder="Email de Acceso" required>
+                        <input type="password" name="password" placeholder="Contraseña Inicial" required>
+                        <input type="text" name="domicilio" placeholder="Domicilio">
+                        <input type="text" name="telefono" placeholder="Teléfono">
+                        <select name="movil_actual_id">
+                            <option value="">Asignar Móvil...</option>
+                        </select>
+                        <button type="submit">Crear Chofer</button>
+                    </form>
+                    <input type="text" id="busqueda-choferes" placeholder="Buscar chofer por nombre o DNI...">
+                    <div id="lista-choferes"></div>
+                </div>
+                <div class="admin-section">
+                    <h2>Móviles</h2>
+                    <form id="form-moviles" class="admin-form">
+                        <input type="number" name="numero" placeholder="N° de Móvil" required>
+                        <input type="text" name="patente" placeholder="Patente" required>
+                        <input type="text" name="marca" placeholder="Marca">
+                        <input type="text" name="modelo" placeholder="Modelo">
+                        <input type="number" name="capacidad_pasajeros" placeholder="Capacidad Pasajeros" value="4">
+                        <input type="text" name="titular_nombre" placeholder="Nombre del Titular">
+                        <input type="text" name="titular_domicilio" placeholder="Domicilio del Titular">
+                        <input type="text" name="titular_telefono" placeholder="Teléfono del Titular">
+                        <button type="submit">Guardar Móvil</button>
+                    </form>
+                    <div id="lista-moviles"></div>
+                </div>
+                <div class="admin-section">
+                    <h2>Usuarios del Sistema</h2>
+                    <form id="form-usuarios" class="admin-form">
+                        <input type="text" name="nombre" placeholder="Nombre de Operador" required>
+                        <input type="email" name="email" placeholder="Email de Acceso" required>
+                        <input type="password" name="password" placeholder="Contraseña" required>
+                        <button type="submit">Crear Usuario</button>
+                    </form>
+                    <div id="lista-usuarios"></div>
+                </div>
+                <div class="admin-section">
+                    <h2>Zonas</h2>
+                     <form id="form-zonas" class="admin-form">
+                        <input type="number" name="numero" placeholder="Número de Zona" required>
+                        <input type="text" name="descripcion" placeholder="Descripción (Ej: Zona Norte)" required>
+                        <button type="submit">Guardar Zona</button>
+                    </form>
+                    <div id="lista-zonas"></div>
+                </div>
+            </div>
+
+             <div id="Historico" class="tab-content" style="display: none;">
+                <h2>Historial de Viajes</h2>
+                 <div class="export-controls">
+                    <input type="date" id="export-fecha-desde">
+                    <input type="date" id="export-fecha-hasta">
+                    <select id="export-cliente"></select>
+                    <button id="btn-exportar-excel">Exportar a Excel</button>
+                </div>
+                <div class="search-container">
+                    <input type="text" id="search-historial-input" placeholder="Buscar en historial (pasajero, cliente, origen, destino...)">
+                </div>
+                <div class="table-container">
+                    <table id="historial-tabla">
+                        <thead>
+                            <tr>
+                                <th>Fecha Turno</th>
+                                <th>Hora Turno</th>
+                                <th>Hora PickUp</th>
+                                <th>Pasajero</th>
+                                <th>Autorización</th>
+                                <th>Siniestro</th>
+                                <th>Cliente</th>
+                                <th>Origen</th>
+                                <th>Destino</th>
+                                <th>Chofer</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historial-body"></tbody>
+                    </table>
+                </div>
+                <div id="paginacion-historico" class="paginacion">
+                    <button id="btn-anterior">Anterior</button>
+                    <span id="indicador-pagina"></span>
+                    <button id="btn-siguiente">Siguiente</button>
+                </div>
+            </div>
+
+            <div id="Pasajeros" class="tab-content" style="display: none;">
+                 <h2>Gestión de Pasajeros</h2>
+                 <div class="admin-section">
+                    <form id="form-pasajeros" class="admin-form">
+                        <input type="text" name="dni" placeholder="DNI del Pasajero" required>
+                        <input type="text" name="nombre_apellido" placeholder="Nombre y Apellido" required>
+                        <input type="text" name="telefono" placeholder="Teléfono">
+                        <input type="text" name="domicilio" placeholder="Agregar un domicilio">
+                        <button type="submit">Guardar Pasajero</button>
+                    </form>
+                </div>
+                <input type="text" id="busqueda-pasajeros" placeholder="Buscar pasajero por nombre o DNI...">
+                <div id="lista-pasajeros"></div>
+                <div id="paginacion-pasajeros" class="paginacion">
+                    <button id="pasajeros-btn-anterior">Anterior</button>
+                    <span id="pasajeros-indicador-pagina"></span>
+                    <button id="pasajeros-btn-siguiente">Siguiente</button>
+                </div>
+            </div>
+        </main>
     </div>
 
     <div id="reserva-modal" class="modal">
         <div class="modal-content">
-            <span class="close-btn">×</span>
+            <span class="close-btn">&times;</span>
             <h2 id="modal-title">Nueva Reserva</h2>
-            <div class="modal-layout">
-                <form id="reserva-form" class="modal-form">
+            <div class="form-map-container">
+                <form id="reserva-form">
                     <input type="hidden" id="reserva-id">
-                    <div class="form-grid">
-                        <select id="cliente" name="cliente" required><option value="Default">Default</option></select>
-                        <input type="text" id="siniestro" name="siniestro" placeholder="N° Siniestro">
-                        <input type="text" id="autorizacion" name="autorizacion" placeholder="N° Autorización">
-                        <input type="text" id="dni_pasajero" name="dni_pasajero" placeholder="DNI Pasajero">
-                        <input type="text" id="nombre_pasajero" name="nombre_pasajero" placeholder="Nombre y Apellido Pasajero">
-                        <input type="tel" id="telefono_pasajero" name="telefono_pasajero" placeholder="Teléfono Pasajero">
-                        <input type="date" id="fecha_turno" name="fecha_turno" required>
-                        <input type="time" id="hora_turno" name="hora_turno" required>
-                        <input type="time" id="hora_pickup" name="hora_pickup" placeholder="Hora PickUp">
-                        <input type="text" id="origen" name="origen" placeholder="Domicilio Origen" required>
-                        <input type="text" id="destino" name="destino" placeholder="Domicilio Destino">
-                        <select id="cantidad_pasajeros" name="cantidad_pasajeros">
-                            <option value="1">1 Pasajero</option><option value="2">2 Pasajeros</option><option value="3">3 Pasajeros</option><option value="4">4 Pasajeros</option>
-                        </select>
-                        <select id="zona" name="zona"><option value="">Seleccionar Zona...</option></select>
-                        
+                     <div class="form-row">
+                        <div class="form-group">
+                            <label for="cliente">Cliente</label>
+                            <select id="cliente" name="cliente"></select>
+                        </div>
+                         <div class="form-group">
+                            <label for="viaje_exclusivo">Viaje Exclusivo</label>
+                            <input type="checkbox" id="viaje_exclusivo" name="viaje_exclusivo">
+                        </div>
+                    </div>
+                     <div class="form-row">
+                        <div class="form-group">
+                            <label for="siniestro">Siniestro</label>
+                            <input type="text" id="siniestro" name="siniestro">
+                        </div>
+                        <div class="form-group">
+                            <label for="autorizacion">Autorización</label>
+                            <input type="text" id="autorizacion" name="autorizacion">
+                        </div>
+                    </div>
+                    <h3>Datos del Pasajero</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dni_pasajero">DNI Pasajero</label>
+                            <input type="text" id="dni_pasajero" name="dni_pasajero">
+                        </div>
+                         <div class="form-group">
+                            <label for="nombre_pasajero">Nombre Pasajero</label>
+                            <input type="text" id="nombre_pasajero" name="nombre_pasajero" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="telefono_pasajero">Teléfono Pasajero</label>
+                            <input type="text" id="telefono_pasajero" name="telefono_pasajero">
+                        </div>
+                    </div>
+                    <h3>Detalles del Viaje</h3>
+                     <div class="form-row">
+                        <div class="form-group">
+                            <label for="fecha_turno">Fecha Turno</label>
+                            <input type="date" id="fecha_turno" name="fecha_turno" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="hora_turno">Hora Turno</label>
+                            <input type="time" id="hora_turno" name="hora_turno" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="hora_pickup">Hora Pickup</label>
+                            <input type="time" id="hora_pickup" name="hora_pickup">
+                        </div>
+                    </div>
+                     <div class="form-row">
+                         <div class="form-group">
+                            <label for="origen">Origen</label>
+                            <input type="text" id="origen" name="origen" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="destino">Destino</label>
+                            <input type="text" id="destino" name="destino" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cantidad_pasajeros">Cantidad Pasajeros</label>
+                            <input type="number" id="cantidad_pasajeros" name="cantidad_pasajeros" value="1" min="1">
+                        </div>
+                        <div class="form-group">
+                            <label for="zona">Zona</label>
+                            <select id="zona" name="zona"></select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="observaciones">Observaciones</label>
+                        <textarea id="observaciones" name="observaciones"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="asignar_movil">Asignar Móvil (Opcional)</label>
                         <select id="asignar_movil" name="asignar_movil">
                             <option value="">No asignar móvil aún</option>
                         </select>
-                        
-                        <div style="display: flex; align-items: center; gap: 10px; grid-column: 1 / -1;">
-                            <input type="checkbox" id="viaje_exclusivo" name="viaje_exclusivo" style="width: auto;">
-                            <label for="viaje_exclusivo" style="margin: 0;">Viaje Exclusivo</label>
-                        </div>
                     </div>
-                    <textarea id="observaciones" name="observaciones" placeholder="Observaciones (máx 100 caracteres)" maxlength="100"></textarea>
-                    <button type="submit" class="btn-primary">Guardar Reserva</button>
+                    <button type="submit">Guardar Reserva</button>
                 </form>
-                <div id="mapa-modal-container" class="modal-map"></div>
+                <div id="mapa-modal-container"></div>
             </div>
         </div>
     </div>
 
-    <div id="edit-modal" class="modal"><div class="modal-content"><span class="close-edit-btn">×</span><h2 id="edit-modal-title">Editar</h2><form id="edit-form"></form></div></div>
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-edit-btn">&times;</span>
+            <h2 id="edit-modal-title">Editar Item</h2>
+            <form id="edit-form"></form>
+        </div>
+    </div>
     
     <div id="reset-password-modal" class="modal">
         <div class="modal-content">
-            <span class="close-reset-password-btn">×</span>
-            <h2>Resetear Contraseña</h2>
-            <p>Chofer: <strong id="reset-chofer-nombre"></strong></p>
-            <form id="reset-password-form" class="admin-form">
-                <input type="hidden" id="reset-chofer-uid" name="reset-chofer-uid">
-                <input type="password" id="nueva-password" name="nueva-password" placeholder="Nueva Contraseña (mín. 6 caracteres)" required>
+            <span class="close-reset-password-btn">&times;</span>
+            <h2>Resetear Contraseña de <span id="reset-chofer-nombre"></span></h2>
+            <form id="reset-password-form">
+                <input type="hidden" id="reset-chofer-uid">
+                <input type="password" id="nueva-password" placeholder="Nueva Contraseña" required>
                 <button type="submit">Actualizar Contraseña</button>
             </form>
         </div>
     </div>
 
-    <div id="map-context-menu" class="context-menu"><ul id="map-context-menu-items"></ul></div>
-
+    <script src="https://maps.googleapis.com/maps/api/js?key=TU_API_KEY_AQUI&libraries=places&callback=initApp" async defer></script>
     <script src="script.js"></script>
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places&callback=initApp" async defer></script>
 </body>
 </html>
