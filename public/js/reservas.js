@@ -667,5 +667,3 @@ function initApp() {
 
     openTab(null, 'Reservas');
 }
-}
-la funcion filtrarPorHoras no la encuentra en main.js
