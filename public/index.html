@@ -85,7 +85,7 @@
                     <h2>Pendientes (+24hs)</h2>
                     <div class="table-container">
                         <table id="tabla-pendientes">
-                             <thead>
+                            <thead>
                                 <tr>
                                     <th>Autorización</th>
                                     <th>Siniestro</th>
@@ -115,7 +115,7 @@
                     </div>
                     <div class="table-container">
                         <table id="tabla-asignados">
-                             <thead>
+                            <thead>
                                 <tr>
                                     <th>Autorización</th>
                                     <th>Siniestro</th>
@@ -140,7 +140,7 @@
                     <h2>Resultados de Búsqueda</h2>
                     <div class="table-container">
                         <table id="tabla-resultados-busqueda">
-                             <thead>
+                            <thead>
                                 <tr>
                                     <th>Autorización</th>
                                     <th>Siniestro</th>
@@ -194,72 +194,94 @@
             </div>
             
             <div id="Administracion" class="tab-content" style="display: none;">
-                <div class="admin-section">
-                    <h2>Clientes</h2>
-                    <form id="form-clientes" class="admin-form">
-                        <input type="text" name="nombre" placeholder="Nombre del Cliente" required>
-                        <input type="text" name="cuit" placeholder="CUIT">
-                        <input type="text" name="domicilio" placeholder="Domicilio">
-                        <input type="text" name="telefono" placeholder="Teléfono">
-                        <input type="color" name="color" value="#FFFFFF">
-                        <button type="submit">Guardar Cliente</button>
-                    </form>
-                    <div id="lista-clientes"></div>
+                <nav class="sub-nav">
+                    <button class="sub-tab-btn active" onclick="openAdminTab(event, 'admin-clientes')">Clientes</button>
+                    <button class="sub-tab-btn" onclick="openAdminTab(event, 'admin-choferes')">Choferes</button>
+                    <button class="sub-tab-btn" onclick="openAdminTab(event, 'admin-moviles')">Móviles</button>
+                    <button class="sub-tab-btn" onclick="openAdminTab(event, 'admin-usuarios')">Usuarios</button>
+                    <button class="sub-tab-btn" onclick="openAdminTab(event, 'admin-zonas')">Zonas</button>
+                </nav>
+
+                <div id="admin-clientes" class="admin-tab-content">
+                    <div class="admin-section">
+                        <h2>Clientes</h2>
+                        <form id="form-clientes" class="admin-form">
+                            <input type="text" name="nombre" placeholder="Nombre del Cliente" required>
+                            <input type="text" name="cuit" placeholder="CUIT">
+                            <input type="text" name="domicilio" placeholder="Domicilio">
+                            <input type="text" name="telefono" placeholder="Teléfono">
+                            <input type="color" name="color" value="#FFFFFF">
+                            <button type="submit">Guardar Cliente</button>
+                        </form>
+                        <div id="lista-clientes"></div>
+                    </div>
                 </div>
-                 <div class="admin-section">
-                    <h2>Choferes</h2>
-                    <form id="form-choferes" class="admin-form">
-                        <input type="text" name="dni" placeholder="DNI (será el ID)" required>
-                        <input type="text" name="nombre" placeholder="Nombre y Apellido" required>
-                        <input type="email" name="email" placeholder="Email de Acceso" required>
-                        <input type="password" name="password" placeholder="Contraseña Inicial" required>
-                        <input type="text" name="domicilio" placeholder="Domicilio">
-                        <input type="text" name="telefono" placeholder="Teléfono">
-                        <select name="movil_actual_id">
-                            <option value="">Asignar Móvil...</option>
-                        </select>
-                        <button type="submit">Crear Chofer</button>
-                    </form>
-                    <input type="text" id="busqueda-choferes" placeholder="Buscar chofer por nombre o DNI...">
-                    <div id="lista-choferes"></div>
+
+                <div id="admin-choferes" class="admin-tab-content" style="display: none;">
+                    <div class="admin-section">
+                        <h2>Choferes</h2>
+                        <form id="form-choferes" class="admin-form">
+                            <input type="text" name="dni" placeholder="DNI (será el ID)" required>
+                            <input type="text" name="nombre" placeholder="Nombre y Apellido" required>
+                            <input type="email" name="email" placeholder="Email de Acceso" required>
+                            <input type="password" name="password" placeholder="Contraseña Inicial" required>
+                            <input type="text" name="domicilio" placeholder="Domicilio">
+                            <input type="text" name="telefono" placeholder="Teléfono">
+                            <select name="movil_actual_id">
+                                <option value="">Asignar Móvil...</option>
+                            </select>
+                            <button type="submit">Crear Chofer</button>
+                        </form>
+                        <input type="text" id="busqueda-choferes" placeholder="Buscar chofer por nombre o DNI...">
+                        <div id="lista-choferes"></div>
+                    </div>
                 </div>
-                <div class="admin-section">
-                    <h2>Móviles</h2>
-                    <form id="form-moviles" class="admin-form">
-                        <input type="number" name="numero" placeholder="N° de Móvil" required>
-                        <input type="text" name="patente" placeholder="Patente" required>
-                        <input type="text" name="marca" placeholder="Marca">
-                        <input type="text" name="modelo" placeholder="Modelo">
-                        <input type="number" name="capacidad_pasajeros" placeholder="Capacidad Pasajeros" value="4">
-                        <input type="text" name="titular_nombre" placeholder="Nombre del Titular">
-                        <input type="text" name="titular_domicilio" placeholder="Domicilio del Titular">
-                        <input type="text" name="titular_telefono" placeholder="Teléfono del Titular">
-                        <button type="submit">Guardar Móvil</button>
-                    </form>
-                    <div id="lista-moviles"></div>
+                
+                <div id="admin-moviles" class="admin-tab-content" style="display: none;">
+                    <div class="admin-section">
+                        <h2>Móviles</h2>
+                        <form id="form-moviles" class="admin-form">
+                            <input type="number" name="numero" placeholder="N° de Móvil" required>
+                            <input type="text" name="patente" placeholder="Patente" required>
+                            <input type="text" name="marca" placeholder="Marca">
+                            <input type="text" name="modelo" placeholder="Modelo">
+                            <input type="number" name="capacidad_pasajeros" placeholder="Capacidad Pasajeros" value="4">
+                            <input type="text" name="titular_nombre" placeholder="Nombre del Titular">
+                            <input type="text" name="titular_domicilio" placeholder="Domicilio del Titular">
+                            <input type="text" name="titular_telefono" placeholder="Teléfono del Titular">
+                            <button type="submit">Guardar Móvil</button>
+                        </form>
+                        <div id="lista-moviles"></div>
+                    </div>
                 </div>
-                <div class="admin-section">
-                    <h2>Usuarios del Sistema</h2>
-                    <form id="form-usuarios" class="admin-form">
-                        <input type="text" name="nombre" placeholder="Nombre de Operador" required>
-                        <input type="email" name="email" placeholder="Email de Acceso" required>
-                        <input type="password" name="password" placeholder="Contraseña" required>
-                        <button type="submit">Crear Usuario</button>
-                    </form>
-                    <div id="lista-usuarios"></div>
+
+                <div id="admin-usuarios" class="admin-tab-content" style="display: none;">
+                    <div class="admin-section">
+                        <h2>Usuarios del Sistema</h2>
+                        <form id="form-usuarios" class="admin-form">
+                            <input type="text" name="nombre" placeholder="Nombre de Operador" required>
+                            <input type="email" name="email" placeholder="Email de Acceso" required>
+                            <input type="password" name="password" placeholder="Contraseña" required>
+                            <button type="submit">Crear Usuario</button>
+                        </form>
+                        <div id="lista-usuarios"></div>
+                    </div>
                 </div>
-                <div class="admin-section">
-                    <h2>Zonas</h2>
-                     <form id="form-zonas" class="admin-form">
-                        <input type="number" name="numero" placeholder="Número de Zona" required>
-                        <input type="text" name="descripcion" placeholder="Descripción (Ej: Zona Norte)" required>
-                        <button type="submit">Guardar Zona</button>
-                    </form>
-                    <div id="lista-zonas"></div>
+
+                <div id="admin-zonas" class="admin-tab-content" style="display: none;">
+                    <div class="admin-section">
+                        <h2>Zonas</h2>
+                        <form id="form-zonas" class="admin-form">
+                            <input type="number" name="numero" placeholder="Número de Zona" required>
+                            <input type="text" name="descripcion" placeholder="Descripción (Ej: Zona Norte)" required>
+                            <button type="submit">Guardar Zona</button>
+                        </form>
+                        <div id="lista-zonas"></div>
+                    </div>
                 </div>
             </div>
 
-             <div id="Historico" class="tab-content" style="display: none;">
+            <div id="Historico" class="tab-content" style="display: none;">
                 <h2>Historial de Viajes</h2>
                  <div class="export-controls">
                     <input type="date" id="export-fecha-desde">
@@ -298,7 +320,7 @@
             </div>
 
             <div id="Pasajeros" class="tab-content" style="display: none;">
-                 <h2>Gestión de Pasajeros</h2>
+                <h2>Gestión de Pasajeros</h2>
                  <div class="admin-section">
                     <form id="form-pasajeros" class="admin-form">
                         <input type="text" name="dni" placeholder="DNI del Pasajero" required>
@@ -319,7 +341,6 @@
         </main>
     </div>
 
-    <!-- Modal para Nueva/Editar Reserva -->
     <div id="reserva-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn">&times;</span>
@@ -328,7 +349,7 @@
                 <form id="reserva-form">
                     <input type="hidden" id="reserva-id">
                      <div class="form-row">
-                        <div class="form-group">
+                         <div class="form-group">
                             <label for="cliente">Cliente</label>
                             <select id="cliente" name="cliente"></select>
                         </div>
@@ -338,7 +359,7 @@
                         </div>
                     </div>
                      <div class="form-row">
-                        <div class="form-group">
+                         <div class="form-group">
                             <label for="siniestro">Siniestro</label>
                             <input type="text" id="siniestro" name="siniestro">
                         </div>
@@ -349,7 +370,7 @@
                     </div>
                     <h3>Datos del Pasajero</h3>
                     <div class="form-row">
-                        <div class="form-group">
+                         <div class="form-group">
                             <label for="dni_pasajero">DNI Pasajero</label>
                             <input type="text" id="dni_pasajero" name="dni_pasajero">
                         </div>
@@ -364,7 +385,7 @@
                     </div>
                     <h3>Detalles del Viaje</h3>
                      <div class="form-row">
-                        <div class="form-group">
+                         <div class="form-group">
                             <label for="fecha_turno">Fecha Turno</label>
                             <input type="date" id="fecha_turno" name="fecha_turno" required>
                         </div>
@@ -378,7 +399,7 @@
                         </div>
                     </div>
                      <div class="form-row">
-                         <div class="form-group">
+                          <div class="form-group">
                             <label for="origen">Origen</label>
                             <input type="text" id="origen" name="origen" required>
                         </div>
@@ -414,7 +435,6 @@
         </div>
     </div>
 
-    <!-- Modal para Editar Items Generales -->
     <div id="edit-modal" class="modal">
         <div class="modal-content">
             <span class="close-edit-btn">&times;</span>
@@ -423,7 +443,6 @@
         </div>
     </div>
     
-    <!-- Modal para Resetear Contraseña -->
     <div id="reset-password-modal" class="modal">
         <div class="modal-content">
             <span class="close-reset-password-btn">&times;</span>
@@ -436,7 +455,6 @@
         </div>
     </div>
 
-    <!-- SCRIPTS MOVIDOS AL FINAL PARA MEJORAR LA CARGA -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -446,4 +464,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-

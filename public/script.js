@@ -62,6 +62,26 @@ async function cargarHistorial() {
     }
 }
 
+function openAdminTab(evt, adminTabName) {
+  // Oculta todos los contenidos de las sub-pestañas de administración
+  const adminTabs = document.querySelectorAll('.admin-tab-content');
+  adminTabs.forEach(tab => {
+    tab.style.display = 'none';
+  });
+
+  // Quita la clase 'active' de todos los botones de la sub-navegación
+  const subTabButtons = document.querySelectorAll('#Administracion .sub-tab-btn');
+  subTabButtons.forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  // Muestra la sub-pestaña seleccionada
+  document.getElementById(adminTabName).style.display = 'block';
+
+  // Añade la clase 'active' al botón que fue presionado
+  evt.currentTarget.classList.add('active');
+}
+
 function mostrarDatosHistorialEnTabla(documentos) {
     if (!historialBody) return;
     historialBody.innerHTML = '';
@@ -793,6 +813,7 @@ function actualizarFiltroChoferesMapa() {
 
     choferSelectMapa.value = valorSeleccionado;
 }
+
 async function openEditReservaModal(reservaId) {
     const doc = await db.collection('reservas').doc(reservaId).get();
     if (!doc.exists) { alert("Error: No se encontró la reserva."); return; }
