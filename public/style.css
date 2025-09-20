@@ -115,7 +115,7 @@ td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #c
 /* --- Modal --- */
 .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
 .modal-content { background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 1000px; border-radius: 8px; }
-.close-btn, .close-edit-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+.close-btn, .close-edit-btn, .close-reset-password-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
 .modal-layout { display: flex; gap: 20px; }
 .modal-form { flex: 1; }
 .modal-map { flex: 1; min-height: 400px; }
@@ -123,6 +123,80 @@ td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #c
 #reserva-form textarea { width: 100%; height: 80px; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
 #edit-form { display: flex; flex-direction: column; gap: 10px; }
 #edit-form input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+
+
+/* --- INICIO: CÓDIGO AÑADIDO PARA EL FORMULARIO DE RESERVA --- */
+.form-map-container {
+    display: flex;
+    gap: 20px; /* Espacio entre el formulario y el mapa */
+}
+
+#reserva-form {
+    flex: 1; /* El formulario ocupa la mitad del espacio */
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Espacio vertical entre las filas del formulario */
+}
+
+#mapa-modal-container {
+    flex: 1; /* El mapa ocupa la otra mitad del espacio */
+    min-height: 500px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px; /* Espacio horizontal entre los campos en una misma fila */
+}
+
+.form-group {
+    flex: 1; /* Cada grupo de campo se expande para ocupar el espacio disponible */
+    display: flex;
+    flex-direction: column;
+    gap: 5px; /* Espacio entre la etiqueta (label) y el campo (input) */
+}
+
+#reserva-form label {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+#reserva-form input[type="text"],
+#reserva-form input[type="date"],
+#reserva-form input[type="time"],
+#reserva-form input[type="number"],
+#reserva-form select,
+#reserva-form textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box; /* Asegura que el padding no afecte el ancho total */
+    font-size: 14px;
+}
+
+#reserva-form h3 {
+    margin-top: 10px;
+    margin-bottom: 0;
+    font-size: 16px;
+    color: #1877f2;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+}
+
+#reserva-form button[type="submit"] {
+    background-color: #28a745;
+    color: white;
+    padding: 12px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 10px;
+}
+/* --- FIN: CÓDIGO AÑADIDO PARA EL FORMULARIO DE RESERVA --- */
+
 
 /* --- Menú Contextual del Mapa --- */
 .context-menu {

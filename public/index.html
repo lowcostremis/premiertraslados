@@ -4,12 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Premier Traslados - Panel de Operador</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4.23.3/dist/algoliasearch-lite.umd.js"></script>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -441,7 +436,14 @@
         </div>
     </div>
 
-   <script loading="async" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places&callback=initApp" defer></script>
+    <!-- SCRIPTS MOVIDOS AL FINAL PARA MEJORAR LA CARGA -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4.23.3/dist/algoliasearch-lite.umd.js"></script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places&callback=initApp" defer></script>
     <script src="script.js"></script>
 </body>
 </html>
+

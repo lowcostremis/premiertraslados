@@ -694,22 +694,39 @@ function loadAuxData() {
 }
 
 function actualizarFiltroChoferesAsignados() {
-    const choferSelect = document.getElementById('filtro-chofer-asignados');
+     const choferSelect = document.getElementById('filtro-chofer-asignados');
     if (!choferSelect) return;
 
     const valorSeleccionado = choferSelect.value;
     choferSelect.innerHTML = '<option value="">Ver todos los móviles</option>';
 
-    choferesCache.forEach(chofer => {
-        if (chofer.movil_actual_id) {
-            const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
-            if (movilAsignado) {
-                const numeroMovil = `Móvil ${movilAsignado.numero}`;
-                const optionHTML = `<option value="${chofer.id}">${numeroMovil} - ${chofer.nombre}</option>`;
-                choferSelect.innerHTML += optionHTML;
+    // 1. Crear una lista de móviles con chofer
+    const movilesConChofer = choferesCache
+        .map(chofer => {
+            if (chofer.movil_actual_id) {
+                const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
+                if (movilAsignado) {
+                    return {
+                        choferId: chofer.id,
+                        choferNombre: chofer.nombre,
+                        movilNumero: movilAsignado.numero
+                    };
+                }
             }
-        }
+            return null;
+        })
+        .filter(item => item !== null);
+
+    // 2. Ordenar esa lista por el número de móvil (de menor a mayor)
+    movilesConChofer.sort((a, b) => a.movilNumero - b.movilNumero);
+
+    // 3. Crear las opciones del select a partir de la lista ordenada
+    movilesConChofer.forEach(item => {
+        const numeroMovil = `Móvil ${item.movilNumero}`;
+        const optionHTML = `<option value="${item.choferId}">${numeroMovil} - ${item.choferNombre}</option>`;
+        choferSelect.innerHTML += optionHTML;
     });
+
     choferSelect.value = valorSeleccionado;
 }
 
@@ -741,26 +758,41 @@ function rebuildMobileSelects() {
 
 
 function actualizarFiltroChoferesMapa() {
-    const choferSelectMapa = document.getElementById('filtro-chofer-mapa');
+     const choferSelectMapa = document.getElementById('filtro-chofer-mapa');
     if (!choferSelectMapa) return;
 
     const valorSeleccionado = choferSelectMapa.value;
     choferSelectMapa.innerHTML = '<option value="">Ver todos los móviles</option>';
 
-    choferesCache.forEach(chofer => {
-        if (chofer.movil_actual_id) {
-            const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
-            if (movilAsignado) {
-                const numeroMovil = `Móvil ${movilAsignado.numero}`;
-                const optionHTML = `<option value="${chofer.id}">${numeroMovil} - ${chofer.nombre}</option>`;
-                choferSelectMapa.innerHTML += optionHTML;
+    // 1. Crear una lista de móviles con chofer
+    const movilesConChofer = choferesCache
+        .map(chofer => {
+            if (chofer.movil_actual_id) {
+                const movilAsignado = movilesCache.find(m => m.id === chofer.movil_actual_id);
+                if (movilAsignado) {
+                    return {
+                        choferId: chofer.id,
+                        choferNombre: chofer.nombre,
+                        movilNumero: movilAsignado.numero
+                    };
+                }
             }
-        }
+            return null;
+        })
+        .filter(item => item !== null);
+
+    // 2. Ordenar esa lista por el número de móvil (de menor a mayor)
+    movilesConChofer.sort((a, b) => a.movilNumero - b.movilNumero);
+
+    // 3. Crear las opciones del select a partir de la lista ordenada
+    movilesConChofer.forEach(item => {
+        const numeroMovil = `Móvil ${item.movilNumero}`;
+        const optionHTML = `<option value="${item.choferId}">${numeroMovil} - ${item.choferNombre}</option>`;
+        choferSelectMapa.innerHTML += optionHTML;
     });
 
     choferSelectMapa.value = valorSeleccionado;
 }
-
 async function openEditReservaModal(reservaId) {
     const doc = await db.collection('reservas').doc(reservaId).get();
     if (!doc.exists) { alert("Error: No se encontró la reserva."); return; }
