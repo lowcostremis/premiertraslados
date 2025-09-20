@@ -49,10 +49,10 @@
                     <button class="sub-tab-btn" onclick="showReservasTab('asignados')" data-tab="asignados">Asignados</button>
                 </nav>
                 <div class="time-filters">
-                    <button class="map-filter-btn active" onclick="filtrarPorHoras(null)">Todas</button>
-                    <button class="map-filter-btn" onclick="filtrarPorHoras(4)">Próximas 4hs</button>
-                    <button class="map-filter-btn" onclick="filtrarPorHoras(8)">Próximas 8hs</button>
-                    <button class="map-filter-btn" onclick="filtrarPorHoras(12)">Próximas 12hs</button>
+                    <button class="map-filter-btn active" onclick="window.app.filtrarPorHoras(null)">Todas</button>
+                    <button class="map-filter-btn" onclick="window.app.filtrarPorHoras(4)">Próximas 4hs</button>
+                    <button class="map-filter-btn" onclick="window.app.filtrarPorHoras(8)">Próximas 8hs</button>
+                    <button class="map-filter-btn" onclick="window.app.filtrarPorHoras(12)">Próximas 12hs</button>
                 </div>
 
                 <div id="reservas-en-curso" class="reservas-container">
@@ -111,7 +111,7 @@
                     <h2>Viajes Asignados</h2>
                     <div class="filter-container" style="margin-bottom: 15px; text-align: left;">
                         <label for="filtro-chofer-asignados" style="margin-right: 10px;">Filtrar por móvil:</label>
-                        <select id="filtro-chofer-asignados" onchange="filtrarReservasAsignadasPorChofer(this.value)"></select>
+                        <select id="filtro-chofer-asignados" onchange="window.app.filtrarReservasAsignadasPorChofer(this.value)"></select>
                     </div>
                     <div class="table-container">
                         <table id="tabla-asignados">
@@ -166,19 +166,19 @@
             <div id="Mapa" class="tab-content" style="display: none;">
                 <div class="map-controls">
                     <div class="map-filters">
-                        <button class="map-filter-btn active" onclick="filtrarMapa('Todos')">Todos</button>
-                        <button class="map-filter-btn" onclick="filtrarMapa('En Curso')">En Curso</button>
-                        <button class="map-filter-btn" onclick="filtrarMapa('Asignado')">Asignados</button>
-                        <button class="map-filter-btn" onclick="filtrarMapa('Pendiente')">Pendientes</button>
+                        <button class="map-filter-btn active" onclick="window.app.filtrarMapa('Todos')">Todos</button>
+                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('En Curso')">En Curso</button>
+                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('Asignado')">Asignados</button>
+                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('Pendiente')">Pendientes</button>
                     </div>
                     <div class="time-filters-map">
-                        <button class="map-filter-btn active" onclick="filtrarMapaPorHoras(null)">24hs</button>
-                        <button class="map-filter-btn" onclick="filtrarMapaPorHoras(4)">4hs</button>
-                        <button class="map-filter-btn" onclick="filtrarMapaPorHoras(8)">8hs</button>
-                        <button class="map-filter-btn" onclick="filtrarMapaPorHoras(12)">12hs</button>
+                        <button class="map-filter-btn active" onclick="window.app.filtrarMapaPorHoras(null)">24hs</button>
+                        <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(4)">4hs</button>
+                        <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(8)">8hs</button>
+                        <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(12)">12hs</button>
                     </div>
                     <div class="chofer-filter">
-                        <select id="filtro-chofer-mapa" onchange="filtrarMapaPorChofer(this.value)">
+                        <select id="filtro-chofer-mapa" onchange="window.app.filtrarMapaPorChofer(this.value)">
                             <option value="">Ver todos los móviles</option>
                         </select>
                     </div>
@@ -460,7 +460,8 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4.23.3/dist/algoliasearch-lite.umd.js"></script>
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places&callback=initApp" defer></script>
-    <script src="script.js"></script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places" defer></script>
+    
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
