@@ -62,26 +62,6 @@ async function cargarHistorial() {
     }
 }
 
-function openAdminTab(evt, adminTabName) {
-  // Oculta todos los contenidos de las sub-pestañas de administración
-  const adminTabs = document.querySelectorAll('.admin-tab-content');
-  adminTabs.forEach(tab => {
-    tab.style.display = 'none';
-  });
-
-  // Quita la clase 'active' de todos los botones de la sub-navegación
-  const subTabButtons = document.querySelectorAll('#Administracion .sub-tab-btn');
-  subTabButtons.forEach(btn => {
-    btn.classList.remove('active');
-  });
-
-  // Muestra la sub-pestaña seleccionada
-  document.getElementById(adminTabName).style.display = 'block';
-
-  // Añade la clase 'active' al botón que fue presionado
-  evt.currentTarget.classList.add('active');
-}
-
 function mostrarDatosHistorialEnTabla(documentos) {
     if (!historialBody) return;
     historialBody.innerHTML = '';
@@ -370,7 +350,7 @@ function renderAllReservas(snapshot) {
         const dateTimeB = new Date(`${fechaB}T${horaB}`);
         return dateTimeA - dateTimeB; 
     });
-   
+    
     const ahora = new Date();
     const limite24hs = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
 
@@ -597,7 +577,7 @@ document.getElementById('login-btn').addEventListener('click', () => {
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
 function initApp() {
-     if (appInitialized) return; 
+   if (appInitialized) return; 
     appInitialized = true;
 
     loadAuxData();
@@ -681,7 +661,7 @@ function loadAuxData() {
         rebuildMobileSelects();
         actualizarFiltroChoferesMapa();
         actualizarFiltroChoferesAsignados();
-        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);    
+        if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot);  
     }, err => console.error("Error cargando choferes:", err));
     auxDataListeners.push(choferesUnsubscribe);
 
@@ -714,7 +694,7 @@ function loadAuxData() {
 }
 
 function actualizarFiltroChoferesAsignados() {
-     const choferSelect = document.getElementById('filtro-chofer-asignados');
+    const choferSelect = document.getElementById('filtro-chofer-asignados');
     if (!choferSelect) return;
 
     const valorSeleccionado = choferSelect.value;
@@ -778,7 +758,7 @@ function rebuildMobileSelects() {
 
 
 function actualizarFiltroChoferesMapa() {
-     const choferSelectMapa = document.getElementById('filtro-chofer-mapa');
+    const choferSelectMapa = document.getElementById('filtro-chofer-mapa');
     if (!choferSelectMapa) return;
 
     const valorSeleccionado = choferSelectMapa.value;
@@ -1235,7 +1215,7 @@ async function handleSavePasajero(e) {
 }
 
 async function handleSaveMovil(e) { 
-     e.preventDefault(); 
+    e.preventDefault(); 
     const f = e.target; 
     const d = {
         numero: parseInt(f.numero.value, 10),
@@ -1500,7 +1480,7 @@ async function editItem(collection, id) {
 }
 
 async function handleUpdateItem(e) { 
-     e.preventDefault();
+    e.preventDefault();
     const form = e.target;
     const collection = form.dataset.collection;
     const id = form.dataset.id;
@@ -1586,13 +1566,21 @@ async function deleteItem(collection, id, auth_uid = null) {
     }
 }
 
+// ===================================================================================
+// GESTIÓN DE PESTAÑAS (TABS)
+// ===================================================================================
+
 function openTab(evt, tabName) { 
     document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = "none"); 
     document.querySelectorAll('.tab-link').forEach(link => link.classList.remove('active')); 
-    document.getElementById(tabName).style.display = "flex";
+    
+    const tabElement = document.getElementById(tabName);
+    if(tabElement) tabElement.style.display = "block";
+
     const activeLink = evt ? evt.currentTarget : document.querySelector(`.tab-link[onclick*="'${tabName}'"]`); 
     if(activeLink) activeLink.classList.add('active'); 
-     if (tabName === 'Mapa') {
+    
+    if (tabName === 'Mapa') {
         if (!map) {
             initMap();
         }
@@ -1613,6 +1601,38 @@ function openTab(evt, tabName) {
     } 
 }
 
+function showReservasTab(tabName) { 
+    document.querySelectorAll('.reservas-container').forEach(c => c.style.display = 'none'); 
+    document.getElementById(`reservas-${tabName}`).style.display = 'block';
+    document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active')); 
+    document.querySelector(`.sub-tab-btn[data-tab="${tabName}"]`).classList.add('active'); 
+}
+
+function openAdminTab(evt, adminTabName) {
+  // Oculta todos los contenidos de las sub-pestañas de administración
+  const adminTabs = document.querySelectorAll('.admin-tab-content');
+  adminTabs.forEach(tab => {
+    tab.style.display = 'none';
+  });
+
+  // Quita la clase 'active' de todos los botones de la sub-navegación
+  const subTabButtons = document.querySelectorAll('#Administracion .sub-tab-btn');
+  subTabButtons.forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  // Muestra la sub-pestaña seleccionada
+  document.getElementById(adminTabName).style.display = 'block';
+
+  // Añade la clase 'active' al botón que fue presionado
+  evt.currentTarget.classList.add('active');
+}
+
+
+// ===================================================================================
+// LÓGICA DEL MAPA
+// ===================================================================================
+
 function initMap() { 
     const c = document.getElementById("map-container"); 
     if (c && !map) { 
@@ -1622,13 +1642,6 @@ function initMap() {
             cargarMarcadoresDeReservas(); 
         } 
     } 
-}
-
-function showReservasTab(tabName) { 
-    document.querySelectorAll('.reservas-container').forEach(c => c.style.display = 'none'); 
-    document.getElementById(`reservas-${tabName}`).style.display = 'block';
-    document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active')); 
-    document.querySelector(`.sub-tab-btn[data-tab="${tabName}"]`).classList.add('active'); 
 }
 
 function initAutocomplete() { 
@@ -1695,7 +1708,7 @@ function crearIconoDeChofer(colorFondo, textoPrincipal) {
 }
 
 function toggleChoferesVisibility(mostrar) {
-     for (const choferId in marcadoresChoferes) {
+    for (const choferId in marcadoresChoferes) {
         const marcador = marcadoresChoferes[choferId];
         if (!marcador) continue;
 
