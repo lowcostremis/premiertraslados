@@ -1,7 +1,6 @@
 // ===================================================================================
 // IMPORTACIONES
 // ===================================================================================
-// <-- 1. MODIFICADO: Cambiamos la importación a la versión v1
 const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -16,7 +15,6 @@ const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 admin.initializeApp();
 const db = admin.firestore();
 
-// ... (El resto de tus funciones no necesitan cambios, se quedan como están) ...
 // --- INICIALIZACIÓN DIFERIDA (LAZY INITIALIZATION) ---
 let algoliaClient;
 let mapsClient;
@@ -189,24 +187,19 @@ exports.crearUsuario = onCall(async (request) => {
 
 exports.listUsers = onCall(async (request) => {
     try {
-         // Obtenemos directamente los documentos de la colección 'users'
         const usersSnapshot = await db.collection('users').get();
         if (usersSnapshot.empty) {
             return { users: [] };
         }
-
-        // Mapeamos los datos para que tengan el formato que el frontend espera
         const users = usersSnapshot.docs.map(doc => {
             const data = doc.data();
             return {
-                uid: doc.id, // El ID del documento es el UID del usuario
+                uid: doc.id,
                 email: data.email || 'N/A',
                 nombre: data.nombre || 'N/A'
             };
         });
-        
         return { users };
-
     } catch (error) {
         console.error("Error al listar usuarios de la colección 'users':", error);
         throw new HttpsError('internal', 'Ocurrió un error al listar los usuarios.');
@@ -308,7 +301,6 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
     }
 });
 
-// --- FUNCIÓN NUEVA PARA GESTIONAR RECHAZO / NEGATIVO ---
 exports.gestionarRechazoDesdeApp = onCall(async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'El usuario no está autenticado.');
@@ -333,25 +325,33 @@ exports.gestionarRechazoDesdeApp = onCall(async (request) => {
             const choferAsignadoId = reservaData.chofer_asignado_id;
 
             if (choferAsignadoId) {
-                 const choferDoc = await db.collection('choferes').doc(choferAsignadoId).get();
-                 if (!choferDoc.exists || choferDoc.data().auth_uid !== request.auth.uid) {
-                     throw new HttpsError('permission-denied', 'No tienes permiso para modificar este viaje.');
-                 }
+                const choferDoc = await db.collection('choferes').doc(choferAsignadoId).get();
+                if (!choferDoc.exists || choferDoc.data().auth_uid !== request.auth.uid) {
+                    throw new HttpsError('permission-denied', 'No tienes permiso para modificar este viaje.');
+                }
+                
+                // --- INICIO DEL CÓDIGO CORREGIDO ---
+                const choferDocData = choferDoc.data();
+                const nombreChofer = choferDocData.nombre || 'Desconocido';
+
+                const nuevoDetalle = esNegativo 
+                    ? `Traslado negativo (Chofer: ${nombreChofer})` 
+                    : `Rechazado por ${nombreChofer}`;
+
+                transaction.update(reservaRef, {
+                    estado: {
+                        principal: 'En Curso',
+                        detalle: nuevoDetalle,
+                        actualizado_en: admin.firestore.FieldValue.serverTimestamp(),
+                    },
+                    chofer_asignado_id: admin.firestore.FieldValue.delete(),
+                    movil_asignado_id: admin.firestore.FieldValue.delete(),
+                });
+                // --- FIN DEL CÓDIGO CORREGIDO ---
+
             } else {
                  throw new HttpsError('failed-precondition', 'La reserva ya no tiene un chofer asignado.');
             }
-
-            const nuevoDetalle = esNegativo ? 'Traslado negativo' : 'Rechazado desde App';
-
-            transaction.update(reservaRef, {
-                estado: {
-                    principal: 'En Curso',
-                    detalle: nuevoDetalle,
-                    actualizado_en: admin.firestore.FieldValue.serverTimestamp(),
-                },
-                chofer_asignado_id: admin.firestore.FieldValue.delete(),
-                movil_asignado_id: admin.firestore.FieldValue.delete(),
-            });
 
             const choferRef = db.collection('choferes').doc(choferAsignadoId);
             transaction.update(choferRef, {
@@ -372,7 +372,7 @@ exports.gestionarRechazoDesdeApp = onCall(async (request) => {
 
 
 // ===================================================================================
-// <-- 2. MODIFICADO: Trigger de notificaciones reescrito con sintaxis v1
+// TRIGGER DE NOTIFICACIONES (v1)
 // ===================================================================================
 exports.enviarNotificacionNuevoViaje = functions.firestore
     .document("reservas/{reservaId}")
@@ -381,11 +381,9 @@ exports.enviarNotificacionNuevoViaje = functions.firestore
         const afterData = change.after.data();
         const reservaId = context.params.reservaId;
 
-        // La condición clave: se dispara solo cuando un viaje que NO tenía chofer, AHORA sí lo tiene.
         if (!beforeData.chofer_asignado_id && afterData.chofer_asignado_id) {
             const choferId = afterData.chofer_asignado_id;
             
-            // Buscamos el documento del chofer para obtener su token de notificación (fcm_token)
             const choferDoc = await db.collection('choferes').doc(choferId).get();
             if (!choferDoc.exists || !choferDoc.data().fcm_token) {
                 console.log(`El chofer ${choferId} no tiene un token de notificación (FCM), no se puede notificar.`);
@@ -394,7 +392,6 @@ exports.enviarNotificacionNuevoViaje = functions.firestore
 
             const fcmToken = choferDoc.data().fcm_token;
 
-            // Construimos el mensaje que se enviará al dispositivo
             const message = {
                 notification: {
                     title: '¡Nuevo Viaje Asignado!',
@@ -402,24 +399,23 @@ exports.enviarNotificacionNuevoViaje = functions.firestore
                 },
                 android: {
                   notification: {
-                    sound: 'reserva_sound' // El nombre del archivo de sonido sin extensión
+                    sound: 'reserva_sound'
                   }
                 },
-                apns: { // Configuración para dispositivos Apple
+                apns: {
                   payload: {
                     aps: {
-                      sound: 'reserva_sound.aiff' // Apple a menudo requiere la extensión
+                      sound: 'reserva_sound.aiff'
                     }
                   }
                 },
                 token: fcmToken,
-                data: { // Datos extra que la app puede usar al recibir la notificación
+                data: {
                     reservaId: reservaId,
-                    click_action: 'FLUTTER_NOTIFICATION_CLICK', // Identificador estándar
+                    click_action: 'FLUTTER_NOTIFICATION_CLICK',
                 },
             };
 
-            // Enviamos el mensaje a través de Firebase Cloud Messaging
             try {
                 await admin.messaging().send(message);
                 console.log(`Notificación de nuevo viaje enviada con éxito al chofer ${choferId}`);
