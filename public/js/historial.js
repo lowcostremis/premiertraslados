@@ -1,6 +1,7 @@
 // js/historial.js
 
 import { db, historicoSearchIndex } from './firebase-config.js';
+import { functions } from './firebase-config.js'; 
 
 // Variables propias del módulo de historial
 let historialBody, btnAnterior, btnSiguiente, indicadorPagina;
@@ -18,6 +19,58 @@ export function initHistorial(caches) {
     btnAnterior = document.getElementById('btn-anterior');
     btnSiguiente = document.getElementById('btn-siguiente');
     indicadorPagina = document.getElementById('indicador-pagina');
+
+    const clienteSelect = document.getElementById('filtro-cliente-historial');
+    if (clienteSelect) {
+        // Limpiamos por si acaso y añadimos la opción por defecto
+        clienteSelect.innerHTML = '<option value="">Todos los clientes</option>';
+        // Poblamos el select con los clientes del cache
+        for (const clienteId in caches.clientes) {
+            const cliente = caches.clientes[clienteId];
+            clienteSelect.innerHTML += `<option value="${clienteId}">${cliente.nombre}</option>`;
+        }
+    }
+    
+    const btnExportar = document.getElementById('btn-exportar-excel');
+    if (btnExportar) {
+        btnExportar.addEventListener('click', async () => {
+            const fechaDesde = document.getElementById('fecha-desde-historial').value;
+            const fechaHasta = document.getElementById('fecha-hasta-historial').value;
+            const clienteId = document.getElementById('filtro-cliente-historial').value;
+
+            if (!fechaDesde || !fechaHasta) {
+                alert('Por favor, selecciona una fecha de inicio y de fin.');
+                return;
+            }
+
+            btnExportar.textContent = 'Generando...';
+            btnExportar.disabled = true;
+
+            try {
+                const exportarHistorico = functions.httpsCallable('exportarHistorico');
+                const result = await exportarHistorico({ fechaDesde, fechaHasta, clienteId });
+                
+                if (result.data.csvData) {
+                    const blob = new Blob([result.data.csvData], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement("a");
+                    const url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", `historico_${fechaDesde}_al_${fechaHasta}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } else {
+                    alert(result.data.message || 'No se encontraron datos para exportar.');
+                }
+            } catch (error) {
+                console.error("Error al exportar:", error);
+                alert("Error al generar el reporte: " + error.message);
+            } finally {
+                btnExportar.textContent = 'Exportar a Excel';
+                btnExportar.disabled = false;
+            }
+        });
+    }
 
     if (btnSiguiente) {
         btnSiguiente.addEventListener('click', () => {

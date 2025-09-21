@@ -57,7 +57,7 @@
 
                 <div id="reservas-en-curso" class="reservas-container">
                     <h2>En Curso (Próximas 24hs)</h2>
-                    <div class="table-container">
+                    <div class="table-wrapper">
                         <table id="tabla-en-curso">
                             <thead>
                                 <tr>
@@ -83,7 +83,7 @@
 
                 <div id="reservas-pendientes" class="reservas-container" style="display: none;">
                     <h2>Pendientes (+24hs)</h2>
-                    <div class="table-container">
+                    <div class="table-wrapper">
                         <table id="tabla-pendientes">
                             <thead>
                                 <tr>
@@ -113,7 +113,7 @@
                         <label for="filtro-chofer-asignados" style="margin-right: 10px;">Filtrar por móvil:</label>
                         <select id="filtro-chofer-asignados" onchange="window.app.filtrarReservasAsignadasPorChofer(this.value)"></select>
                     </div>
-                    <div class="table-container">
+                    <div class="table-wrapper">
                         <table id="tabla-asignados">
                             <thead>
                                 <tr>
@@ -138,7 +138,7 @@
                 </div>
                  <div id="resultados-busqueda-reservas" class="reservas-container" style="display: none;">
                     <h2>Resultados de Búsqueda</h2>
-                    <div class="table-container">
+                    <div class="table-wrapper">
                         <table id="tabla-resultados-busqueda">
                             <thead>
                                 <tr>
@@ -283,35 +283,22 @@
 
             <div id="Historico" class="tab-content" style="display: none;">
                 <h2>Historial de Viajes</h2>
-                 <div class="export-controls">
-                    <input type="date" id="export-fecha-desde">
-                    <input type="date" id="export-fecha-hasta">
-                    <select id="export-cliente"></select>
+                <div class="toolbar" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                    <input type="date" id="fecha-desde-historial">
+                    <input type="date" id="fecha-hasta-historial">
+                    <select id="filtro-cliente-historial" style="min-width: 200px;">
+                        <option value="">Todos los clientes</option>
+                    </select>
                     <button id="btn-exportar-excel">Exportar a Excel</button>
+                    <input type="text" id="search-historial-input" placeholder="Buscar en historial..." style="flex-grow: 1;">
                 </div>
-                <div class="search-container">
-                    <input type="text" id="search-historial-input" placeholder="Buscar en historial (pasajero, cliente, origen, destino...)">
-                </div>
-                <div class="table-container">
-                    <table id="historial-tabla">
-                        <thead>
-                            <tr>
-                                <th>Fecha Turno</th>
-                                <th>Hora Turno</th>
-                                <th>Hora PickUp</th>
-                                <th>Pasajero</th>
-                                <th>Autorización</th>
-                                <th>Siniestro</th>
-                                <th>Cliente</th>
-                                <th>Origen</th>
-                                <th>Destino</th>
-                                <th>Chofer</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody id="historial-body"></tbody>
+                
+                <div class="table-wrapper">
+                    <table style="display: none;"> <tbody id="historial-body-legacy"></tbody>
                     </table>
+                    <div id="historial-body"></div>
                 </div>
+                
                 <div id="paginacion-historico" class="paginacion">
                     <button id="btn-anterior">Anterior</button>
                     <span id="indicador-pagina"></span>
