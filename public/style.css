@@ -8,66 +8,257 @@ body {
 }
 
 /* --- Layout Principal --- */
-#app-content { display: flex; flex-direction: column; height: 100vh; }
-header { background-color: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; }
-header h1 { margin: 0; font-size: 24px; color: #1877f2; }
-.user-info { display: flex; align-items: center; gap: 15px; }
-.main-nav { background-color: #1877f2; padding: 0 20px; }
-.tab-link { background: none; border: none; color: white; padding: 15px 20px; cursor: pointer; font-size: 16px; transition: background-color 0.2s; }
-.tab-link:hover, .tab-link.active { background-color: #166fe5; }
-.tab-content { padding: 20px;
-   padding: 20px;
-    flex-grow: 1; /* Ocupa el espacio vertical restante del viewport */
-    display: flex;
-    flex-direction: column; /* Apila los elementos (toolbar, tabla) verticalmente */
-    overflow: hidden; /* CRÍTICO: Evita que esta sección tenga su propio scroll */
+#app-content { 
+    display: flex; 
+    flex-direction: column; 
+    height: 100vh; 
 }
-/* --- Autenticación --- */
-#auth-section { display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #1877f2; }
-.auth-container { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); text-align: center; }
-.auth-container input { display: block; width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 5px; }
-.auth-container button { width: 100%; padding: 12px; background-color: #1877f2; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+header { 
+    background-color: #fff; 
+    padding: 10px 20px; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    border-bottom: 1px solid #ddd; 
+}
+header h1 { 
+    margin: 0; 
+    font-size: 24px; 
+    color: #1877f2; 
+}
+.user-info { 
+    display: flex; 
+    align-items: center; 
+    gap: 15px; 
+}
+.main-nav { 
+    background-color: #1877f2; 
+    padding: 0 20px; 
+}
+.tab-link { 
+    background: none; 
+    border: none; 
+    color: white; 
+    padding: 15px 20px; 
+    cursor: pointer; 
+    font-size: 16px; 
+    transition: background-color 0.2s; 
+}
+.tab-link:hover, .tab-link.active { 
+    background-color: #166fe5; 
+}
+.tab-content { 
+    padding: 20px;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
 
-/* --- Tablas de Reservas --- */
-.toolbar { margin-bottom: 15px; }
-.btn-primary { background-color: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 16px; }
-.sub-nav { border-bottom: 2px solid #ddd; margin-bottom: 15px; }
-.sub-tab-btn { background: none; border: none; padding: 10px 15px; font-size: 15px; cursor: pointer; color: #555; border-bottom: 2px solid transparent; }
-.sub-tab-btn.active { color: #1877f2; border-bottom-color: #1877f2; }
-.table-wrapper { overflow: auto; /* Mágico: Gestiona AMBOS scrolls (vertical y horizontal) */
-    flex-grow: 1; /* CRÍTICO: Hace que este contenedor crezca para llenar el espacio disponible */
+/* --- Autenticación --- */
+#auth-section { 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    height: 100vh; 
+    background-color: #1877f2; 
+}
+.auth-container { 
+    background: white; 
+    padding: 40px; 
+    border-radius: 8px; 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+    text-align: center; 
+}
+.auth-container input { 
+    display: block; 
+    width: 100%; 
+    padding: 10px; 
+    margin-bottom: 15px; 
+    border: 1px solid #ddd; 
+    border-radius: 5px; 
+}
+.auth-container button { 
+    width: 100%; 
+    padding: 12px; 
+    background-color: #1877f2; 
+    color: white; 
+    border: none; 
+    border-radius: 5px; 
+    font-size: 16px; 
+    cursor: pointer; 
+}
+
+/* --- Secciones y Barras de Herramientas --- */
+.toolbar { 
+    margin-bottom: 15px; 
+}
+.btn-primary { 
+    background-color: #28a745; 
+    color: white; 
+    border: none; 
+    padding: 10px 15px; 
+    border-radius: 5px; 
+    cursor: pointer; 
+    font-size: 16px; 
+}
+.sub-nav { 
+    border-bottom: 2px solid #ddd; 
+    margin-bottom: 15px; 
+}
+.sub-tab-btn { 
+    background: none; 
+    border: none; 
+    padding: 10px 15px; 
+    font-size: 15px; 
+    cursor: pointer; 
+    color: #555; 
+    border-bottom: 2px solid transparent; 
+}
+.sub-tab-btn.active { 
+    color: #1877f2; 
+    border-bottom-color: #1877f2; 
+}
+.search-input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+/* --- Estilos para Tablas y Contenedores de Tablas --- */
+.table-wrapper { 
+    overflow: auto; 
+    flex-grow: 1; 
     border: 1px solid #e0e0e0;
     border-radius: 5px;
-    /* El padding-bottom que tenías se puede quitar o reducir si lo deseas */
-    padding-bottom: 150px; /* AÑADIDO: Espacio extra al final para los menús */
 }
     
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 10px 5px; /* Reduce el espacio interno (padding) */
-    font-size: 13px; /* Reduce un poco el tamaño de la letra */
-    text-align: left;
-    border-bottom: 1px solid #e0e0e0;
-    white-space: nowrap; }
-th { background-color: #f7f7f7; font-weight: 600; }
-tbody tr:hover { background-color: #f5f5f5; }
-.estado-negativo { background-color: #ffdddd !important; }
-.estado-anulado { background-color: #f0f0f0 !important; color: #888; text-decoration: line-through; }
-td.acciones { text-align: center; }
-td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; }
-.btn-danger { background-color: #dc3545; color: white; }
-.btn-warning { background-color: #ffc107; color: #333; }
-.editable-cell input, .editable-cell select { width: 100%; box-sizing: border-box; }
+/* --- ESTILOS UNIFICADOS PARA TABLAS DE GESTIÓN --- */
 
-/* --- TAREA 2: ESTILOS PARA EL MENÚ DE ACCIONES DESPLEGABLE --- */
-.acciones-dropdown { position: relative; display: inline-block; }
-.icono-tres-puntos { background: none; border: none; font-size: 20px; cursor: pointer; padding: 0 10px; border-radius: 50%; }
-.icono-tres-puntos:hover { background-color: #e0e0e0; }
-.menu-contenido { display: none; position: absolute; background-color: white; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); z-index: 10; border-radius: 5px; right: 0; border: 1px solid #ddd; }
-.menu-contenido a, .menu-contenido button, .menu-contenido select { color: black; padding: 12px 16px; text-decoration: none; display: block; width: 100%; text-align: left; background: none; border: none; margin: 0; border-radius: 0; }
-.menu-contenido a:hover, .menu-contenido button:hover { background-color: #f1f1f1; }
-.menu-contenido.visible { display: block; }
+.table-wrapper table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
 
-/* --- AÑADIDO: ESTILOS PARA PAGINACIÓN Y BÚSQUEDA --- */
+.table-wrapper table th,
+.table-wrapper table td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.table-wrapper table th { 
+    background-color: #f7f7f7; 
+    font-weight: 600; 
+}
+
+.table-wrapper tbody tr:hover { 
+    background-color: #f5f5f5; 
+}
+
+/* --- Anchos de Columna Específicos para cada Tabla --- */
+
+/* Tabla de Pasajeros */
+#lista-pasajeros th:nth-child(1) { width: 15%; } /* DNI */
+#lista-pasajeros th:nth-child(2) { width: 25%; } /* Nombre y Apellido */
+#lista-pasajeros th:nth-child(3) { width: 15%; } /* Teléfono */
+#lista-pasajeros th:nth-child(4) { width: 30%; } /* Domicilios */
+#lista-pasajeros th:nth-child(5) { width: 15%; } /* Acciones */
+
+/* Tabla de Clientes */
+#lista-clientes th:nth-child(1) { width: 35%; } /* Nombre */
+#lista-clientes th:nth-child(2) { width: 25%; } /* CUIT */
+#lista-clientes th:nth-child(3) { width: 25%; } /* Teléfono */
+#lista-clientes th:nth-child(4) { width: 15%; } /* Acciones */
+
+
+/* --- Acciones y Estados en Tablas --- */
+.estado-negativo { 
+    background-color: #ffdddd !important; 
+}
+.estado-anulado { 
+    background-color: #f0f0f0 !important; 
+    color: #888; 
+    text-decoration: line-through; 
+}
+td.acciones { 
+    text-align: center; 
+}
+td button, td select { 
+    padding: 5px 8px; 
+    margin-right: 5px; 
+    border: 1px solid #ccc; 
+    border-radius: 4px; 
+    font-size: 12px; 
+}
+.btn-danger { 
+    background-color: #dc3545; 
+    color: white; 
+}
+.btn-warning { 
+    background-color: #ffc107; 
+    color: #333; 
+}
+.editable-cell input, .editable-cell select { 
+    width: 100%; 
+    box-sizing: border-box; 
+}
+
+/* --- Menú de Acciones Desplegable --- */
+.acciones-dropdown { 
+    position: relative; 
+    display: inline-block; 
+}
+.icono-tres-puntos { 
+    background: none; 
+    border: none; 
+    font-size: 20px; 
+    cursor: pointer; 
+    padding: 0 10px; 
+    border-radius: 50%; 
+}
+.icono-tres-puntos:hover { 
+    background-color: #e0e0e0; 
+}
+.menu-contenido { 
+    display: none; 
+    position: absolute; 
+    background-color: white; 
+    min-width: 160px; 
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); 
+    z-index: 10; 
+    border-radius: 5px; 
+    right: 0; 
+    border: 1px solid #ddd; 
+}
+.menu-contenido a, .menu-contenido button, .menu-contenido select { 
+    color: black; 
+    padding: 12px 16px; 
+    text-decoration: none; 
+    display: block; 
+    width: 100%; 
+    text-align: left; 
+    background: none; 
+    border: none; 
+    margin: 0; 
+    border-radius: 0; 
+}
+.menu-contenido a:hover, .menu-contenido button:hover { 
+    background-color: #f1f1f1; 
+}
+.menu-contenido.visible { 
+    display: block; 
+}
+
+/* --- Paginación --- */
 .pagination-controls {
     display: flex;
     justify-content: center;
@@ -90,101 +281,122 @@ td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #c
     opacity: 0.5;
 }
 
-.search-input {
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 15px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-    font-size: 16px;
-    box-sizing: border-box;
-}
-
 /* --- Pestaña Mapa --- */
-#map-container { width: 100%; height: calc(100vh - 200px); }
-/* --- TAREA 1: ESTILOS PARA LOS FILTROS DEL MAPA --- */
-#map-filters { margin-bottom: 15px; display: flex; gap: 10px; }
-.map-filter-btn { padding: 8px 15px; border: 1px solid #ccc; background-color: #fff; border-radius: 20px; cursor: pointer; transition: all 0.2s; }
-.map-filter-btn.active { background-color: #1877f2; color: white; border-color: #1877f2; }
+#map-container { 
+    width: 100%; 
+    height: calc(100vh - 200px); 
+}
+#map-filters { 
+    margin-bottom: 15px; 
+    display: flex; 
+    gap: 10px; 
+}
+.map-filter-btn { 
+    padding: 8px 15px; 
+    border: 1px solid #ccc; 
+    background-color: #fff; 
+    border-radius: 20px; 
+    cursor: pointer; 
+    transition: all 0.2s; 
+}
+.map-filter-btn.active { 
+    background-color: #1877f2; 
+    color: white; 
+    border-color: #1877f2; 
+}
 
 /* --- Formularios de Admin --- */
-.admin-form { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 5px; }
-.admin-form input, .admin-form select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-.lista-admin { margin-top: 20px; }
-
-/* --- Modal --- */
-.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
-.modal-content { background-color: #fefefe; margin: 5% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 1000px; border-radius: 8px; }
-.close-btn, .close-edit-btn, .close-reset-password-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-.modal-layout { display: flex; gap: 20px; }
-.modal-form { flex: 1; }
-.modal-map { flex: 1; min-height: 400px; }
-.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
-#reserva-form textarea { width: 100%; height: 80px; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-#edit-form { display: flex; flex-direction: column; gap: 10px; }
-#edit-form input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-
-
-/* --- INICIO: CÓDIGO AÑADIDO PARA EL FORMULARIO DE RESERVA --- */
-.form-map-container {
-    display: flex;
-    gap: 20px; /* Espacio entre el formulario y el mapa */
+.admin-form { 
+    display: flex; 
+    flex-wrap: wrap; 
+    gap: 10px; 
+    margin-bottom: 20px; 
+    padding: 15px; 
+    background: #f9f9f9; 
+    border-radius: 5px; 
+}
+.admin-form input, .admin-form select { 
+    padding: 8px; 
+    border: 1px solid #ccc; 
+    border-radius: 4px; 
+}
+.lista-admin { 
+    margin-top: 20px; 
 }
 
-#reserva-form {
-    flex: 1; /* El formulario ocupa la mitad del espacio */
-    display: flex;
-    flex-direction: column;
-    gap: 15px; /* Espacio vertical entre las filas del formulario */
+/* --- Estilos para Modales --- */
+.modal { 
+    display: none; 
+    position: fixed; 
+    z-index: 1000; 
+    left: 0; 
+    top: 0; 
+    width: 100%; 
+    height: 100%; 
+    overflow: auto; 
+    background-color: rgba(0,0,0,0.5); 
+}
+.modal-content { 
+    background-color: #fefefe; 
+    margin: 5% auto; 
+    padding: 20px; 
+    border: 1px solid #888; 
+    width: 80%; 
+    max-width: 1000px; 
+    border-radius: 8px; 
+}
+.close-btn, .close-edit-btn, .close-reset-password-btn { 
+    color: #aaa; 
+    float: right; 
+    font-size: 28px; 
+    font-weight: bold; 
+    cursor: pointer; 
 }
 
-#mapa-modal-container {
-    flex: 1; /* El mapa ocupa la otra mitad del espacio */
-    min-height: 500px;
+/* --- Formularios Dentro de Modales --- */
+.form-map-container, .modal-layout {
+    display: flex;
+    gap: 20px;
+}
+.modal-form, #reserva-form {
+    flex: 1;
+}
+.modal-map, #mapa-modal-container {
+    flex: 1;
+    min-height: 400px;
     border: 1px solid #ddd;
     border-radius: 5px;
 }
-
 .form-row {
     display: flex;
-    gap: 15px; /* Espacio horizontal entre los campos en una misma fila */
+    gap: 15px;
 }
-
 .form-group {
-    flex: 1; /* Cada grupo de campo se expande para ocupar el espacio disponible */
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 5px; /* Espacio entre la etiqueta (label) y el campo (input) */
+    gap: 5px;
 }
-
-#reserva-form label {
+#reserva-form, #edit-form { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 10px; 
+}
+#reserva-form label, #edit-form label {
     font-weight: 600;
     font-size: 13px;
 }
-
-#reserva-form input[type="text"],
-#reserva-form input[type="date"],
-#reserva-form input[type="time"],
-#reserva-form input[type="number"],
-#reserva-form select,
-#reserva-form textarea {
+#reserva-form input, 
+#reserva-form select, 
+#reserva-form textarea,
+#edit-form input {
     width: 100%;
     padding: 8px;
     border: 1px solid #ccc;
     border-radius: 4px;
-    box-sizing: border-box; /* Asegura que el padding no afecte el ancho total */
+    box-sizing: border-box;
     font-size: 14px;
 }
-
-#reserva-form h3 {
-    margin-top: 10px;
-    margin-bottom: 0;
-    font-size: 16px;
-    color: #1877f2;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 5px;
-}
-
 #reserva-form button[type="submit"] {
     background-color: #28a745;
     color: white;
@@ -195,8 +407,6 @@ td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #c
     font-size: 16px;
     margin-top: 10px;
 }
-/* --- FIN: CÓDIGO AÑADIDO PARA EL FORMULARIO DE RESERVA --- */
-
 
 /* --- Menú Contextual del Mapa --- */
 .context-menu {
@@ -209,16 +419,12 @@ td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #c
     min-width: 180px;
     border-radius: 5px;
     padding: 5px 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
-
 .context-menu ul {
     list-style: none;
     margin: 0;
     padding: 0;
 }
-
-/* Estilo para los links y el select dentro del menú */
 .context-menu ul li a, .context-menu ul li select {
     display: block;
     padding: 10px 15px;
@@ -232,13 +438,6 @@ td button, td select { padding: 5px 8px; margin-right: 5px; border: 1px solid #c
     background: none;
     text-align: left;
 }
-
 .context-menu ul li a:hover {
     background-color: #f0f0f0;
-}
-
-.context-menu ul li select {
-    -webkit-appearance: none; /* Quita estilos por defecto en algunos navegadores */
-    -moz-appearance: none;
-    appearance: none;
 }

@@ -172,12 +172,27 @@ export async function handleSaveReserva(e, caches) {
     }
 }
 
-export async function openEditReservaModal(reservaId, initMapaModalCallback) {
+export async function openEditReservaModal(reservaId, caches, initMapaModalCallback) {
     const doc = await db.collection('reservas').doc(reservaId).get();
     if (!doc.exists) { alert("Error: No se encontró la reserva."); return; }
     const data = doc.data();
     const form = document.getElementById('reserva-form');
     form.reset();
+
+    // --- CÓDIGO AÑADIDO PARA POBLAR EL DESPLEGABLE ---
+    const movilSelect = form.asignar_movil;
+    movilSelect.innerHTML = '<option value="">No asignar móvil aún</option>'; // Limpiar y poner opción por defecto
+
+    caches.moviles.forEach(movil => {
+        const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
+        const choferInfo = choferAsignado ? ` - ${choferAsignado.nombre}` : ' - (Sin chofer)';
+        const option = document.createElement('option');
+        option.value = movil.id;
+        option.textContent = `Móvil ${movil.numero}${choferInfo}`;
+        movilSelect.appendChild(option);
+    });
+    // --- FIN DEL CÓDIGO AÑADIDO ---
+
     form.viaje_exclusivo.checked = false;
     form.cantidad_pasajeros.disabled = false;
     form.cliente.value = data.cliente || 'Default';
@@ -194,7 +209,10 @@ export async function openEditReservaModal(reservaId, initMapaModalCallback) {
     form.cantidad_pasajeros.value = data.cantidad_pasajeros || '1';
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
-    form.asignar_movil.value = data.movil_asignado_id || '';
+    
+    // Esta línea ahora seleccionará el valor correcto de la lista ya poblada
+    movilSelect.value = data.movil_asignado_id || '';
+
     if (data.es_exclusivo) {
         form.viaje_exclusivo.checked = true;
         form.cantidad_pasajeros.value = '4';

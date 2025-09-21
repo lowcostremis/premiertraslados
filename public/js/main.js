@@ -189,7 +189,7 @@ function initApp() {
 
     window.app = {
         editItem, deleteItem, openResetPasswordModal,
-        openEditReservaModal: (reservaId) => openEditReservaModal(reservaId, initMapaModal),
+        openEditReservaModal: (reservaId) => openEditReservaModal(reservaId, caches, initMapaModal),
         asignarMovil: (reservaId, movilId) => asignarMovil(reservaId, movilId, caches),
         changeReservaState: (reservaId, newState) => changeReservaState(reservaId, newState, caches),
         finalizarReserva: (reservaId) => finalizarReserva(reservaId, caches),

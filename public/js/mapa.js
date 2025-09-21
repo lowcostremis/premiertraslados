@@ -5,7 +5,7 @@ import { db } from './firebase-config.js';
 // --- VARIABLES INTERNAS DEL MÓDULO ---
 let map, mapaModal, autocompleteOrigen, autocompleteDestino, geocoder;
 let marcadoresOrigen = {}, marcadoresChoferes = {};
-let marcadorOrigenModal, marcadorDestinoModal, infoWindowActiva = null;
+let marcadorOrigenModal, marcadorDestinoModal, infoWindowActiva = null, marcadorDestinoActivo = null;
 let mapContextMenu, mapContextMenuItems;
 let filtroMapaActual = 'Todos', filtroHorasMapa = null, filtroChoferMapaId = null;
 let cachesRef = {}, lastReservasSnapshotRef = null, unsubscribeChoferes = null;
@@ -30,6 +30,13 @@ export function initMapInstance() {
     if (c && !map) {
         map = new google.maps.Map(c, { center: { lat: -32.9566, lng: -60.6577 }, zoom: 12 });
         map.addListener('click', hideMapContextMenu);
+        
+        // Listener para el clic derecho en el mapa
+        map.addListener('rightclick', (event) => {
+            event.domEvent.preventDefault();
+            hideMapContextMenu(); 
+        });
+
         if (lastReservasSnapshotRef()) cargarMarcadoresDeReservas();
     }
 }
@@ -123,6 +130,7 @@ export function cargarMarcadoresDeReservas() {
                 });
                 marker.addListener('rightclick', (event) => {
                     event.domEvent.preventDefault();
+                    
                     hideMapContextMenu();
                     let menuHTML = ''; const rId = r.id;
                     if (e === 'En Curso' || e === 'Pendiente') {
