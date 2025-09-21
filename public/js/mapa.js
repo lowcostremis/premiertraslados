@@ -270,6 +270,6 @@ function actualizarInputDesdeCoordenadas(latLng, tipo) {
     });
 }
 
-function hideMapContextMenu() {
+export function hideMapContextMenu() {
     if (mapContextMenu) mapContextMenu.style.display = 'none';
 }

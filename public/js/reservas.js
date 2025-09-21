@@ -1,6 +1,8 @@
 // js/reservas.js
 
 import { db, functions, reservasSearchIndex } from './firebase-config.js';
+import { hideMapContextMenu } from './mapa.js';
+
 
 // --- FUNCIONES EXPUESTAS (EXPORTADAS) ---
 
@@ -246,6 +248,7 @@ export async function asignarMovil(reservaId, movilId, caches) {
         });
         batch.update(choferRef, { viajes_activos: firebase.firestore.FieldValue.arrayUnion(reservaId) });
         await batch.commit();
+        hideMapContextMenu();
     } catch (err) {
         console.error("Error al asignar móvil:", err);
         alert("Error al asignar el móvil: " + err.message);
@@ -256,6 +259,7 @@ export async function changeReservaState(reservaId, newState, caches) {
     if (['Anulado', 'Negativo'].includes(newState)) {
         if (confirm(`¿Estás seguro de que quieres marcar esta reserva como "${newState}"?`)) {
             await moverReservaAHistorico(reservaId, newState, caches);
+            hideMapContextMenu();
         }
     }
 }
@@ -263,6 +267,7 @@ export async function changeReservaState(reservaId, newState, caches) {
 export async function finalizarReserva(reservaId, caches) {
     if (confirm("¿Marcar esta reserva como finalizada?")) {
         await moverReservaAHistorico(reservaId, 'Finalizado', caches);
+        hideMapContextMenu();
     }
 }
 
@@ -285,6 +290,7 @@ export async function quitarAsignacion(reservaId) {
                 batch.update(choferRef, { viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId) });
             }
             await batch.commit();
+            hideMapContextMenu();
         } catch (error) {
             console.error("Error al quitar asignación:", error);
             alert("Hubo un error al actualizar la reserva.");
