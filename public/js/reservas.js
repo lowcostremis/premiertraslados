@@ -471,6 +471,13 @@ async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
             } else {
                 reservaData.clienteNombre = 'Default';
             }
+            
+            if (reservaData.chofer_asignado_id) {
+                const chofer = caches.choferes.find(c => c.id === reservaData.chofer_asignado_id);
+                if (chofer) {
+                    reservaData.choferNombre = chofer.nombre;
+                }
+            }
 
             if (reservaData.chofer_asignado_id) {
                 const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);

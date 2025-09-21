@@ -277,6 +277,14 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
             const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
             reservaData.clienteNombre = clienteDoc.exists ? (clienteDoc.data().nombre || 'Default') : 'Default';
         }
+
+        if (reservaData.chofer_asignado_id) {
+            const choferDoc = await db.collection('choferes').doc(reservaData.chofer_asignado_id).get();
+            if (choferDoc.exists) {
+                reservaData.choferNombre = choferDoc.data().nombre || 'N/A';
+            }
+        }
+        
         await db.runTransaction(async (transaction) => {
             reservaData.estado = {
                 principal: 'Finalizado',

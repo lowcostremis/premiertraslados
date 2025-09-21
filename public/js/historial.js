@@ -8,18 +8,16 @@ const registrosPorPagina = 100;
 let ultimoDocVisible = null;
 let historialDePaginas = [null];
 let paginaActual = 0;
-let choferesCacheRef; // Referencia al cache de choferes
 
 /**
  * Inicializa el módulo, obteniendo los elementos del DOM y configurando los listeners.
- * @param {Object} caches - Referencia a los caches globales de la app.
+ * @param {Object} caches - Referencia a los caches globales de la app (no se usa directamente aquí pero es buena práctica mantenerlo).
  */
 export function initHistorial(caches) {
     historialBody = document.getElementById('historial-body');
     btnAnterior = document.getElementById('btn-anterior');
     btnSiguiente = document.getElementById('btn-siguiente');
     indicadorPagina = document.getElementById('indicador-pagina');
-    choferesCacheRef = caches.choferes; // Guardamos la referencia
 
     if (btnSiguiente) {
         btnSiguiente.addEventListener('click', () => {
@@ -51,7 +49,7 @@ export function initHistorial(caches) {
 export async function cargarHistorial() {
     if (!historialBody) return;
     try {
-        historialBody.innerHTML = '<tr><td colspan="11">Cargando historial...</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="1">Cargando historial...</td></tr>';
         btnAnterior.disabled = true;
         btnSiguiente.disabled = true;
 
@@ -66,7 +64,7 @@ export async function cargarHistorial() {
         const documentos = querySnapshot.docs;
 
         if (documentos.length === 0 && paginaActual === 0) {
-            historialBody.innerHTML = '<tr><td colspan="11">No hay viajes en el historial.</td></tr>';
+            historialBody.innerHTML = '<tr><td colspan="1">No hay viajes en el historial.</td></tr>';
             actualizarEstadoBotonesPaginacion(0);
             return;
         }
@@ -80,7 +78,7 @@ export async function cargarHistorial() {
 
     } catch (error) {
         console.error("Error al cargar el historial: ", error);
-        historialBody.innerHTML = '<tr><td colspan="11">Error al cargar los datos.</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="1">Error al cargar los datos.</td></tr>';
     }
 }
 
@@ -99,62 +97,69 @@ export async function buscarEnHistorial(texto) {
     }
     try {
         if (paginacionContainer) paginacionContainer.style.display = 'none';
-        historialBody.innerHTML = '<tr><td colspan="11">Buscando...</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="1">Buscando...</td></tr>';
         const { hits } = await historicoSearchIndex.search(texto);
-        mostrarDatosHistorialEnTabla(hits);
+        // Algolia devuelve los datos directamente, no necesitamos llamar a .data()
+        const documentosFormateados = hits.map(hit => ({ ...hit, id: hit.objectID }));
+        mostrarDatosHistorialEnTabla(documentosFormateados);
     } catch (error) {
         console.error("Error buscando en Algolia: ", error);
-        historialBody.innerHTML = '<tr><td colspan="11">Error al realizar la búsqueda.</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="1">Error al realizar la búsqueda.</td></tr>';
         if (paginacionContainer) paginacionContainer.style.display = 'flex';
     }
 }
 
-// --- Funciones Internas (no necesitan 'export') ---
+
+// --- Funciones Internas ---
 
 function mostrarDatosHistorialEnTabla(documentos) {
     if (!historialBody) return;
-    historialBody.innerHTML = '';
+    historialBody.innerHTML = ''; // Limpiamos el contenido anterior
 
     if (documentos.length === 0) {
-        historialBody.innerHTML = '<tr><td colspan="11">No se encontraron viajes con ese criterio.</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="1">No se encontraron viajes con ese criterio.</td></tr>';
         return;
     }
 
     documentos.forEach(item => {
+        // Unificamos el origen de los datos (Firestore o Algolia)
         const viaje = typeof item.data === 'function' ? item.data() : item;
-        const fecha = viaje.fecha_turno ? new Date(viaje.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR', { timeZone: 'UTC' }) : 'N/A';
+        const estado = (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A';
+        const estadoClassName = estado.toLowerCase().replace(/\s+/g, '-');
         
-        let nombreChofer = 'N/A';
-        if (viaje.chofer_asignado_id && choferesCacheRef.length > 0) {
-            const chofer = choferesCacheRef.find(c => c.id === viaje.chofer_asignado_id);
-            if (chofer) {
-                nombreChofer = chofer.nombre;
-            }
-        }
-
-        let estiloFila = '';
-        if (viaje.estado?.principal === 'Negativo') {
-            estiloFila = 'style="background-color: #FFDE59; color: #333;"';
-        } else if (viaje.estado?.principal === 'Anulado') {
-            estiloFila = 'style="text-decoration: line-through;"';
-        }
-
-        const fila = `
-            <tr class="border-b border-gray-700 hover:bg-gray-800" ${estiloFila}>
-                <td>${fecha}</td>
-                <td>${viaje.hora_turno || 'N/A'}</td>
-                <td>${viaje.hora_pickup || 'N/A'}</td>
-                <td>${viaje.nombre_pasajero || 'N/A'}</td>
-                <td>${viaje.autorizacion || 'N/A'}</td>
-                <td>${viaje.siniestro || 'N/A'}</td>
-                <td>${viaje.clienteNombre || 'N/A'}</td>
-                <td>${viaje.origen || 'N/A'}</td>
-                <td>${viaje.destino || 'N/A'}</td>
-                <td>${nombreChofer}</td>
-                <td>${viaje.estado?.principal || viaje.estado || 'N/A'}</td>
+        // Creamos una fila por cada viaje, y dentro una celda que ocupa todo el ancho con la tarjeta.
+        const filaHTML = `
+            <tr>
+                <td colspan="12">
+                    <div class="historial-card">
+                        <div class="card-header">
+                            <div class="card-fecha">
+                                <span>📅 ${viaje.fecha_turno || 'Sin fecha'}</span>
+                                <span>🕒 ${viaje.hora_turno || '--:--'}</span>
+                            </div>
+                            <div class="card-pasajero"><strong>Pasajero:</strong> ${viaje.nombre_pasajero || 'N/A'}</div>
+                            <div class="estado-tag estado-${estadoClassName}">${estado}</div>
+                        </div>
+                        <div class="card-body">
+                            <div class="card-cliente"><strong>Cliente:</strong> ${viaje.clienteNombre || 'N/A'}</div>
+                            <div class="card-chofer"><strong>Chofer:</strong> ${viaje.choferNombre || 'N/A'}</div>
+                        </div>
+                        <div class="card-locations">
+                            <div class="location-group">
+                                <span class="location-label">Origen</span>
+                                <div class="location-address">${viaje.origen || 'N/A'}</div>
+                            </div>
+                            <div class="location-arrow">→</div>
+                            <div class="location-group">
+                                <span class="location-label">Destino</span>
+                                <div class="location-address">${viaje.destino || 'N/A'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </td>
             </tr>
         `;
-        historialBody.innerHTML += fila;
+        historialBody.innerHTML += filaHTML;
     });
 }
 

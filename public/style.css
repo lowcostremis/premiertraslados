@@ -138,6 +138,86 @@ header h1 {
 
     padding-bottom: 150px; 
 }
+
+/* --- ESTILOS PARA LA LISTA DE HISTORIAL --- */
+.historial-lista {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.historial-card {
+    background-color: #fff;
+    border: 1px solid #e0e0e0;
+    border-left: 5px solid #1877f2; /* Color de acento */
+    border-radius: 5px;
+    padding: 15px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.card-fecha {
+    font-size: 13px;
+    color: #555;
+    display: flex;
+    gap: 15px;
+}
+
+.card-pasajero {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.estado-tag {
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.estado-finalizado { background-color: #28a745; } /* Verde */
+.estado-anulado { background-color: #6c757d; } /* Gris */
+.estado-negativo { background-color: #dc3545; } /* Rojo */
+
+.card-body {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 15px;
+    font-size: 14px;
+}
+
+.card-locations {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    background-color: #f9f9f9;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.location-group { flex: 1; }
+.location-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+}
+.location-address {
+    font-size: 13px;
+    color: #333;
+}
+.location-arrow {
+    font-size: 24px;
+    color: #1877f2;
+}
     
 /* --- ESTILOS UNIFICADOS PARA TABLAS DE GESTIÓN --- */
 
