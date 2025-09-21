@@ -3,7 +3,7 @@
 // 1. IMPORTACIONES DE TODOS LOS MÓDULOS
 import { auth, db } from './firebase-config.js';
 import { openTab, showReservasTab, openAdminTab } from './tabs.js';
-import { initHistorial, cargarHistorial } from './historial.js';
+import { initHistorial, cargarHistorial, poblarFiltroClientes } from './historial.js';
 import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
 import { initMapa, initMapInstance, initMapaModal, cargarMarcadoresDeReservas, filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer, escucharUbicacionChoferes } from './mapa.js';
@@ -19,7 +19,6 @@ import {
     updateHoraPickup,
     updateZona,
     handleDniBlur
-    // La importación de 'filtrarPorHoras' ha sido eliminada
 } from './reservas.js';
 
 
@@ -67,11 +66,14 @@ function loadAuxData() {
         const clienteSelect = document.getElementById('cliente');
         caches.clientes = {};
         if (clienteSelect) clienteSelect.innerHTML = '<option value="Default">Default</option>';
+        
         snapshot.forEach(doc => {
             const data = doc.data();
             caches.clientes[doc.id] = data;
             if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
         });
+        
+        poblarFiltroClientes(caches.clientes);
     });
 
     db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
@@ -144,7 +146,6 @@ function filtrarReservasAsignadasPorChofer(choferId) {
     }
 }
 
-// --- FUNCIÓN AÑADIDA AQUÍ ---
 function filtrarPorHoras(horas) {
     filtroHoras = horas;
     document.querySelectorAll('.time-filters .map-filter-btn').forEach(btn => btn.classList.remove('active'));
@@ -161,7 +162,6 @@ function filtrarPorHoras(horas) {
 }
 
 
-// 5. FUNCIÓN DE INICIALIZACIÓN PRINCIPAL
 function initApp() {
     if (appInitialized) return;
     appInitialized = true;
@@ -197,7 +197,7 @@ function initApp() {
         toggleMenu,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer,
-        filtrarPorHoras // La función ahora está definida en este archivo
+        filtrarPorHoras
     };
     
     window.openTab = (event, tabName) => openTab(event, tabName, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });

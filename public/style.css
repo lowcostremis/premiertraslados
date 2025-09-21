@@ -135,21 +135,40 @@ header h1 {
     flex-grow: 1; 
     border: 1px solid #e0e0e0;
     border-radius: 5px;
-
     padding-bottom: 150px; 
+}
+    
+/* --- ESTILOS UNIFICADOS PARA TABLAS DE GESTIÓN --- */
+.table-wrapper table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.table-wrapper table th,
+.table-wrapper table td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.table-wrapper table th { 
+    background-color: #f7f7f7; 
+    font-weight: 600; 
+}
+
+.table-wrapper tbody tr:hover { 
+    background-color: #f5f5f5; 
 }
 
 /* --- ESTILOS PARA LA LISTA DE HISTORIAL --- */
-.historial-lista {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
 .historial-card {
     background-color: #fff;
     border: 1px solid #e0e0e0;
-    border-left: 5px solid #1877f2; /* Color de acento */
+    border-left: 5px solid #1877f2;
     border-radius: 5px;
     padding: 15px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
@@ -159,7 +178,7 @@ header h1 {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 15px;
     padding-bottom: 10px;
     border-bottom: 1px solid #f0f0f0;
 }
@@ -189,22 +208,34 @@ header h1 {
 .estado-negativo { background-color: #dc3545; } /* Rojo */
 
 .card-body {
-    display: flex;
-    gap: 30px;
     margin-bottom: 15px;
+}
+
+.card-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 10px;
+    width: 100%;
+}
+
+.card-detail-item {
     font-size: 14px;
+    background-color: #f9f9f9;
+    padding: 8px;
+    border-radius: 4px;
 }
 
 .card-locations {
     display: flex;
     align-items: center;
     gap: 15px;
-    background-color: #f9f9f9;
+    background-color: #f0f2f5;
     padding: 10px;
     border-radius: 4px;
 }
 
 .location-group { flex: 1; }
+
 .location-label {
     font-size: 11px;
     color: #888;
@@ -218,49 +249,18 @@ header h1 {
     font-size: 24px;
     color: #1877f2;
 }
-    
-/* --- ESTILOS UNIFICADOS PARA TABLAS DE GESTIÓN --- */
-
-.table-wrapper table {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-}
-
-.table-wrapper table th,
-.table-wrapper table td {
-  padding: 10px;
-  text-align: left;
-  border-bottom: 1px solid #ddd;
-  white-space: normal;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-}
-
-.table-wrapper table th { 
-    background-color: #f7f7f7; 
-    font-weight: 600; 
-}
-
-.table-wrapper tbody tr:hover { 
-    background-color: #f5f5f5; 
-}
 
 /* --- Anchos de Columna Específicos para cada Tabla --- */
-
-/* Tabla de Pasajeros */
 #lista-pasajeros th:nth-child(1) { width: 15%; } /* DNI */
 #lista-pasajeros th:nth-child(2) { width: 25%; } /* Nombre y Apellido */
 #lista-pasajeros th:nth-child(3) { width: 15%; } /* Teléfono */
 #lista-pasajeros th:nth-child(4) { width: 30%; } /* Domicilios */
 #lista-pasajeros th:nth-child(5) { width: 15%; } /* Acciones */
 
-/* Tabla de Clientes */
 #lista-clientes th:nth-child(1) { width: 35%; } /* Nombre */
 #lista-clientes th:nth-child(2) { width: 25%; } /* CUIT */
 #lista-clientes th:nth-child(3) { width: 25%; } /* Teléfono */
 #lista-clientes th:nth-child(4) { width: 15%; } /* Acciones */
-
 
 /* --- Acciones y Estados en Tablas --- */
 .estado-negativo { 

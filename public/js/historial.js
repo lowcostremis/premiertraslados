@@ -3,6 +3,23 @@
 import { db, historicoSearchIndex } from './firebase-config.js';
 import { functions } from './firebase-config.js'; 
 
+export function poblarFiltroClientes(clientes) {
+    const clienteSelect = document.getElementById('filtro-cliente-historial');
+    if (!clienteSelect) return;
+
+    // Guardamos el valor que estaba seleccionado, si había uno
+    const valorSeleccionado = clienteSelect.value;
+
+    clienteSelect.innerHTML = '<option value="">Todos los clientes</option>';
+    for (const clienteId in clientes) {
+        const cliente = clientes[clienteId];
+        clienteSelect.innerHTML += `<option value="${clienteId}">${cliente.nombre}</option>`;
+    }
+
+    // Volvemos a establecer el valor que estaba seleccionado
+    clienteSelect.value = valorSeleccionado;
+}
+
 // Variables propias del módulo de historial
 let historialBody, btnAnterior, btnSiguiente, indicadorPagina;
 const registrosPorPagina = 100;
@@ -20,17 +37,7 @@ export function initHistorial(caches) {
     btnSiguiente = document.getElementById('btn-siguiente');
     indicadorPagina = document.getElementById('indicador-pagina');
 
-    const clienteSelect = document.getElementById('filtro-cliente-historial');
-    if (clienteSelect) {
-        // Limpiamos por si acaso y añadimos la opción por defecto
-        clienteSelect.innerHTML = '<option value="">Todos los clientes</option>';
-        // Poblamos el select con los clientes del cache
-        for (const clienteId in caches.clientes) {
-            const cliente = caches.clientes[clienteId];
-            clienteSelect.innerHTML += `<option value="${clienteId}">${cliente.nombre}</option>`;
-        }
-    }
-    
+     
     const btnExportar = document.getElementById('btn-exportar-excel');
     if (btnExportar) {
         btnExportar.addEventListener('click', async () => {
@@ -164,10 +171,9 @@ export async function buscarEnHistorial(texto) {
 
 
 // --- Funciones Internas ---
-
 function mostrarDatosHistorialEnTabla(documentos) {
     if (!historialBody) return;
-    historialBody.innerHTML = ''; // Limpiamos el contenido anterior
+    historialBody.innerHTML = ''; 
 
     if (documentos.length === 0) {
         historialBody.innerHTML = '<tr><td colspan="1">No se encontraron viajes con ese criterio.</td></tr>';
@@ -175,12 +181,10 @@ function mostrarDatosHistorialEnTabla(documentos) {
     }
 
     documentos.forEach(item => {
-        // Unificamos el origen de los datos (Firestore o Algolia)
         const viaje = typeof item.data === 'function' ? item.data() : item;
         const estado = (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A';
         const estadoClassName = estado.toLowerCase().replace(/\s+/g, '-');
         
-        // Creamos una fila por cada viaje, y dentro una celda que ocupa todo el ancho con la tarjeta.
         const filaHTML = `
             <tr>
                 <td colspan="12">
@@ -193,10 +197,17 @@ function mostrarDatosHistorialEnTabla(documentos) {
                             <div class="card-pasajero"><strong>Pasajero:</strong> ${viaje.nombre_pasajero || 'N/A'}</div>
                             <div class="estado-tag estado-${estadoClassName}">${estado}</div>
                         </div>
+                        
                         <div class="card-body">
-                            <div class="card-cliente"><strong>Cliente:</strong> ${viaje.clienteNombre || 'N/A'}</div>
-                            <div class="card-chofer"><strong>Chofer:</strong> ${viaje.choferNombre || 'N/A'}</div>
+                            <div class="card-details-grid">
+                                <div class="card-detail-item"><strong>Cliente:</strong> ${viaje.clienteNombre || 'N/A'}</div>
+                                <div class="card-detail-item"><strong>Chofer:</strong> ${viaje.choferNombre || 'N/A'}</div>
+                                <div class="card-detail-item"><strong>Siniestro:</strong> ${viaje.siniestro || 'N/A'}</div>
+                                <div class="card-detail-item"><strong>Autorización:</strong> ${viaje.autorizacion || 'N/A'}</div>
+                                <div class="card-detail-item"><strong>Tel. Pasajero:</strong> ${viaje.telefono_pasajero || 'N/A'}</div>
+                            </div>
                         </div>
+
                         <div class="card-locations">
                             <div class="location-group">
                                 <span class="location-label">Origen</span>
