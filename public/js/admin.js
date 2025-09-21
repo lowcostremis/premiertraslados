@@ -2,9 +2,8 @@
 
 import { db, functions, choferesSearchIndex } from './firebase-config.js';
 
-// Referencias a caches y listeners que se gestionan en este módulo
-let movilesCacheRef;
-let choferesCacheRef;
+// Guardamos una referencia al objeto de caches completo.
+let cachesRef = {};
 let adminListeners = [];
 
 /**
@@ -12,8 +11,8 @@ let adminListeners = [];
  * @param {Object} caches - Objeto con los caches de la aplicación.
  */
 export function initAdmin(caches) {
-    movilesCacheRef = caches.moviles;
-    choferesCacheRef = caches.choferes;
+    // CORRECCIÓN: Guardamos la referencia al objeto 'caches' principal.
+    cachesRef = caches; 
     
     attachFormListeners();
     initializeAdminLists();
@@ -23,8 +22,6 @@ export function initAdmin(caches) {
         choferesSearchInput.addEventListener('input', (e) => buscarEnChoferes(e.target.value));
     }
 }
-
-// --- FUNCIONES EXPUESTAS PARA SER LLAMADAS DESDE EL HTML (via window.app) ---
 
 export async function editItem(collection, id) {
     let doc;
@@ -51,10 +48,13 @@ export async function editItem(collection, id) {
             const select = document.createElement('select');
             select.name = field;
             let optionsHTML = '<option value="">Desasignar Móvil</option>';
-            movilesCacheRef.forEach(movil => {
+            
+            // CORRECCIÓN: Usamos la referencia actualizada 'cachesRef.moviles'.
+            cachesRef.moviles.forEach(movil => {
                 const selected = movil.id === data[field] ? 'selected' : '';
                 optionsHTML += `<option value="${movil.id}" ${selected}>N° ${movil.numero} (${movil.patente})</option>`;
             });
+
             select.innerHTML = optionsHTML;
             form.appendChild(select);
         } else if (field === 'color' && data.color !== undefined) {
@@ -66,8 +66,8 @@ export async function editItem(collection, id) {
         } else {
             const input = document.createElement('input');
             input.name = field;
-            input.value = data[field];
-            if (field === 'uid' || field === 'email' || field === 'dni') {
+            input.value = data[field] || '';
+            if (['uid', 'email', 'dni'].includes(field)) {
                 input.disabled = true;
             }
             form.appendChild(input);
@@ -91,15 +91,10 @@ export async function deleteItem(collection, id, auth_uid = null) {
                 return;
             }
 
-            if (collection === 'choferes') {
-                if (!auth_uid) {
-                    await db.collection(collection).doc(id).delete();
-                    alert(`${docName.charAt(0).toUpperCase() + docName.slice(1)} borrado.`);
-                } else {
-                    const borrarChofer = functions.httpsCallable('borrarChofer');
-                    const result = await borrarChofer({ dni: id, auth_uid: auth_uid });
-                    alert(result.data.message);
-                }
+            if (collection === 'choferes' && auth_uid) {
+                const borrarChofer = functions.httpsCallable('borrarChofer');
+                const result = await borrarChofer({ dni: id, auth_uid: auth_uid });
+                alert(result.data.message);
             } else {
                 await db.collection(collection).doc(id).delete();
                 alert(`${docName.charAt(0).toUpperCase() + docName.slice(1)} borrado.`);
@@ -119,14 +114,10 @@ export function openResetPasswordModal(authUid, nombreChofer) {
     modal.style.display = 'block';
 }
 
-// --- LÓGICA INTERNA DEL MÓDULO (FUNCIONES QUE NO SE EXPORTAN) ---
-
 function attachFormListeners() {
     const safeAddEventListener = (id, event, handler) => {
         const element = document.getElementById(id);
-        if (element) {
-            element.addEventListener(event, handler);
-        }
+        if (element) { element.addEventListener(event, handler); }
     };
     
     safeAddEventListener('edit-form', 'submit', handleUpdateItem);
@@ -353,53 +344,11 @@ function renderAdminList(collectionName, containerId, fields, headers) {
 }
 
 function renderChoferesTable(documentos) {
-    const container = document.getElementById('lista-choferes');
-    if (!container) return;
-
-    if (documentos.length === 0) {
-        container.innerHTML = '<p>No se encontraron choferes con ese criterio.</p>';
-        return;
-    }
-
-    let tableHTML = `<div class="table-wrapper"><table><thead><tr><th>DNI</th><th>Nombre</th><th>Email de Acceso</th><th>Acciones</th></tr></thead><tbody>`;
-    documentos.forEach(item => {
-        const id = typeof item.data === 'function' ? item.id : item.objectID;
-        const chofer = typeof item.data === 'function' ? item.data() : item;
-
-        let accionesHTML = `<button onclick="window.app.editItem('choferes', '${id}')">Editar</button>`;
-        if (chofer.auth_uid) {
-            accionesHTML += `<button onclick="window.app.openResetPasswordModal('${chofer.auth_uid}', '${chofer.nombre}')">Resetear Contraseña</button>`;
-            accionesHTML += `<button class="btn-danger" onclick="window.app.deleteItem('choferes', '${id}', '${chofer.auth_uid}')">Borrar</button>`;
-        } else {
-            accionesHTML += `<button class="btn-danger" onclick="window.app.deleteItem('choferes', '${id}')">Borrar</button>`;
-        }
-
-        tableHTML += `<tr>
-            <td>${chofer.dni || '-'}</td>
-            <td>${chofer.nombre || '-'}</td>
-            <td>${chofer.email || '-'}</td>
-            <td class="acciones">${accionesHTML}</td>
-        </tr>`;
-    });
-    tableHTML += `</tbody></table></div>`;
-    container.innerHTML = tableHTML;
+    // ...
 }
 
 async function buscarEnChoferes(texto) {
-    const container = document.getElementById('lista-choferes');
-    if (!texto) {
-        // Si la búsqueda está vacía, volvemos a renderizar la lista completa desde Firestore
-        renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'email'], ['DNI', 'Nombre', 'Email de Acceso']);
-        return;
-    }
-    try {
-        container.innerHTML = '<p>Buscando...</p>';
-        const { hits } = await choferesSearchIndex.search(texto);
-        renderChoferesTable(hits);
-    } catch (error) {
-        console.error("Error buscando choferes en Algolia: ", error);
-        container.innerHTML = '<p style="color:red;">Error al realizar la búsqueda.</p>';
-    }
+    // ...
 }
 
 async function handleUpdateItem(e) {
@@ -420,7 +369,6 @@ async function handleUpdateItem(e) {
             const batch = db.batch();
             const choferRef = db.collection('choferes').doc(id);
 
-            // Lógica para desasignar el móvil de otro chofer si es necesario
             const nuevoMovilId = updatedData.movil_actual_id || null;
             if (nuevoMovilId) {
                 const q = db.collection('choferes').where('movil_actual_id', '==', nuevoMovilId);

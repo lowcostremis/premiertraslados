@@ -19,6 +19,7 @@ import {
     updateHoraPickup,
     updateZona,
     handleDniBlur
+    // La importación de 'filtrarPorHoras' ha sido eliminada
 } from './reservas.js';
 
 
@@ -71,7 +72,6 @@ function loadAuxData() {
             caches.clientes[doc.id] = data;
             if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
         });
-        setupExportControls();
     });
 
     db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
@@ -144,9 +144,9 @@ function filtrarReservasAsignadasPorChofer(choferId) {
     }
 }
 
+// --- FUNCIÓN AÑADIDA AQUÍ ---
 function filtrarPorHoras(horas) {
     filtroHoras = horas;
-
     document.querySelectorAll('.time-filters .map-filter-btn').forEach(btn => btn.classList.remove('active'));
     let btnActivo;
     if (horas === null) {
@@ -155,13 +155,11 @@ function filtrarPorHoras(horas) {
         btnActivo = document.querySelector(`.time-filters .map-filter-btn[onclick="window.app.filtrarPorHoras(${horas})"]`);
     }
     if (btnActivo) btnActivo.classList.add('active');
-
     if (lastReservasSnapshot) {
         renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
     }
 }
 
-function setupExportControls() { /* ... Lógica de exportación ... */ }
 
 // 5. FUNCIÓN DE INICIALIZACIÓN PRINCIPAL
 function initApp() {
@@ -173,16 +171,10 @@ function initApp() {
     const nuevaReservaBtn = document.getElementById('btn-nueva-reserva');
     if (nuevaReservaBtn) {
         nuevaReservaBtn.addEventListener('click', () => {
-            const modal = document.getElementById('reserva-modal');
             document.getElementById('reserva-form').reset();
-            document.getElementById('asignar_movil').value = '';
-            document.getElementById('viaje_exclusivo').checked = false;
-            const p = document.getElementById('cantidad_pasajeros');
-            p.value = '1';
-            p.disabled = false;
             document.getElementById('modal-title').textContent = 'Nueva Reserva';
             document.getElementById('reserva-id').value = '';
-            if (modal) modal.style.display = 'block';
+            document.getElementById('reserva-modal').style.display = 'block';
             initMapaModal(null, null);
         });
     }
@@ -205,7 +197,7 @@ function initApp() {
         toggleMenu,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer,
-        filtrarPorHoras
+        filtrarPorHoras // La función ahora está definida en este archivo
     };
     
     window.openTab = (event, tabName) => openTab(event, tabName, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
