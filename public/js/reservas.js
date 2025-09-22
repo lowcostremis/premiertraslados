@@ -3,7 +3,6 @@
 import { db, functions, reservasSearchIndex } from './firebase-config.js';
 import { hideMapContextMenu } from './mapa.js';
 
-
 // --- FUNCIONES EXPUESTAS (EXPORTADAS) ---
 
 export function listenToReservas(onUpdate) {
@@ -114,7 +113,6 @@ export async function buscarEnReservas(texto, caches) {
     }
 }
 
-
 export async function handleSaveReserva(e, caches) {
     e.preventDefault();
     const f = e.target;
@@ -180,11 +178,9 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     const data = doc.data();
     const form = document.getElementById('reserva-form');
     form.reset();
-
-    // --- CÓDIGO AÑADIDO PARA POBLAR EL DESPLEGABLE ---
+    
     const movilSelect = form.asignar_movil;
-    movilSelect.innerHTML = '<option value="">No asignar móvil aún</option>'; // Limpiar y poner opción por defecto
-
+    movilSelect.innerHTML = '<option value="">No asignar móvil aún</option>'; 
     caches.moviles.forEach(movil => {
         const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
         const choferInfo = choferAsignado ? ` - ${choferAsignado.nombre}` : ' - (Sin chofer)';
@@ -193,7 +189,6 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
         option.textContent = `Móvil ${movil.numero}${choferInfo}`;
         movilSelect.appendChild(option);
     });
-    // --- FIN DEL CÓDIGO AÑADIDO ---
 
     form.viaje_exclusivo.checked = false;
     form.cantidad_pasajeros.disabled = false;
@@ -211,10 +206,7 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     form.cantidad_pasajeros.value = data.cantidad_pasajeros || '1';
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
-    
-    // Esta línea ahora seleccionará el valor correcto de la lista ya poblada
     movilSelect.value = data.movil_asignado_id || '';
-
     if (data.es_exclusivo) {
         form.viaje_exclusivo.checked = true;
         form.cantidad_pasajeros.value = '4';
@@ -249,6 +241,7 @@ export async function asignarMovil(reservaId, movilId, caches) {
         batch.update(choferRef, { viajes_activos: firebase.firestore.FieldValue.arrayUnion(reservaId) });
         await batch.commit();
         hideMapContextMenu();
+        window.app.hideTableMenus();
     } catch (err) {
         console.error("Error al asignar móvil:", err);
         alert("Error al asignar el móvil: " + err.message);
@@ -260,6 +253,7 @@ export async function changeReservaState(reservaId, newState, caches) {
         if (confirm(`¿Estás seguro de que quieres marcar esta reserva como "${newState}"?`)) {
             await moverReservaAHistorico(reservaId, newState, caches);
             hideMapContextMenu();
+            window.app.hideTableMenus();
         }
     }
 }
@@ -268,6 +262,7 @@ export async function finalizarReserva(reservaId, caches) {
     if (confirm("¿Marcar esta reserva como finalizada?")) {
         await moverReservaAHistorico(reservaId, 'Finalizado', caches);
         hideMapContextMenu();
+        window.app.hideTableMenus();
     }
 }
 
@@ -291,6 +286,7 @@ export async function quitarAsignacion(reservaId) {
             }
             await batch.commit();
             hideMapContextMenu();
+            window.app.hideTableMenus();
         } catch (error) {
             console.error("Error al quitar asignación:", error);
             alert("Hubo un error al actualizar la reserva.");

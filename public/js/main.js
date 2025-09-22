@@ -101,6 +101,12 @@ function loadAuxData() {
     });
 }
 
+function hideTableMenus() {
+    document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
+        menu.classList.remove('visible');
+    });
+}
+
 function toggleMenu(event) {
     event.stopPropagation();
     document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
@@ -207,6 +213,7 @@ function initApp() {
         finalizarReserva: (reservaId) => finalizarReserva(reservaId, caches),
         quitarAsignacion, updateHoraPickup, updateZona,
         toggleMenu,
+        hideTableMenus, 
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer,
         filtrarPorHoras,
