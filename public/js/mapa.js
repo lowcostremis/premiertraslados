@@ -181,11 +181,15 @@ export function filtrarMapaPorChofer(choferId) {
 // ESTA FUNCIÓN AHORA SE EXPORTA
 export function escucharUbicacionChoferes() {
     if (unsubscribeChoferes) unsubscribeChoferes();
+
     unsubscribeChoferes = db.collection('choferes').onSnapshot(snapshot => {
         const mostrar = document.getElementById('toggle-choferes').checked;
+        const ahora = new Date();
+
         snapshot.docChanges().forEach(change => {
             const chofer = { id: change.doc.id, ...change.doc.data() };
             const marcadorExistente = marcadoresChoferes[chofer.id];
+
             if (change.type === 'removed' || !chofer.coordenadas) {
                 if (marcadorExistente) {
                     marcadorExistente.setMap(null);
@@ -193,10 +197,31 @@ export function escucharUbicacionChoferes() {
                 }
                 return;
             }
+
+            // --- INICIO DE LA NUEVA LÓGICA DE ESTADO ---
+            let isOnline = false;
+            if (chofer.esta_en_linea && chofer.ultima_actualizacion) {
+                // Convertimos el timestamp de Firestore a una fecha de JavaScript
+                const ultimaActualizacionDate = chofer.ultima_actualizacion.toDate();
+                // Calculamos la diferencia en minutos
+                const diferenciaMinutos = (ahora.getTime() - ultimaActualizacionDate.getTime()) / 60000;
+                
+                if (diferenciaMinutos < 5) {
+                    isOnline = true;
+                }
+            }
+
+            // Definimos el color basado en el estado
+            const colorFondo = isOnline ? '#23477b' : '#808080'; // Azul para online, Gris para offline
+            // --- FIN DE LA NUEVA LÓGICA DE ESTADO ---
+
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = cachesRef.moviles.find(m => m.id === chofer.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
-            const iconoChofer = crearIconoDeChofer('#23477b', numeroMovil);
+            
+            // Pasamos el color determinado a la función que crea el ícono
+            const iconoChofer = crearIconoDeChofer(colorFondo, numeroMovil);
+
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
                 marcadorExistente.setIcon(iconoChofer);
@@ -210,7 +235,6 @@ export function escucharUbicacionChoferes() {
         });
     });
 }
-
 
 // --- FUNCIONES INTERNAS ---
 
