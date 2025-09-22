@@ -164,11 +164,28 @@ exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{reservaId}"
     return reservasIndex.saveObject(record);
 });
 
-exports.sincronizarChoferesConAlgolia = onDocumentWritten("choferes/{choferId}", (event) => {
-    const { choferesIndex } = getAlgoliaIndices();
+exports.sincronizarChoferesConAlgolia = onDocumentWritten("choferes/{choferId}", async (event) => {
+     const { choferesIndex } = getAlgoliaIndices();
     const choferId = event.params.choferId;
-    if (!event.data.after.exists) { return choferesIndex.deleteObject(choferId); }
-    const record = { objectID: choferId, ...event.data.after.data() };
+
+    if (!event.data.after.exists) {
+        return choferesIndex.deleteObject(choferId);
+    }
+
+    const choferData = event.data.after.data();
+
+    if (choferData.movil_actual_id) {
+        try {
+            const movilDoc = await db.collection('moviles').doc(choferData.movil_actual_id).get();
+            if (movilDoc.exists) {
+                choferData.numero_movil = movilDoc.data().numero;
+            }
+        } catch (error) {
+            console.error(`Error al buscar móvil ${choferData.movil_actual_id} para el chofer ${choferId}:`, error);
+        }
+    }
+
+    const record = { objectID: choferId, ...choferData };
     return choferesIndex.saveObject(record);
 });
 

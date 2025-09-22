@@ -186,48 +186,52 @@ export function escucharUbicacionChoferes() {
         const mostrar = document.getElementById('toggle-choferes').checked;
         const ahora = new Date();
 
+        // Usamos docChanges() para procesar solo los cambios, no toda la colección
         snapshot.docChanges().forEach(change => {
             const chofer = { id: change.doc.id, ...change.doc.data() };
             const marcadorExistente = marcadoresChoferes[chofer.id];
 
+            // Escenario 1: El chofer fue eliminado o ya no tiene coordenadas
             if (change.type === 'removed' || !chofer.coordenadas) {
                 if (marcadorExistente) {
-                    marcadorExistente.setMap(null);
+                    marcadorExistente.setMap(null); // Borramos solo este marcador
                     delete marcadoresChoferes[chofer.id];
                 }
-                return;
+                return; // Siguiente cambio
             }
-
-            // --- INICIO DE LA NUEVA LÓGICA DE ESTADO ---
+            
+            // Lógica para determinar si el chofer está en línea (se mantiene igual)
             let isOnline = false;
             if (chofer.esta_en_linea && chofer.ultima_actualizacion) {
-                // Convertimos el timestamp de Firestore a una fecha de JavaScript
                 const ultimaActualizacionDate = chofer.ultima_actualizacion.toDate();
-                // Calculamos la diferencia en minutos
                 const diferenciaMinutos = (ahora.getTime() - ultimaActualizacionDate.getTime()) / 60000;
-                
                 if (diferenciaMinutos < 5) {
                     isOnline = true;
                 }
             }
-
-            // Definimos el color basado en el estado
-            const colorFondo = isOnline ? '#23477b' : '#808080'; // Azul para online, Gris para offline
-            // --- FIN DE LA NUEVA LÓGICA DE ESTADO ---
-
+            const colorFondo = isOnline ? '#23477b' : '#808080';
+            
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = cachesRef.moviles.find(m => m.id === chofer.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
-            
-            // Pasamos el color determinado a la función que crea el ícono
             const iconoChofer = crearIconoDeChofer(colorFondo, numeroMovil);
+            const titulo = `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`;
 
+            // Escenario 2: El marcador del chofer ya existe, solo lo actualizamos
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
                 marcadorExistente.setIcon(iconoChofer);
-                marcadorExistente.setTitle(`Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`);
-            } else {
-                const marcador = new google.maps.Marker({ position: nuevaPos, map: map, title: `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`, icon: iconoChofer, zIndex: 101 });
+                marcadorExistente.setTitle(titulo);
+            } 
+            // Escenario 3: El marcador no existe, lo creamos por primera vez
+            else {
+                const marcador = new google.maps.Marker({ 
+                    position: nuevaPos, 
+                    map: map, 
+                    title: titulo, 
+                    icon: iconoChofer, 
+                    zIndex: 101 
+                });
                 const esVisible = mostrar && (!filtroChoferMapaId || chofer.id === filtroChoferMapaId);
                 marcador.setVisible(esVisible);
                 marcadoresChoferes[chofer.id] = marcador;
