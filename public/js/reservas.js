@@ -455,10 +455,25 @@ async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
 
     try {
         await db.runTransaction(async (transaction) => {
-            const doc = await transaction.get(reservaRef);
-            if (!doc.exists) throw "No se encontró la reserva para archivar.";
+            const reservaDoc = await transaction.get(reservaRef);
 
-            const reservaData = doc.data();
+            // --- INICIO DE LA LÓGICA MEJORADA ---
+            if (!reservaDoc.exists) {
+                // Si la reserva no está en la colección activa, revisamos si ya está en el historial.
+                const historicoDoc = await transaction.get(historicoRef);
+                if (historicoDoc.exists) {
+                    // Si ya existe en el historial, significa que la acción ya se completó.
+                    // No hacemos nada y evitamos el error.
+                    console.log(`La reserva ${reservaId} ya se encuentra en el historial. No se requiere acción.`);
+                    return; 
+                } else {
+                    // Si no está en ninguna de las dos colecciones, es un error real.
+                    throw "No se encontró la reserva para archivar en ninguna colección.";
+                }
+            }
+            // --- FIN DE LA LÓGICA MEJORADA ---
+
+            const reservaData = reservaDoc.data();
             reservaData.estado = {
                 principal: estadoFinal,
                 detalle: `Viaje marcado como ${estadoFinal}`,
@@ -491,6 +506,6 @@ async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
         });
     } catch (error) {
         console.error("Error al mover reserva a histórico:", error);
-        alert("Error al archivar la reserva.");
+        alert("Error al archivar la reserva: " + error);
     }
 }

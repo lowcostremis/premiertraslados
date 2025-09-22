@@ -10,6 +10,7 @@ import { initMapa, initMapInstance, initMapaModal, cargarMarcadoresDeReservas, f
 import { 
     listenToReservas,
     renderAllReservas,
+    buscarEnReservas, // <-- AÑADIR ESTA LÍNEA
     handleSaveReserva,
     openEditReservaModal,
     asignarMovil,
@@ -187,6 +188,17 @@ function initApp() {
     document.querySelector('.close-edit-btn')?.addEventListener('click', () => closeModal('edit-modal'));
     document.querySelector('.close-reset-password-btn')?.addEventListener('click', () => closeModal('reset-password-modal'));
 
+    // --- CÓDIGO AÑADIDO ---
+    // Conecta la barra de búsqueda de reservas con la función de Algolia
+    const busquedaReservasInput = document.getElementById('busqueda-reservas');
+    if (busquedaReservasInput) {
+        busquedaReservasInput.addEventListener('input', (e) => {
+            // Llama a la función buscarEnReservas cada vez que el usuario escribe
+            buscarEnReservas(e.target.value, caches);
+        });
+    }
+    // --- FIN DEL CÓDIGO A AÑADIR ---
+
     window.app = {
         editItem, deleteItem, openResetPasswordModal,
         openEditReservaModal: (reservaId) => openEditReservaModal(reservaId, caches, initMapaModal),
@@ -197,7 +209,8 @@ function initApp() {
         toggleMenu,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer,
-        filtrarPorHoras
+        filtrarPorHoras,
+        buscarEnReservas // Exponemos la función de búsqueda a window.app
     };
     
     window.openTab = (event, tabName) => openTab(event, tabName, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
