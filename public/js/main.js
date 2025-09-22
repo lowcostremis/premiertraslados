@@ -79,8 +79,8 @@ function loadAuxData() {
 
     db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
         caches.choferes = [];
-        snapshot.forEach(doc => caches.choferes.push({ id: doc.id, ...doc.data() }));
-        actualizarFiltroChoferesAsignados();
+       snapshot.forEach(doc => caches.choferes.push({ id: doc.id, ...doc.data() }));
+       actualizarFiltrosDeMoviles();
     });
 
     db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
@@ -97,7 +97,7 @@ function loadAuxData() {
     db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         caches.moviles = [];
         snapshot.forEach(doc => caches.moviles.push({ id: doc.id, ...doc.data() }));
-        actualizarFiltroChoferesAsignados();
+        actualizarFiltrosDeMoviles(); 
     });
 }
 
@@ -117,13 +117,18 @@ function toggleMenu(event) {
     event.currentTarget.nextElementSibling.classList.toggle('visible');
 }
 
-function actualizarFiltroChoferesAsignados() {
-    const choferSelect = document.getElementById('filtro-chofer-asignados');
-    if (!choferSelect) return;
+function actualizarFiltrosDeMoviles() {
+    // Obtenemos ambos menús desplegables por su ID
+    const selectReservas = document.getElementById('filtro-chofer-asignados');
+    const selectMapa = document.getElementById('filtro-chofer-mapa');
 
-    const valorSeleccionado = choferSelect.value;
-    choferSelect.innerHTML = '<option value="">Ver todos los móviles</option>';
+    // Creamos un array con los que existan en la página actual
+    const selects = [selectReservas, selectMapa].filter(s => s !== null);
 
+    if (selects.length === 0) return;
+
+    // Generamos el HTML de las opciones UNA SOLA VEZ
+    let optionsHTML = '<option value="">Ver todos los móviles</option>';
     const movilesConChofer = caches.choferes
         .map(chofer => {
             if (chofer.movil_actual_id) {
@@ -139,11 +144,16 @@ function actualizarFiltroChoferesAsignados() {
 
     movilesConChofer.forEach(item => {
         const numeroMovil = `Móvil ${item.movilNumero}`;
-        const optionHTML = `<option value="${item.choferId}">${numeroMovil} - ${item.choferNombre}</option>`;
-        choferSelect.innerHTML += optionHTML;
+        // El valor del option es el ID del chofer para poder filtrar
+        optionsHTML += `<option value="${item.choferId}">${numeroMovil} - ${item.choferNombre}</option>`;
     });
 
-    choferSelect.value = valorSeleccionado;
+    // Aplicamos el HTML a todos los menús encontrados, preservando la selección actual
+    selects.forEach(select => {
+        const valorSeleccionado = select.value;
+        select.innerHTML = optionsHTML;
+        select.value = valorSeleccionado;
+    });
 }
 
 function filtrarReservasAsignadasPorChofer(choferId) {
