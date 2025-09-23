@@ -1,6 +1,6 @@
 // js/main.js
 
-// 1. IMPORTACIONES DE TODOS LOS MÓDULOS
+// 1. IMPORTACIONES DE TODOS LOS MÓDulos
 import { auth, db } from './firebase-config.js';
 import { openTab, showReservasTab, openAdminTab } from './tabs.js';
 import { initHistorial, cargarHistorial, poblarFiltroClientes } from './historial.js';
@@ -13,6 +13,7 @@ import {
     buscarEnReservas,
     handleSaveReserva,
     openEditReservaModal,
+    poblarSelectDeMoviles,
     asignarMovil,
     changeReservaState,
     finalizarReserva,
@@ -172,12 +173,10 @@ function filtrarPorHoras(horas) {
     }
 }
 
-// ========= INICIO DEL CÓDIGO AÑADIDO =========
 function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     const form = document.getElementById('reserva-form');
     form.reset();
 
-    // Precargamos los datos del regreso
     form.cliente.value = datos.cliente || 'Default';
     form.siniestro.value = datos.siniestro || '';
     form.autorizacion.value = datos.autorizacion || '';
@@ -187,7 +186,6 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     form.origen.value = datos.origen || '';
     form.destino.value = datos.destino || '';
 
-    // Dejamos los campos de fecha, hora y otros vacíos
     document.getElementById('reserva-id').value = '';
     document.getElementById('modal-title').textContent = 'Nueva Reserva (Regreso)';
     document.getElementById('reserva-modal').style.display = 'block';
@@ -196,7 +194,6 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
         setTimeout(() => initMapaModalCallback(null, null), 100);
     }
 }
-// ========= FIN DEL CÓDIGO AÑADIDO =========
 
 function initApp() {
     if (appInitialized) return;
@@ -207,6 +204,7 @@ function initApp() {
     if (nuevaReservaBtn) {
         nuevaReservaBtn.addEventListener('click', () => {
             document.getElementById('reserva-form').reset();
+            poblarSelectDeMoviles(caches);
             document.getElementById('modal-title').textContent = 'Nueva Reserva';
             document.getElementById('reserva-id').value = '';
             document.getElementById('reserva-modal').style.display = 'block';
@@ -247,14 +245,12 @@ function initApp() {
     window.showReservasTab = showReservasTab;
     window.openAdminTab = openAdminTab;
     
-    // ========= INICIO DEL CÓDIGO MODIFICADO =========
     document.getElementById('reserva-form').addEventListener('submit', async (e) => {
         const datosParaRegreso = await handleSaveReserva(e, caches);
         if (datosParaRegreso) {
             openNuevaReservaConDatos(datosParaRegreso, initMapaModal);
         }
     });
-    // ========= FIN DEL CÓDIGO MODIFICADO =========
     
     document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
 
@@ -276,10 +272,9 @@ function initApp() {
                 buscarEnReservas(searchInput.value, caches);
             }
         }
-
-        if (document.getElementById('Mapa').style.display === 'block') {
-            cargarMarcadoresDeReservas();
-        }
+       
+        cargarMarcadoresDeReservas();
+       
     });
 
     openTab(null, 'Reservas');

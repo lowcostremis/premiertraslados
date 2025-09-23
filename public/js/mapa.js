@@ -31,7 +31,6 @@ export function initMapInstance() {
         map = new google.maps.Map(c, { center: { lat: -32.9566, lng: -60.6577 }, zoom: 12 });
         map.addListener('click', hideMapContextMenu);
         
-        // Listener para el clic derecho en el mapa
         map.addListener('rightclick', (event) => {
             event.domEvent.preventDefault();
             hideMapContextMenu(); 
@@ -71,6 +70,15 @@ export function cargarMarcadoresDeReservas() {
     Object.values(marcadoresOrigen).forEach(m => m.setMap(null));
     marcadoresOrigen = {};
 
+    if (marcadorDestinoActivo) {
+        marcadorDestinoActivo.setMap(null);
+        marcadorDestinoActivo = null;
+    }
+    if (infoWindowActiva) {
+        infoWindowActiva.close();
+        infoWindowActiva = null;
+    }
+
     const idsDeReservasEnMapa = new Set(Object.keys(marcadoresOrigen));
     const idsDeReservasProcesadas = new Set();
     const ahora = new Date();
@@ -86,6 +94,7 @@ export function cargarMarcadoresDeReservas() {
             if (fT && fT <= lim) e = 'En Curso';
         }
         if (filtroMapaActual !== 'Todos' && e !== filtroMapaActual) return;
+        
         if (filtroHorasMapa !== null) {
             const horaReferencia = r.hora_pickup || r.hora_turno;
             if (!r.fecha_turno || !horaReferencia) return;
@@ -94,33 +103,51 @@ export function cargarMarcadoresDeReservas() {
             const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
             if (horasDiferencia < 0 || horasDiferencia > filtroHorasMapa) return;
         }
-        if (r.origen_coords && r.origen_coords.latitude) {
-            idsDeReservasProcesadas.add(r.id);
-            let cM, tM = '';
+
+        let posicionMarcador, iconoMarcador, tituloMarcador;
+
+        // ========= INICIO DE LA CORRECCIÓN 1 =========
+        // Ahora esta condición acepta 'Viaje Iniciado' O 'En Origen'
+        if ((e === 'Viaje Iniciado' || e === 'En Origen') && r.destino_coords && r.destino_coords.latitude) {
+            posicionMarcador = { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude };
+            const movil = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id);
+            const numeroMovil = movil ? movil.numero.toString() : '?';
+            iconoMarcador = crearIconoDePin('#27DAF5', numeroMovil);
+            tituloMarcador = `DESTINO: ${r.destino} (Móvil ${numeroMovil})`;
+        } else if (r.origen_coords && r.origen_coords.latitude) {
+            posicionMarcador = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
+            let colorFondo, textoIcono = '';
+            
             switch (e) {
-                case 'En Curso': case 'En Origen': case 'Viaje Iniciado':
-                    cM = '#F54927'; tM = (r.hora_pickup || r.hora_turno || '').substring(0, 5); break;
+                case 'En Curso': 
+                case 'En Origen':
+                    colorFondo = '#F54927'; textoIcono = (r.hora_pickup || r.hora_turno || '').substring(0, 5); break;
                 case 'Asignado':
-                    cM = '#4DF527'; const m = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id); if (m) tM = m.numero.toString(); break;
-                case 'Pendiente': cM = '#C15DE8'; break;
+                    colorFondo = '#4DF527'; const m = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id); if (m) textoIcono = m.numero.toString(); break;
+                case 'Pendiente': 
+                    colorFondo = '#C15DE8'; break;
+                default:
+                    colorFondo = '#808080';
+                    textoIcono = '•';
+                    break;
             }
-            const i = crearIconoDePin(cM, tM);
-            const nuevaPos = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
+
+            iconoMarcador = crearIconoDePin(colorFondo, textoIcono);
+            tituloMarcador = `Origen: ${r.origen} (${e})`;
+        }
+
+        if (posicionMarcador) {
+            idsDeReservasProcesadas.add(r.id);
             if (marcadoresOrigen[r.id]) {
-                marcadoresOrigen[r.id].setPosition(nuevaPos);
-                marcadoresOrigen[r.id].setIcon(i);
-                marcadoresOrigen[r.id].setTitle(`Origen: ${r.origen} (${e})`);
+                marcadoresOrigen[r.id].setPosition(posicionMarcador);
+                marcadoresOrigen[r.id].setIcon(iconoMarcador);
+                marcadoresOrigen[r.id].setTitle(tituloMarcador);
             } else {
-                const marker = new google.maps.Marker({ position: nuevaPos, map: map, title: `Origen: ${r.origen} (${e})`, icon: i });
+                const marker = new google.maps.Marker({ position: posicionMarcador, map: map, title: tituloMarcador, icon: iconoMarcador });
                 marcadoresOrigen[r.id] = marker;
-                
-                // ========= INICIO DEL CÓDIGO AÑADIDO =========
-                // Listener para que el doble clic abra la ficha de edición.
                 marker.addListener('dblclick', () => {
                     window.app.openEditReservaModal(r.id);
                 });
-                // ========= FIN DEL CÓDIGO AÑADIDO =========
-
                 marker.addListener('click', () => {
                     if (infoWindowActiva) infoWindowActiva.close();
                     if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null);
@@ -130,7 +157,10 @@ export function cargarMarcadoresDeReservas() {
                     const cont = `<div class="info-window"><h4>Reserva de: ${cli.nombre}</h4><p><strong>Pasajero:</strong> ${r.nombre_pasajero||'N/A'}</p><p><strong>Origen:</strong> ${r.origen}</p><p><strong>Destino:</strong> ${r.destino}</p><p><strong>Turno:</strong> ${new Date(r.fecha_turno + 'T' + (r.hora_turno||'00:00')).toLocaleString('es-AR')}</p><p><strong>Chofer:</strong> ${cho.nombre}</p>${obs}</div>`;
                     infoWindowActiva = new google.maps.InfoWindow({ content: cont });
                     infoWindowActiva.open(map, marker);
-                    if (r.destino_coords && r.destino_coords.latitude) {
+                    
+                    // ========= INICIO DE LA CORRECCIÓN 2 =========
+                    // El marcador 'D' temporal no se muestra si el estado es 'Viaje Iniciado' O 'En Origen'
+                    if (!['Viaje Iniciado', 'En Origen'].includes(e) && r.destino_coords && r.destino_coords.latitude) {
                         const iD = crearIconoDePin('#27DAF5', 'D');
                         marcadorDestinoActivo = new google.maps.Marker({ position: { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude }, map: map, title: `Destino: ${r.destino}`, icon: iD });
                     }
@@ -138,7 +168,6 @@ export function cargarMarcadoresDeReservas() {
                 });
                 marker.addListener('rightclick', (event) => {
                     event.domEvent.preventDefault();
-                    
                     hideMapContextMenu();
                     let menuHTML = ''; const rId = r.id;
                     if (e === 'En Curso' || e === 'Pendiente') {
@@ -156,6 +185,7 @@ export function cargarMarcadoresDeReservas() {
             }
         }
     });
+
     idsDeReservasEnMapa.forEach(id => {
         if (!idsDeReservasProcesadas.has(id)) {
             marcadoresOrigen[id].setMap(null);
@@ -186,29 +216,22 @@ export function filtrarMapaPorChofer(choferId) {
     toggleChoferesVisibility(document.getElementById('toggle-choferes').checked);
 }
 
-// ESTA FUNCIÓN AHORA SE EXPORTA
 export function escucharUbicacionChoferes() {
     if (unsubscribeChoferes) unsubscribeChoferes();
-
     unsubscribeChoferes = db.collection('choferes').onSnapshot(snapshot => {
         const mostrar = document.getElementById('toggle-choferes').checked;
         const ahora = new Date();
-
-        // Usamos docChanges() para procesar solo los cambios, no toda la colección
         snapshot.docChanges().forEach(change => {
             const chofer = { id: change.doc.id, ...change.doc.data() };
             const marcadorExistente = marcadoresChoferes[chofer.id];
-
-            // Escenario 1: El chofer fue eliminado o ya no tiene coordenadas
             if (change.type === 'removed' || !chofer.coordenadas) {
                 if (marcadorExistente) {
-                    marcadorExistente.setMap(null); // Borramos solo este marcador
+                    marcadorExistente.setMap(null);
                     delete marcadoresChoferes[chofer.id];
                 }
-                return; // Siguiente cambio
+                return;
             }
             
-            // Lógica para determinar si el chofer está en línea (se mantiene igual)
             let isOnline = false;
             if (chofer.esta_en_linea && chofer.ultima_actualizacion) {
                 const ultimaActualizacionDate = chofer.ultima_actualizacion.toDate();
@@ -217,29 +240,22 @@ export function escucharUbicacionChoferes() {
                     isOnline = true;
                 }
             }
+            if (Array.isArray(chofer.viajes_activos) && chofer.viajes_activos.length > 0) {
+                isOnline = true;
+            }
+
             const colorFondo = isOnline ? '#23477b' : '#808080';
-            
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = cachesRef.moviles.find(m => m.id === chofer.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
             const iconoChofer = crearIconoDeChofer(colorFondo, numeroMovil);
             const titulo = `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`;
-
-            // Escenario 2: El marcador del chofer ya existe, solo lo actualizamos
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
                 marcadorExistente.setIcon(iconoChofer);
                 marcadorExistente.setTitle(titulo);
-            } 
-            // Escenario 3: El marcador no existe, lo creamos por primera vez
-            else {
-                const marcador = new google.maps.Marker({ 
-                    position: nuevaPos, 
-                    map: map, 
-                    title: titulo, 
-                    icon: iconoChofer, 
-                    zIndex: 101 
-                });
+            } else {
+                const marcador = new google.maps.Marker({ position: nuevaPos, map: map, title: titulo, icon: iconoChofer, zIndex: 101 });
                 const esVisible = mostrar && (!filtroChoferMapaId || chofer.id === filtroChoferMapaId);
                 marcador.setVisible(esVisible);
                 marcadoresChoferes[chofer.id] = marcador;
@@ -247,8 +263,6 @@ export function escucharUbicacionChoferes() {
         });
     });
 }
-
-// --- FUNCIONES INTERNAS ---
 
 function crearIconoDePin(colorFondo, textoPrincipal) {
     const svgIcon = `<svg width="42" height="56" viewBox="0 0 42 56" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 0C11.64 0 4 7.64 4 18c0 14 17 38 17 38s17-24 17-38C38 7.64 30.36 0 21 0Z" fill="${colorFondo}"/><circle cx="21" cy="18" r="15" fill="white"/><text x="21" y="24" font-family="Arial, sans-serif" font-size="15px" font-weight="bold" fill="#333" text-anchor="middle">${textoPrincipal}</text></svg>`;
@@ -308,4 +322,19 @@ function actualizarInputDesdeCoordenadas(latLng, tipo) {
 
 export function hideMapContextMenu() {
     if (mapContextMenu) mapContextMenu.style.display = 'none';
+}
+export function getModalMarkerCoords() {
+    let origen = null;
+    let destino = null;
+
+    if (marcadorOrigenModal && marcadorOrigenModal.getPosition()) {
+        const pos = marcadorOrigenModal.getPosition();
+        origen = { latitude: pos.lat(), longitude: pos.lng() };
+    }
+    if (marcadorDestinoModal && marcadorDestinoModal.getPosition()) {
+        const pos = marcadorDestinoModal.getPosition();
+        destino = { latitude: pos.lat(), longitude: pos.lng() };
+    }
+    
+    return { origen, destino };
 }

@@ -1,7 +1,28 @@
 // js/reservas.js
 
 import { db, functions, reservasSearchIndex } from './firebase-config.js';
-import { hideMapContextMenu } from './mapa.js';
+import { hideMapContextMenu, getModalMarkerCoords } from './mapa.js';
+
+// --- NUEVA FUNCIÓN REUTILIZABLE ---
+export function poblarSelectDeMoviles(caches) {
+    const movilSelect = document.getElementById('asignar_movil');
+    if (!movilSelect) return;
+
+    const valorActual = movilSelect.value;
+    movilSelect.innerHTML = '<option value="">No asignar móvil aún</option>';
+
+    caches.moviles.forEach(movil => {
+        const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
+        const choferInfo = choferAsignado ? ` - ${choferAsignado.nombre}` : ' - (Sin chofer)';
+        const option = document.createElement('option');
+        option.value = movil.id;
+        option.textContent = `Móvil ${movil.numero}${choferInfo}`;
+        movilSelect.appendChild(option);
+    });
+
+    movilSelect.value = valorActual;
+}
+
 
 // --- FUNCIONES EXPUESTAS (EXPORTADAS) ---
 
@@ -118,23 +139,24 @@ export async function handleSaveReserva(e, caches) {
     const f = e.target;
     const submitBtn = f.querySelector('button[type="submit"]');
     
-    // --> AÑADIDO: Capturamos el estado del checkbox de regreso
     const generarRegreso = f.tiene_regreso.checked;
-    // --> AÑADIDO: Lo reseteamos para que no quede marcado para la siguiente carga
     if (generarRegreso) {
         f.tiene_regreso.checked = false;
     }
 
-    let datosParaRegreso = null; // --> AÑADIDO: Variable para guardar los datos del regreso
+    let datosParaRegreso = null;
 
     try {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Guardando...';
-
+        
         const rId = f['reserva-id'].value;
         const movilIdParaAsignar = f.asignar_movil.value;
         const esX = f.viaje_exclusivo.checked;
         const cP = esX ? '4' : f.cantidad_pasajeros.value;
+        
+        const coords = getModalMarkerCoords(); 
+
         const d = {
             cliente: f.cliente.value,
             siniestro: f.siniestro.value,
@@ -147,16 +169,19 @@ export async function handleSaveReserva(e, caches) {
             hora_pickup: f.hora_pickup.value,
             origen: f.origen.value,
             destino: f.destino.value,
+            origen_coords: coords.origen,
+            destino_coords: coords.destino,
             cantidad_pasajeros: cP,
             zona: f.zona.value,
             observaciones: f.observaciones.value,
             es_exclusivo: esX
         };
+
         if (!rId) {
             d.estado = { principal: 'Pendiente', detalle: 'Recién creada', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() };
             d.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
         }
-        
+
         let reservaGuardadaId = rId;
         if (rId) {
             await db.collection('reservas').doc(rId).update(d);
@@ -182,7 +207,6 @@ export async function handleSaveReserva(e, caches) {
             await pRef.set(pData, { merge: true });
         }
         
-        // --> AÑADIDO: Si se marcó "generar regreso", preparamos los datos
         if (generarRegreso) {
             datosParaRegreso = {
                 cliente: d.cliente,
@@ -191,7 +215,6 @@ export async function handleSaveReserva(e, caches) {
                 dni_pasajero: d.dni_pasajero,
                 nombre_pasajero: d.nombre_pasajero,
                 telefono_pasajero: d.telefono_pasajero,
-                // Invertimos origen y destino
                 origen: d.destino, 
                 destino: d.origen
             };
@@ -206,10 +229,8 @@ export async function handleSaveReserva(e, caches) {
         submitBtn.textContent = 'Guardar Reserva';
     }
 
-    // --> AÑADIDO: Devolvemos los datos del regreso (o null si no aplica)
     return datosParaRegreso;
 }
-
 
 export async function openEditReservaModal(reservaId, caches, initMapaModalCallback) {
     const doc = await db.collection('reservas').doc(reservaId).get();
@@ -218,19 +239,10 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     const form = document.getElementById('reserva-form');
     form.reset();
     
-    const movilSelect = form.asignar_movil;
-    movilSelect.innerHTML = '<option value="">No asignar móvil aún</option>'; 
-    caches.moviles.forEach(movil => {
-        const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
-        const choferInfo = choferAsignado ? ` - ${choferAsignado.nombre}` : ' - (Sin chofer)';
-        const option = document.createElement('option');
-        option.value = movil.id;
-        option.textContent = `Móvil ${movil.numero}${choferInfo}`;
-        movilSelect.appendChild(option);
-    });
+    poblarSelectDeMoviles(caches);
 
-    form.viaje_exclusivo.checked = false;
-    form.cantidad_pasajeros.disabled = false;
+    form.viaje_exclusivo.checked = data.es_exclusivo || false;
+    form.cantidad_pasajeros.disabled = data.es_exclusivo || false;
     form.cliente.value = data.cliente || 'Default';
     form.siniestro.value = data.siniestro || '';
     form.autorizacion.value = data.autorizacion || '';
@@ -245,12 +257,8 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     form.cantidad_pasajeros.value = data.cantidad_pasajeros || '1';
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
-    movilSelect.value = data.movil_asignado_id || '';
-    if (data.es_exclusivo) {
-        form.viaje_exclusivo.checked = true;
-        form.cantidad_pasajeros.value = '4';
-        form.cantidad_pasajeros.disabled = true;
-    }
+    form.asignar_movil.value = data.movil_asignado_id || '';
+    
     document.getElementById('reserva-id').value = reservaId;
     document.getElementById('modal-title').textContent = 'Editar Reserva';
     document.getElementById('reserva-modal').style.display = 'block';
@@ -399,7 +407,6 @@ function renderFilaReserva(tbody, reserva, caches) {
         }
     }
     
-    // Texto del móvil asignado
     let movilAsignadoTexto = '';
     if (reserva.movil_asignado_id) {
         const movilAsignado = caches.moviles.find(m => m.id === reserva.movil_asignado_id);
@@ -409,7 +416,6 @@ function renderFilaReserva(tbody, reserva, caches) {
         movilAsignadoTexto = textoMovil + textoChofer;
     }
     
-    // HTML para la celda de estado
     let estadoCombinadoHTML = `<strong>${estadoPrincipal || 'Pendiente'}</strong>`;
     if (estadoDetalle !== '---' && estadoDetalle !== `Estado cambiado a ${estadoPrincipal}`) {
         estadoCombinadoHTML += `<br><small style="color: #777;">${estadoDetalle}</small>`;
@@ -423,7 +429,6 @@ function renderFilaReserva(tbody, reserva, caches) {
     const isAsignable = ['reservas-en-curso', 'reservas-pendientes', 'resultados-busqueda-reservas'].includes(containerId);
     const isAsignado = containerId === 'reservas-asignados';
     
-    // Construcción del menú de acciones
     let menuItems = `<a href="#" onclick="window.app.openEditReservaModal('${reserva.id || reserva.objectID}')">Editar</a>`;
     if (isAsignable) {
         let movilesOptions = caches.moviles.map(movil => {
@@ -448,7 +453,6 @@ function renderFilaReserva(tbody, reserva, caches) {
             </div>
         </td>`;
 
-    // Llenado de la fila
     row.innerHTML = `
         <td>${reserva.autorizacion || ''}</td>
         <td>${reserva.siniestro || ''}</td>
@@ -465,7 +469,6 @@ function renderFilaReserva(tbody, reserva, caches) {
         ${accionesHTML}
     `;
 
-    // Celdas editables
     const pickupCell = row.querySelector('.pickup-cell');
     const zonaCell = row.querySelector('.zona-cell');
     if (isAsignable) {
@@ -483,7 +486,6 @@ function renderFilaReserva(tbody, reserva, caches) {
     }
 }
   
-
 async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
     const reservaRef = db.collection('reservas').doc(reservaId);
     const historicoRef = db.collection('historico').doc(reservaId);
@@ -492,21 +494,15 @@ async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
         await db.runTransaction(async (transaction) => {
             const reservaDoc = await transaction.get(reservaRef);
 
-            // --- INICIO DE LA LÓGICA MEJORADA ---
             if (!reservaDoc.exists) {
-                // Si la reserva no está en la colección activa, revisamos si ya está en el historial.
                 const historicoDoc = await transaction.get(historicoRef);
                 if (historicoDoc.exists) {
-                    // Si ya existe en el historial, significa que la acción ya se completó.
-                    // No hacemos nada y evitamos el error.
                     console.log(`La reserva ${reservaId} ya se encuentra en el historial. No se requiere acción.`);
                     return; 
                 } else {
-                    // Si no está en ninguna de las dos colecciones, es un error real.
                     throw "No se encontró la reserva para archivar en ninguna colección.";
                 }
             }
-            // --- FIN DE LA LÓGICA MEJORADA ---
 
             const reservaData = reservaDoc.data();
             reservaData.estado = {
