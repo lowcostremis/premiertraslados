@@ -335,16 +335,14 @@
             <div class="form-map-container">
                 <form id="reserva-form">
                     <input type="hidden" id="reserva-id">
-                     <div class="form-row">
-                         <div class="form-group">
-                            <label for="cliente">Cliente</label>
-                            <select id="cliente" name="cliente"></select>
-                        </div>
-                         <div class="form-group">
-                            <label for="viaje_exclusivo">Viaje Exclusivo</label>
-                            <input type="checkbox" id="viaje_exclusivo" name="viaje_exclusivo">
-                        </div>
-                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                           <label for="cliente">Cliente</label>
+                           <select id="cliente" name="cliente"></select>
+                       </div>
+                   </div>
+
                      <div class="form-row">
                          <div class="form-group">
                             <label for="siniestro">Siniestro</label>
@@ -385,18 +383,18 @@
                             <input type="time" id="hora_pickup" name="hora_pickup">
                         </div>
                     </div>
-                     <div class="form-row">
-                          <div class="form-group">
-                              <label for="origen">Origen</label>
-                              <input type="text" id="origen" name="origen" required>
-                          </div>
-                    </div>
                     <div class="form-row">
-                        <div class="form-group">
-                            <label for="destino">Destino</label>
-                            <input type="text" id="destino" name="destino">
-                        </div>
-                    </div>
+                         <div class="form-group">
+                             <label for="origen">Origen</label>
+                             <input type="text" id="origen" name="origen" required>
+                         </div>
+                   </div>
+                   <div class="form-row">
+                       <div class="form-group">
+                           <label for="destino">Destino</label>
+                           <input type="text" id="destino" name="destino">
+                       </div>
+                   </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="cantidad_pasajeros">Cantidad Pasajeros</label>
@@ -418,10 +416,17 @@
                         </select>
                     </div>
                     
-                    <div class="form-group form-group-full" style="flex-direction: row; align-items: center; gap: 10px; margin-top: 15px;">
-                        <input type="checkbox" id="tiene_regreso" name="tiene_regreso" style="width: auto;">
-                        <label for="tiene_regreso" style="margin: 0;">¿Generar viaje de regreso?</label>
+                    <div class="form-row" style="justify-content: flex-start; align-items: center; gap: 30px; margin-top: 15px;">
+                        <div class="form-group" style="flex-direction: row; align-items: center; gap: 10px; margin-bottom: 0;">
+                            <input type="checkbox" id="tiene_regreso" name="tiene_regreso" style="width: auto;">
+                            <label for="tiene_regreso" style="margin: 0;">¿Generar viaje de regreso?</label>
+                        </div>
+                        <div class="form-group" style="flex-direction: row; align-items: center; gap: 10px; margin-bottom: 0;">
+                            <input type="checkbox" id="viaje_exclusivo" name="viaje_exclusivo" style="width: auto;">
+                            <label for="viaje_exclusivo" style="margin: 0;">Viaje Exclusivo</label>
+                        </div>
                     </div>
+                    
                     <button type="submit">Guardar Reserva</button>
                 </form>
                 <div id="mapa-modal-container"></div>
