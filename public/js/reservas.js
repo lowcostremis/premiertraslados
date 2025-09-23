@@ -116,32 +116,39 @@ export async function buscarEnReservas(texto, caches) {
 export async function handleSaveReserva(e, caches) {
     e.preventDefault();
     const f = e.target;
-    const rId = f['reserva-id'].value;
-    const movilIdParaAsignar = f.asignar_movil.value;
-    const esX = f.viaje_exclusivo.checked;
-    const cP = esX ? '4' : f.cantidad_pasajeros.value;
-    const d = {
-        cliente: f.cliente.value,
-        siniestro: f.siniestro.value,
-        autorizacion: f.autorizacion.value,
-        dni_pasajero: f.dni_pasajero.value.trim(),
-        nombre_pasajero: f.nombre_pasajero.value,
-        telefono_pasajero: f.telefono_pasajero.value,
-        fecha_turno: f.fecha_turno.value,
-        hora_turno: f.hora_turno.value,
-        hora_pickup: f.hora_pickup.value,
-        origen: f.origen.value,
-        destino: f.destino.value,
-        cantidad_pasajeros: cP,
-        zona: f.zona.value,
-        observaciones: f.observaciones.value,
-        es_exclusivo: esX
-    };
-    if (!rId) {
-        d.estado = { principal: 'Pendiente', detalle: 'Recién creada', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() };
-        d.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
-    }
+    const submitBtn = f.querySelector('button[type="submit"]');
+
     try {
+        // Deshabilitamos el botón para evitar dobles clics
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Guardando...';
+
+        const rId = f['reserva-id'].value;
+        const movilIdParaAsignar = f.asignar_movil.value;
+        const esX = f.viaje_exclusivo.checked;
+        const cP = esX ? '4' : f.cantidad_pasajeros.value;
+        const d = {
+            cliente: f.cliente.value,
+            siniestro: f.siniestro.value,
+            autorizacion: f.autorizacion.value,
+            dni_pasajero: f.dni_pasajero.value.trim(),
+            nombre_pasajero: f.nombre_pasajero.value,
+            telefono_pasajero: f.telefono_pasajero.value,
+            fecha_turno: f.fecha_turno.value,
+            hora_turno: f.hora_turno.value,
+            hora_pickup: f.hora_pickup.value,
+            origen: f.origen.value,
+            destino: f.destino.value,
+            cantidad_pasajeros: cP,
+            zona: f.zona.value,
+            observaciones: f.observaciones.value,
+            es_exclusivo: esX
+        };
+        if (!rId) {
+            d.estado = { principal: 'Pendiente', detalle: 'Recién creada', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() };
+            d.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
+        }
+        
         let reservaGuardadaId = rId;
         if (rId) {
             await db.collection('reservas').doc(rId).update(d);
@@ -167,8 +174,15 @@ export async function handleSaveReserva(e, caches) {
             await pRef.set(pData, { merge: true });
         }
         document.getElementById('reserva-modal').style.display = 'none';
+
     } catch (error) {
+        // Si algo falla, mostramos el error
         alert("Error al guardar: " + error.message);
+    } finally {
+        // Este bloque se ejecuta siempre, con o sin error.
+        // Nos aseguramos de reactivar el botón.
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Guardar Reserva';
     }
 }
 
