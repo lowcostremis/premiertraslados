@@ -113,6 +113,14 @@ export function cargarMarcadoresDeReservas() {
             } else {
                 const marker = new google.maps.Marker({ position: nuevaPos, map: map, title: `Origen: ${r.origen} (${e})`, icon: i });
                 marcadoresOrigen[r.id] = marker;
+                
+                // ========= INICIO DEL CÓDIGO AÑADIDO =========
+                // Listener para que el doble clic abra la ficha de edición.
+                marker.addListener('dblclick', () => {
+                    window.app.openEditReservaModal(r.id);
+                });
+                // ========= FIN DEL CÓDIGO AÑADIDO =========
+
                 marker.addListener('click', () => {
                     if (infoWindowActiva) infoWindowActiva.close();
                     if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null);
