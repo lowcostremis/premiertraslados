@@ -106,8 +106,6 @@ export function cargarMarcadoresDeReservas() {
 
         let posicionMarcador, iconoMarcador, tituloMarcador;
 
-        // ========= INICIO DE LA CORRECCIÓN 1 =========
-        // Ahora esta condición acepta 'Viaje Iniciado' O 'En Origen'
         if ((e === 'Viaje Iniciado' || e === 'En Origen') && r.destino_coords && r.destino_coords.latitude) {
             posicionMarcador = { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude };
             const movil = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id);
@@ -158,8 +156,6 @@ export function cargarMarcadoresDeReservas() {
                     infoWindowActiva = new google.maps.InfoWindow({ content: cont });
                     infoWindowActiva.open(map, marker);
                     
-                    // ========= INICIO DE LA CORRECCIÓN 2 =========
-                    // El marcador 'D' temporal no se muestra si el estado es 'Viaje Iniciado' O 'En Origen'
                     if (!['Viaje Iniciado', 'En Origen'].includes(e) && r.destino_coords && r.destino_coords.latitude) {
                         const iD = crearIconoDePin('#27DAF5', 'D');
                         marcadorDestinoActivo = new google.maps.Marker({ position: { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude }, map: map, title: `Destino: ${r.destino}`, icon: iD });
@@ -232,24 +228,24 @@ export function escucharUbicacionChoferes() {
                 return;
             }
             
-            let isOnline = false;
+            let reportadoEnLinea = false;
             if (chofer.esta_en_linea && chofer.ultima_actualizacion) {
-                const ultimaActualizacionDate = chofer.ultima_actualizacion.toDate();
-                const diferenciaMinutos = (ahora.getTime() - ultimaActualizacionDate.getTime()) / 60000;
+                const diferenciaMinutos = (ahora.getTime() - chofer.ultima_actualizacion.toDate().getTime()) / 60000;
                 if (diferenciaMinutos < 5) {
-                    isOnline = true;
+                    reportadoEnLinea = true;
                 }
             }
-            if (Array.isArray(chofer.viajes_activos) && chofer.viajes_activos.length > 0) {
-                isOnline = true;
-            }
-
+            
+            const tieneViajeActivo = Array.isArray(chofer.viajes_activos) && chofer.viajes_activos.length > 0;
+            const isOnline = reportadoEnLinea || tieneViajeActivo;
             const colorFondo = isOnline ? '#23477b' : '#808080';
+
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = cachesRef.moviles.find(m => m.id === chofer.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
             const iconoChofer = crearIconoDeChofer(colorFondo, numeroMovil);
             const titulo = `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`;
+            
             if (marcadorExistente) {
                 marcadorExistente.setPosition(nuevaPos);
                 marcadorExistente.setIcon(iconoChofer);
@@ -264,6 +260,7 @@ export function escucharUbicacionChoferes() {
     });
 }
 
+// --- FUNCIONES INTERNAS ---
 function crearIconoDePin(colorFondo, textoPrincipal) {
     const svgIcon = `<svg width="42" height="56" viewBox="0 0 42 56" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 0C11.64 0 4 7.64 4 18c0 14 17 38 17 38s17-24 17-38C38 7.64 30.36 0 21 0Z" fill="${colorFondo}"/><circle cx="21" cy="18" r="15" fill="white"/><text x="21" y="24" font-family="Arial, sans-serif" font-size="15px" font-weight="bold" fill="#333" text-anchor="middle">${textoPrincipal}</text></svg>`;
     return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svgIcon), scaledSize: new google.maps.Size(42, 56), anchor: new google.maps.Point(21, 56) };
