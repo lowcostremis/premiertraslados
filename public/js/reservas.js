@@ -117,9 +117,17 @@ export async function handleSaveReserva(e, caches) {
     e.preventDefault();
     const f = e.target;
     const submitBtn = f.querySelector('button[type="submit"]');
+    
+    // --> AÑADIDO: Capturamos el estado del checkbox de regreso
+    const generarRegreso = f.tiene_regreso.checked;
+    // --> AÑADIDO: Lo reseteamos para que no quede marcado para la siguiente carga
+    if (generarRegreso) {
+        f.tiene_regreso.checked = false;
+    }
+
+    let datosParaRegreso = null; // --> AÑADIDO: Variable para guardar los datos del regreso
 
     try {
-        // Deshabilitamos el botón para evitar dobles clics
         submitBtn.disabled = true;
         submitBtn.textContent = 'Guardando...';
 
@@ -173,18 +181,35 @@ export async function handleSaveReserva(e, caches) {
             };
             await pRef.set(pData, { merge: true });
         }
+        
+        // --> AÑADIDO: Si se marcó "generar regreso", preparamos los datos
+        if (generarRegreso) {
+            datosParaRegreso = {
+                cliente: d.cliente,
+                siniestro: d.siniestro,
+                autorizacion: d.autorizacion,
+                dni_pasajero: d.dni_pasajero,
+                nombre_pasajero: d.nombre_pasajero,
+                telefono_pasajero: d.telefono_pasajero,
+                // Invertimos origen y destino
+                origen: d.destino, 
+                destino: d.origen
+            };
+        }
+
         document.getElementById('reserva-modal').style.display = 'none';
 
     } catch (error) {
-        // Si algo falla, mostramos el error
         alert("Error al guardar: " + error.message);
     } finally {
-        // Este bloque se ejecuta siempre, con o sin error.
-        // Nos aseguramos de reactivar el botón.
         submitBtn.disabled = false;
         submitBtn.textContent = 'Guardar Reserva';
     }
+
+    // --> AÑADIDO: Devolvemos los datos del regreso (o null si no aplica)
+    return datosParaRegreso;
 }
+
 
 export async function openEditReservaModal(reservaId, caches, initMapaModalCallback) {
     const doc = await db.collection('reservas').doc(reservaId).get();

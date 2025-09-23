@@ -118,16 +118,12 @@ function toggleMenu(event) {
 }
 
 function actualizarFiltrosDeMoviles() {
-    // Obtenemos ambos menús desplegables por su ID
     const selectReservas = document.getElementById('filtro-chofer-asignados');
     const selectMapa = document.getElementById('filtro-chofer-mapa');
-
-    // Creamos un array con los que existan en la página actual
     const selects = [selectReservas, selectMapa].filter(s => s !== null);
 
     if (selects.length === 0) return;
 
-    // Generamos el HTML de las opciones UNA SOLA VEZ
     let optionsHTML = '<option value="">Ver todos los móviles</option>';
     const movilesConChofer = caches.choferes
         .map(chofer => {
@@ -144,11 +140,9 @@ function actualizarFiltrosDeMoviles() {
 
     movilesConChofer.forEach(item => {
         const numeroMovil = `Móvil ${item.movilNumero}`;
-        // El valor del option es el ID del chofer para poder filtrar
         optionsHTML += `<option value="${item.choferId}">${numeroMovil} - ${item.choferNombre}</option>`;
     });
 
-    // Aplicamos el HTML a todos los menús encontrados, preservando la selección actual
     selects.forEach(select => {
         const valorSeleccionado = select.value;
         select.innerHTML = optionsHTML;
@@ -177,6 +171,32 @@ function filtrarPorHoras(horas) {
         renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
     }
 }
+
+// ========= INICIO DEL CÓDIGO AÑADIDO =========
+function openNuevaReservaConDatos(datos, initMapaModalCallback) {
+    const form = document.getElementById('reserva-form');
+    form.reset();
+
+    // Precargamos los datos del regreso
+    form.cliente.value = datos.cliente || 'Default';
+    form.siniestro.value = datos.siniestro || '';
+    form.autorizacion.value = datos.autorizacion || '';
+    form.dni_pasajero.value = datos.dni_pasajero || '';
+    form.nombre_pasajero.value = datos.nombre_pasajero || '';
+    form.telefono_pasajero.value = datos.telefono_pasajero || '';
+    form.origen.value = datos.origen || '';
+    form.destino.value = datos.destino || '';
+
+    // Dejamos los campos de fecha, hora y otros vacíos
+    document.getElementById('reserva-id').value = '';
+    document.getElementById('modal-title').textContent = 'Nueva Reserva (Regreso)';
+    document.getElementById('reserva-modal').style.display = 'block';
+
+    if(initMapaModalCallback) {
+        setTimeout(() => initMapaModalCallback(null, null), 100);
+    }
+}
+// ========= FIN DEL CÓDIGO AÑADIDO =========
 
 function initApp() {
     if (appInitialized) return;
@@ -227,7 +247,15 @@ function initApp() {
     window.showReservasTab = showReservasTab;
     window.openAdminTab = openAdminTab;
     
-    document.getElementById('reserva-form').addEventListener('submit', (e) => handleSaveReserva(e, caches));
+    // ========= INICIO DEL CÓDIGO MODIFICADO =========
+    document.getElementById('reserva-form').addEventListener('submit', async (e) => {
+        const datosParaRegreso = await handleSaveReserva(e, caches);
+        if (datosParaRegreso) {
+            openNuevaReservaConDatos(datosParaRegreso, initMapaModal);
+        }
+    });
+    // ========= FIN DEL CÓDIGO MODIFICADO =========
+    
     document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
 
     loadAuxData();
