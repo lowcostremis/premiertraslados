@@ -63,6 +63,8 @@ document.getElementById('logout-btn').addEventListener('click', () => auth.signO
 
 
 // 4. FUNCIONES PRINCIPALES Y DE UTILIDAD
+
+
 function loadAuxData() {
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
@@ -196,8 +198,10 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
 }
 
 function initApp() {
-    if (appInitialized) return;
-    appInitialized = true;
+  if (appInitialized) {
+        return; // Si ya se inicializó, no hagas nada más y sal de la función.
+    }
+    appInitialized = true; // Si es la primera vez, levanta la bandera.
     console.log("Aplicación Inicializada y Módulos Conectados");
     
     const nuevaReservaBtn = document.getElementById('btn-nueva-reserva');
