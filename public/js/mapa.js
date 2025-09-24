@@ -228,17 +228,11 @@ export function escucharUbicacionChoferes() {
                 return;
             }
             
-            let reportadoEnLinea = false;
-            if (chofer.esta_en_linea && chofer.ultima_actualizacion) {
-                const diferenciaMinutos = (ahora.getTime() - chofer.ultima_actualizacion.toDate().getTime()) / 60000;
-                if (diferenciaMinutos < 5) {
-                    reportadoEnLinea = true;
-                }
-            }
-            
+                       
             const tieneViajeActivo = Array.isArray(chofer.viajes_activos) && chofer.viajes_activos.length > 0;
-            const isOnline = reportadoEnLinea || tieneViajeActivo;
-            const colorFondo = isOnline ? '#23477b' : '#808080';
+             // La nueva lógica: está en línea si la app lo dice (esta_en_linea) O si tiene un viaje activo como respaldo.
+            const isOnline = chofer.esta_en_linea || tieneViajeActivo;
+            const colorFondo = isOnline ? '#23477b' : '#808080'; // Azul si está en línea, Gris si no
 
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = cachesRef.moviles.find(m => m.id === chofer.movil_actual_id);
