@@ -228,11 +228,21 @@ export function escucharUbicacionChoferes() {
                 return;
             }
             
-                       
+            // --- INICIO DE LA NUEVA LÓGICA DE TRES COLORES ---
+            let colorFondo;
             const tieneViajeActivo = Array.isArray(chofer.viajes_activos) && chofer.viajes_activos.length > 0;
-             // La nueva lógica: está en línea si la app lo dice (esta_en_linea) O si tiene un viaje activo como respaldo.
-            const isOnline = chofer.esta_en_linea || tieneViajeActivo;
-            const colorFondo = isOnline ? '#23477b' : '#808080'; // Azul si está en línea, Gris si no
+
+            if (chofer.esta_en_linea) {
+                // Si la app dice que está en línea, es azul. Esta es la máxima prioridad.
+                colorFondo = '#23477b'; // Azul (Online)
+            } else if (tieneViajeActivo) {
+                // Si no está en línea, PERO tiene un viaje, significa que fue notificado.
+                colorFondo = '#F5A623'; // Naranja (Notificado)
+            } else {
+                // Si no está en línea y no tiene viajes, está completamente offline.
+                colorFondo = '#808080'; // Gris (Offline)
+            }
+            // --- FIN DE LA NUEVA LÓGICA DE TRES COLORES ---
 
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = cachesRef.moviles.find(m => m.id === chofer.movil_actual_id);
