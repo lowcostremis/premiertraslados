@@ -85,7 +85,11 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
                 const ahoraLocal = new Date();
                 const diferenciaMilisegundos = fechaHoraReserva.getTime() - ahoraLocal.getTime();
                 const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
-                if (horasDiferencia < 0 || horasDiferencia > filtroHoras) return;
+                
+                // --- INICIO DE LA CORRECCIÓN ---
+                // Se elimina la condición "horasDiferencia < 0" para mostrar viajes vencidos
+                if (horasDiferencia > filtroHoras) return;
+                // --- FIN DE LA CORRECCIÓN ---
             }
 
             if (targetTableId && bodies[targetTableId]) {
@@ -96,7 +100,6 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
         }
     });
 }
-
 export async function buscarEnReservas(texto, caches) {
     const resultadosContainer = document.getElementById('resultados-busqueda-reservas');
     const resultadosTbody = document.querySelector('#tabla-resultados-busqueda tbody');

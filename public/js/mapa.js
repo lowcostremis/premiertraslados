@@ -5,7 +5,7 @@ import { db } from './firebase-config.js';
 // --- VARIABLES INTERNAS DEL MÓDULO ---
 let map, mapaModal, autocompleteOrigen, autocompleteDestino, geocoder;
 let marcadoresOrigen = {}, marcadoresChoferes = {};
-let marcadorOrigenModal, marcadorDestinoModal, infoWindowActiva = null, marcadorDestinoActivo = null;
+let marcadorOrigenModal, marcadorDestinoModal, infoWindowActiva = null;
 let mapContextMenu, mapContextMenuItems;
 let filtroMapaActual = 'Todos', filtroHorasMapa = null, filtroChoferMapaId = null;
 let cachesRef = {}, lastReservasSnapshotRef = null, unsubscribeChoferes = null;
@@ -66,129 +66,181 @@ export function initMapaModal(origenCoords, destinoCoords) {
 
 export function cargarMarcadoresDeReservas() {
     if (!map || !lastReservasSnapshotRef()) return;
-    
-    Object.values(marcadoresOrigen).forEach(m => m.setMap(null));
-    marcadoresOrigen = {};
 
-    if (marcadorDestinoActivo) {
-        marcadorDestinoActivo.setMap(null);
-        marcadorDestinoActivo = null;
-    }
+    const idsDeReservasProcesadas = new Set();
+    const ahora = new Date();
+    const lim = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
+
     if (infoWindowActiva) {
         infoWindowActiva.close();
         infoWindowActiva = null;
     }
 
-    const idsDeReservasEnMapa = new Set(Object.keys(marcadoresOrigen));
-    const idsDeReservasProcesadas = new Set();
-    const ahora = new Date();
-    const lim = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
-
     lastReservasSnapshotRef().forEach(doc => {
         const r = { id: doc.id, ...doc.data() };
         let e = (typeof r.estado === 'object') ? r.estado.principal : r.estado;
         const estValidos = ['En Curso', 'Asignado', 'Pendiente', 'En Origen', 'Viaje Iniciado'];
+        
         if (!estValidos.includes(e)) return;
+
+        const estadoOriginal = e;
         if (!r.chofer_asignado_id && e === 'Pendiente') {
             const fT = r.fecha_turno ? new Date(`${r.fecha_turno}T${r.hora_turno || '00:00'}`) : null;
-            if (fT && fT <= lim) e = 'En Curso';
+            if (fT && fT <= lim) {
+                e = 'En Curso';
+            }
         }
-        if (filtroMapaActual !== 'Todos' && e !== filtroMapaActual) return;
+
+        const esPendienteDeFuturo = (estadoOriginal === 'Pendiente' && e === 'Pendiente');
+
+        if (filtroMapaActual !== 'Todos') {
+            if (filtroMapaActual === 'Pendientes') {
+                if (!esPendienteDeFuturo) return;
+            } else {
+                let estadosVisibles = [];
+                if (filtroMapaActual === 'Asignados') {
+                    estadosVisibles = ['Asignado', 'En Origen', 'Viaje Iniciado'];
+                } else if (filtroMapaActual === 'En Curso') {
+                    estadosVisibles = ['En Curso', 'En Origen', 'Viaje Iniciado'];
+                } else {
+                    estadosVisibles = [filtroMapaActual];
+                }
+                if (!estadosVisibles.includes(e)) return;
+            }
+        }
         
-        if (filtroHorasMapa !== null) {
+        if (filtroHorasMapa !== null && !esPendienteDeFuturo) {
             const horaReferencia = r.hora_pickup || r.hora_turno;
             if (!r.fecha_turno || !horaReferencia) return;
             const fechaHoraReserva = new Date(`${r.fecha_turno}T${horaReferencia}`);
             const diferenciaMilisegundos = fechaHoraReserva.getTime() - ahora.getTime();
             const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
-            if (horasDiferencia < 0 || horasDiferencia > filtroHorasMapa) return;
+
+            // --- INICIO DE LA CORRECCIÓN ---
+            // Se elimina la condición "horasDiferencia < 0" para mostrar viajes vencidos
+            if (horasDiferencia > filtroHorasMapa) return;
+            // --- FIN DE LA CORRECCIÓN ---
         }
 
-        let posicionMarcador, iconoMarcador, tituloMarcador;
+        idsDeReservasProcesadas.add(r.id);
+        const marcadorExistente = marcadoresOrigen[r.id];
+        const esViajeEnCurso = ['Viaje Iniciado', 'En Origen'].includes(e);
 
-        if ((e === 'Viaje Iniciado' || e === 'En Origen') && r.destino_coords && r.destino_coords.latitude) {
-            posicionMarcador = { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude };
+        if (esViajeEnCurso && r.destino_coords && r.destino_coords.latitude) {
+            const posicion = { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude };
             const movil = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id);
             const numeroMovil = movil ? movil.numero.toString() : '?';
-            iconoMarcador = crearIconoDePin('#27DAF5', numeroMovil);
-            tituloMarcador = `DESTINO: ${r.destino} (Móvil ${numeroMovil})`;
+            const icono = crearIconoDePin('#27DAF5', numeroMovil);
+            const titulo = `DESTINO: ${r.destino}`;
+
+            if (marcadorExistente) {
+                marcadorExistente.setPosition(posicion);
+                marcadorExistente.setIcon(icono);
+                marcadorExistente.setTitle(titulo);
+                google.maps.event.clearInstanceListeners(marcadorExistente);
+                marcadorExistente.addListener('click', () => {
+                    if (infoWindowActiva) infoWindowActiva.close();
+                    const contenido = `<strong>Origen del Viaje:</strong><br>${r.origen}`;
+                    infoWindowActiva = new google.maps.InfoWindow({ content: contenido });
+                    infoWindowActiva.open(map, marcadorExistente);
+                });
+                marcadorExistente.addListener('rightclick', () => {});
+
+            } else {
+                const marker = new google.maps.Marker({ position: posicion, map: map, title: titulo, icon: icono });
+                marker.addListener('click', () => {
+                    if (infoWindowActiva) infoWindowActiva.close();
+                    const contenido = `<strong>Origen del Viaje:</strong><br>${r.origen}`;
+                    infoWindowActiva = new google.maps.InfoWindow({ content: contenido });
+                    infoWindowActiva.open(map, marker);
+                });
+                marcadoresOrigen[r.id] = marker;
+            }
+
         } else if (r.origen_coords && r.origen_coords.latitude) {
-            posicionMarcador = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
+            const posicion = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
             let colorFondo, textoIcono = '';
             
             switch (e) {
-                case 'En Curso': 
-                case 'En Origen':
+                case 'En Curso':
                     colorFondo = '#F54927'; textoIcono = (r.hora_pickup || r.hora_turno || '').substring(0, 5); break;
                 case 'Asignado':
-                    colorFondo = '#4DF527'; const m = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id); if (m) textoIcono = m.numero.toString(); break;
-                case 'Pendiente': 
-                    colorFondo = '#C15DE8'; break;
-                default:
-                    colorFondo = '#808080';
-                    textoIcono = '•';
+                    const detalleEstado = r.estado && r.estado.detalle;
+                    colorFondo = (detalleEstado === 'Aceptada') ? '#4DF527' : '#F5A623';
+                    const movilAsignado = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id);
+                    if (movilAsignado) textoIcono = movilAsignado.numero.toString();
                     break;
+                case 'Pendiente': 
+                    colorFondo = '#C15DE8';
+                    textoIcono = (r.hora_pickup || r.hora_turno || '').substring(0, 5);
+                    break;
+                default:
+                    colorFondo = '#808080'; textoIcono = '•'; break;
+            }
+            const icono = crearIconoDePin(colorFondo, textoIcono);
+            const titulo = `Origen: ${r.origen} (${e})`;
+
+            if (marcadorExistente) {
+                marcadorExistente.setPosition(posicion);
+                marcadorExistente.setIcon(icono);
+                marcadorExistente.setTitle(titulo);
+                google.maps.event.clearInstanceListeners(marcadorExistente);
+                marcadorExistente.addListener('dblclick', () => window.app.openEditReservaModal(r.id));
+                marcadorExistente.addListener('rightclick', (event) => {
+                     event.domEvent.preventDefault();
+                     hideMapContextMenu();
+                     let menuHTML = ''; const rId = r.id;
+                     if (e === 'En Curso' || e === 'Pendiente') {
+                         menuHTML = `<li><a onclick="window.app.openEditReservaModal('${rId}');">Editar</a></li><li><select onchange="window.app.asignarMovil('${rId}', this.value);"><option value="">Asignar Móvil...</option>${cachesRef.moviles.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="window.app.changeReservaState('${rId}', 'Anulado');">Anular</a></li>`;
+                     } else if (e === 'Asignado' || e === 'En Origen' || e === 'Viaje Iniciado') {
+                         menuHTML = `<li><a onclick="window.app.openEditReservaModal('${rId}');">Editar</a></li><li><a onclick="window.app.finalizarReserva('${rId}');">Finalizar</a></li><li><a onclick="window.app.quitarAsignacion('${rId}');">Quitar Móvil</a></li>`;
+                     }
+                     if (menuHTML) {
+                         mapContextMenuItems.innerHTML = menuHTML;
+                         mapContextMenu.style.left = `${event.domEvent.clientX}px`;
+                         mapContextMenu.style.top = `${event.domEvent.clientY}px`;
+                         mapContextMenu.style.display = 'block';
+                     }
+                });
+
+            } else {
+                const marker = new google.maps.Marker({ position: posicion, map: map, title: titulo, icon: icono });
+                marker.addListener('dblclick', () => window.app.openEditReservaModal(r.id));
+                marker.addListener('rightclick', (event) => {
+                     event.domEvent.preventDefault();
+                     hideMapContextMenu();
+                     let menuHTML = ''; const rId = r.id;
+                     if (e === 'En Curso' || e === 'Pendiente') {
+                         menuHTML = `<li><a onclick="window.app.openEditReservaModal('${rId}');">Editar</a></li><li><select onchange="window.app.asignarMovil('${rId}', this.value);"><option value="">Asignar Móvil...</option>${cachesRef.moviles.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="window.app.changeReservaState('${rId}', 'Anulado');">Anular</a></li>`;
+                     } else if (e === 'Asignado' || e === 'En Origen' || e === 'Viaje Iniciado') {
+                         menuHTML = `<li><a onclick="window.app.openEditReservaModal('${rId}');">Editar</a></li><li><a onclick="window.app.finalizarReserva('${rId}');">Finalizar</a></li><li><a onclick="window.app.quitarAsignacion('${rId}');">Quitar Móvil</a></li>`;
+                     }
+                     if (menuHTML) {
+                         mapContextMenuItems.innerHTML = menuHTML;
+                         mapContextMenu.style.left = `${event.domEvent.clientX}px`;
+                         mapContextMenu.style.top = `${event.domEvent.clientY}px`;
+                         mapContextMenu.style.display = 'block';
+                     }
+                });
+                marcadoresOrigen[r.id] = marker;
             }
 
-            iconoMarcador = crearIconoDePin(colorFondo, textoIcono);
-            tituloMarcador = `Origen: ${r.origen} (${e})`;
-        }
-
-        if (posicionMarcador) {
-            idsDeReservasProcesadas.add(r.id);
-            if (marcadoresOrigen[r.id]) {
-                marcadoresOrigen[r.id].setPosition(posicionMarcador);
-                marcadoresOrigen[r.id].setIcon(iconoMarcador);
-                marcadoresOrigen[r.id].setTitle(tituloMarcador);
-            } else {
-                const marker = new google.maps.Marker({ position: posicionMarcador, map: map, title: tituloMarcador, icon: iconoMarcador });
-                marcadoresOrigen[r.id] = marker;
-                marker.addListener('dblclick', () => {
-                    window.app.openEditReservaModal(r.id);
-                });
-                marker.addListener('click', () => {
-                    if (infoWindowActiva) infoWindowActiva.close();
-                    if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null);
-                    const cli = cachesRef.clientes[r.cliente] || { nombre: 'N/A' };
-                    const cho = cachesRef.choferes.find(c => c.id === r.chofer_asignado_id) || { nombre: 'No asignado' };
-                    let obs = r.observaciones ? `<p style="background-color:#fffbe6;border-left:4px solid #ffc107;padding:8px;margin-top:5px;"><strong>Obs:</strong> ${r.observaciones}</p>` : '';
-                    const cont = `<div class="info-window"><h4>Reserva de: ${cli.nombre}</h4><p><strong>Pasajero:</strong> ${r.nombre_pasajero||'N/A'}</p><p><strong>Origen:</strong> ${r.origen}</p><p><strong>Destino:</strong> ${r.destino}</p><p><strong>Turno:</strong> ${new Date(r.fecha_turno + 'T' + (r.hora_turno||'00:00')).toLocaleString('es-AR')}</p><p><strong>Chofer:</strong> ${cho.nombre}</p>${obs}</div>`;
-                    infoWindowActiva = new google.maps.InfoWindow({ content: cont });
-                    infoWindowActiva.open(map, marker);
-                    
-                    if (!['Viaje Iniciado', 'En Origen'].includes(e) && r.destino_coords && r.destino_coords.latitude) {
-                        const iD = crearIconoDePin('#27DAF5', 'D');
-                        marcadorDestinoActivo = new google.maps.Marker({ position: { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude }, map: map, title: `Destino: ${r.destino}`, icon: iD });
-                    }
-                    infoWindowActiva.addListener('closeclick', () => { if (marcadorDestinoActivo) marcadorDestinoActivo.setMap(null); });
-                });
-                marker.addListener('rightclick', (event) => {
-                    event.domEvent.preventDefault();
-                    hideMapContextMenu();
-                    let menuHTML = ''; const rId = r.id;
-                    if (e === 'En Curso' || e === 'Pendiente') {
-                        menuHTML = `<li><a onclick="window.app.openEditReservaModal('${rId}');">Editar</a></li><li><select onchange="window.app.asignarMovil('${rId}', this.value);"><option value="">Asignar Móvil...</option>${cachesRef.moviles.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('')}</select></li><li><a onclick="window.app.changeReservaState('${rId}', 'Anulado');">Anular</a></li>`;
-                    } else if (e === 'Asignado' || e === 'En Origen' || e === 'Viaje Iniciado') {
-                        menuHTML = `<li><a onclick="window.app.openEditReservaModal('${rId}');">Editar</a></li><li><a onclick="window.app.finalizarReserva('${rId}');">Finalizar</a></li><li><a onclick="window.app.quitarAsignacion('${rId}');">Quitar Móvil</a></li>`;
-                    }
-                    if (menuHTML) {
-                        mapContextMenuItems.innerHTML = menuHTML;
-                        mapContextMenu.style.left = `${event.domEvent.clientX}px`;
-                        mapContextMenu.style.top = `${event.domEvent.clientY}px`;
-                        mapContextMenu.style.display = 'block';
-                    }
-                });
+        } else {
+            if (marcadorExistente) {
+                marcadorExistente.setMap(null);
+                delete marcadoresOrigen[r.id];
             }
         }
     });
 
-    idsDeReservasEnMapa.forEach(id => {
+    Object.keys(marcadoresOrigen).forEach(id => {
         if (!idsDeReservasProcesadas.has(id)) {
             marcadoresOrigen[id].setMap(null);
             delete marcadoresOrigen[id];
         }
     });
 }
+
 
 export function filtrarMapa(estado) {
     filtroMapaActual = estado;
@@ -228,21 +280,16 @@ export function escucharUbicacionChoferes() {
                 return;
             }
             
-            // --- INICIO DE LA NUEVA LÓGICA DE TRES COLORES ---
             let colorFondo;
             const tieneViajeActivo = Array.isArray(chofer.viajes_activos) && chofer.viajes_activos.length > 0;
 
             if (chofer.esta_en_linea) {
-                // Si la app dice que está en línea, es azul. Esta es la máxima prioridad.
                 colorFondo = '#23477b'; // Azul (Online)
             } else if (tieneViajeActivo) {
-                // Si no está en línea, PERO tiene un viaje, significa que fue notificado.
                 colorFondo = '#F5A623'; // Naranja (Notificado)
             } else {
-                // Si no está en línea y no tiene viajes, está completamente offline.
                 colorFondo = '#808080'; // Gris (Offline)
             }
-            // --- FIN DE LA NUEVA LÓGICA DE TRES COLORES ---
 
             const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
             const movilAsignado = cachesRef.moviles.find(m => m.id === chofer.movil_actual_id);
