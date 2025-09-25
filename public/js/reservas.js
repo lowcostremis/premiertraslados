@@ -65,18 +65,22 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
             const estadoPrincipal = typeof reserva.estado === 'object' ? reserva.estado.principal : reserva.estado;
 
             if (estadoPrincipal === 'Finalizado' || estadoPrincipal === 'Anulado') {
-                // No mostrar
-            } else if (estadoPrincipal === 'Asignado' || estadoPrincipal === 'En Origen' || estadoPrincipal === 'Viaje Iniciado') {
-                targetTableId = 'tabla-asignados';
-            } else if (fechaTurno && fechaTurno > limite24hs && estadoPrincipal !== 'Negativo') {
-                targetTableId = 'tabla-pendientes';
+               } else if (estadoPrincipal === 'Asignado' || estadoPrincipal === 'En Origen' || estadoPrincipal === 'Viaje Iniciado') {
+                                          // Las asignadas van a su tabla, esto se mantiene igual.
+              targetTableId = 'tabla-asignados';
+            } else if (estadoPrincipal === 'Pendiente') {
+                                         // ¡NUEVA LÓGICA! Manejamos explícitamente el estado 'Pendiente'.
+                if (fechaTurno && fechaTurno > limite24hs) {
+                                         // Si es 'Pendiente' Y su fecha es mayor a 24hs, va a la tabla de pendientes.
+                    targetTableId = 'tabla-pendientes';
+                } else {
+                                        // Si es 'Pendiente' pero su fecha es dentro de las próximas 24hs, va a 'En Curso'.
+                    targetTableId = 'tabla-en-curso';
+              }
             } else {
-                targetTableId = 'tabla-en-curso';
-            }
-
-            if (targetTableId === 'tabla-asignados' && filtroChoferAsignadosId && reserva.chofer_asignado_id !== filtroChoferAsignadosId) {
-                return;
-            }
+                                      // Cualquier otro estado no finalizado ni asignado (como 'En Curso' mismo) va aquí.
+                    targetTableId = 'tabla-en-curso';
+                    }
 
             if (targetTableId === 'tabla-en-curso' && filtroHoras !== null) {
                 const horaReferencia = reserva.hora_pickup || reserva.hora_turno;

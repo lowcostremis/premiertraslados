@@ -1,13 +1,13 @@
 // js/main.js
 
-// 1. IMPORTACIONES DE TODOS LOS MÓDulos
+// 1. IMPORTACIONES DE TODOS LOS MÓDULOS
 import { auth, db } from './firebase-config.js';
 import { openTab, showReservasTab, openAdminTab } from './tabs.js';
 import { initHistorial, cargarHistorial, poblarFiltroClientes } from './historial.js';
 import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
 import { initMapa, initMapInstance, initMapaModal, cargarMarcadoresDeReservas, filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer, escucharUbicacionChoferes } from './mapa.js';
-import { 
+import {
     listenToReservas,
     renderAllReservas,
     buscarEnReservas,
@@ -32,7 +32,7 @@ let caches = {
     moviles: []
 };
 let lastReservasSnapshot = null;
-let appInitialized = false;
+let appInitialized = false; // Bandera para controlar la inicialización
 let filtroChoferAsignadosId = null;
 let filtroHoras = null;
 
@@ -44,11 +44,11 @@ auth.onAuthStateChanged(user => {
         authSection.style.display = 'none';
         appContent.style.display = 'block';
         document.getElementById('user-email-display').textContent = user.email;
-        initApp();
+        initApp(); // Inicializa la aplicación cuando el usuario está logueado
     } else {
         authSection.style.display = 'flex';
         appContent.style.display = 'none';
-        appInitialized = false;
+        appInitialized = false; // Resetea la bandera si el usuario cierra sesión
     }
 });
 
@@ -64,24 +64,23 @@ document.getElementById('logout-btn').addEventListener('click', () => auth.signO
 
 // 4. FUNCIONES PRINCIPALES Y DE UTILIDAD
 
-
 function loadAuxData() {
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
         caches.clientes = {};
         if (clienteSelect) clienteSelect.innerHTML = '<option value="Default">Default</option>';
-        
+
         snapshot.forEach(doc => {
             const data = doc.data();
             caches.clientes[doc.id] = data;
             if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
         });
-        
+
         poblarFiltroClientes(caches.clientes);
     });
 
     db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
-        caches.choferes = [];
+       caches.choferes = [];
        snapshot.forEach(doc => caches.choferes.push({ id: doc.id, ...doc.data() }));
        actualizarFiltrosDeMoviles();
     });
@@ -100,7 +99,7 @@ function loadAuxData() {
     db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         caches.moviles = [];
         snapshot.forEach(doc => caches.moviles.push({ id: doc.id, ...doc.data() }));
-        actualizarFiltrosDeMoviles(); 
+        actualizarFiltrosDeMoviles();
     });
 }
 
@@ -197,13 +196,21 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     }
 }
 
+// 5. INICIALIZACIÓN CENTRAL DE LA APLICACIÓN
 function initApp() {
-  if (appInitialized) {
-        return; // Si ya se inicializó, no hagas nada más y sal de la función.
+    // --- ADAPTACIÓN DE DEPURACIÓN 1 ---
+    // Log para verificar cuántas veces se intenta inicializar la app.
+    console.log("Intentando inicializar la aplicación en:", new Date().toLocaleTimeString());
+    
+    if (appInitialized) {
+        // Si ya se inicializó, no hagas nada más y sal de la función.
+        console.warn("ADVERTENCIA: La aplicación ya estaba inicializada. Se evitó una re-inicialización.");
+        return;
     }
     appInitialized = true; // Si es la primera vez, levanta la bandera.
     console.log("Aplicación Inicializada y Módulos Conectados");
-    
+
+    // --- EVENT LISTENERS DE ELEMENTOS GLOBALES ---
     const nuevaReservaBtn = document.getElementById('btn-nueva-reserva');
     if (nuevaReservaBtn) {
         nuevaReservaBtn.addEventListener('click', () => {
@@ -216,7 +223,7 @@ function initApp() {
         });
     }
 
-    const closeModal = (modalId) => { 
+    const closeModal = (modalId) => {
         const modal = document.getElementById(modalId);
         if(modal) modal.style.display = 'none';
      };
@@ -231,6 +238,7 @@ function initApp() {
         });
     }
 
+    // --- OBJETO GLOBAL PARA FUNCIONES ACCESIBLES DESDE HTML ---
     window.app = {
         editItem, deleteItem, openResetPasswordModal,
         openEditReservaModal: (reservaId) => openEditReservaModal(reservaId, caches, initMapaModal),
@@ -239,7 +247,7 @@ function initApp() {
         finalizarReserva: (reservaId) => finalizarReserva(reservaId, caches),
         quitarAsignacion, updateHoraPickup, updateZona,
         toggleMenu,
-        hideTableMenus, 
+        hideTableMenus,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer,
         filtrarPorHoras
@@ -258,13 +266,19 @@ function initApp() {
     
     document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
 
+    // --- CARGA DE DATOS Y MÓDULOS ---
     loadAuxData();
     initHistorial(caches);
     initPasajeros();
     initAdmin(caches);
     initMapa(caches, () => lastReservasSnapshot);
 
+    // --- LISTENER PRINCIPAL DE RESERVAS ---
     listenToReservas(snapshot => {
+        // --- ADAPTACIÓN DE DEPURACIÓN 2 ---
+        // Log para ver cuándo se activa el listener y con cuántos datos.
+        console.log("Listener de 'reservas' activado con", snapshot.size, "documentos.");
+        
         lastReservasSnapshot = snapshot;
         renderAllReservas(snapshot, caches, filtroChoferAsignadosId, filtroHoras);
         
@@ -272,14 +286,13 @@ function initApp() {
         if (searchResultsContainer && searchResultsContainer.style.display === 'block') {
             const searchInput = document.getElementById('busqueda-reservas');
             if (searchInput.value) {
-                console.log("Refrescando búsqueda por cambio en los datos...");
                 buscarEnReservas(searchInput.value, caches);
             }
         }
        
         cargarMarcadoresDeReservas();
-       
     });
 
+    // --- PESTAÑA INICIAL ---
     openTab(null, 'Reservas');
 }
