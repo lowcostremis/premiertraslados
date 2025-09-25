@@ -190,6 +190,53 @@ exports.sincronizarChoferesConAlgolia = onDocumentWritten("choferes/{choferId}",
 });
 
 // ===================================================================================
+// ====> FUNCIÓN NUEVA PARA AGREGAR NOMBRE DE CLIENTE <====
+// ===================================================================================
+exports.agregarNombreClienteAReserva = onDocumentWritten("reservas/{reservaId}", async (event) => {
+    if (!event.data.after.exists) {
+        console.log("Reserva borrada, no se hace nada.");
+        return null;
+    }
+
+    const datosReserva = event.data.after.data();
+
+    // Evita bucles infinitos: si el campo ya existe, no hace nada.
+    if (datosReserva.cliente_nombre) {
+        console.log(`La reserva ${event.params.reservaId} ya tiene nombre de cliente. Saliendo.`);
+        return null;
+    }
+
+    const clienteId = datosReserva.cliente;
+    if (!clienteId) {
+        console.log(`La reserva ${event.params.reservaId} no tiene clienteId. Saliendo.`);
+        return null;
+    }
+    
+    console.log(`Buscando nombre para cliente con ID: ${clienteId}`);
+
+    try {
+        const clienteSnap = await db.collection("clientes").doc(clienteId).get();
+
+        let nombreCliente = "N/A";
+        if (clienteSnap.exists) {
+            nombreCliente = clienteSnap.data().nombre || "N/A";
+            console.log(`Nombre encontrado: ${nombreCliente}. Actualizando reserva.`);
+        } else {
+            console.log(`Cliente no encontrado con ID: ${clienteId}. Usando 'N/A'.`);
+        }
+        
+        return event.data.after.ref.update({
+            cliente_nombre: nombreCliente,
+        });
+
+    } catch (error) {
+        console.error("Error al buscar o actualizar el cliente:", error);
+        return null;
+    }
+});
+
+
+// ===================================================================================
 // FUNCIONES DE ADMINISTRACIÓN (USUARIOS, EXPORTACIÓN)
 // ===================================================================================
 exports.crearUsuario = onCall(async (request) => {
