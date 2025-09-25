@@ -154,7 +154,7 @@ function attachFormListeners() {
 
 function initializeAdminLists() {
     renderAdminList('clientes', 'lista-clientes', ['nombre', 'cuit', 'telefono'], ['Nombre', 'CUIT', 'Teléfono']);
-    renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'email'], ['DNI', 'Nombre', 'Email de Acceso']);
+     renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'movil_actual_id', 'email'], ['DNI', 'Nombre', 'Móvil Asignado', 'Email de Acceso']);
     renderAdminList('moviles', 'lista-moviles', ['numero', 'patente', 'marca', 'modelo'], ['N° Móvil', 'Patente', 'Marca', 'Modelo']);
     renderAdminList('zonas', 'lista-zonas', ['numero', 'descripcion'], ['Número', 'Descripción']);
     renderUsersList();
@@ -344,11 +344,27 @@ function renderAdminList(collectionName, containerId, fields, headers) {
         snapshot.forEach(doc => {
             const item = doc.data();
             tableHTML += `<tr>`;
+            
+            // ▼▼▼ LÓGICA MODIFICADA ▼▼▼
             fields.forEach(field => {
-                if (field !== 'auth_uid') {
+                // Si el campo es 'movil_actual_id', buscamos el móvil en la caché para mostrar su número.
+                if (field === 'movil_actual_id' && collectionName === 'choferes') {
+                    const movilId = item[field];
+                    let movilDisplay = '-'; // Valor por defecto si no tiene móvil
+                    if (movilId && cachesRef.moviles) {
+                        const movilAsignado = cachesRef.moviles.find(m => m.id === movilId);
+                        if (movilAsignado) {
+                            movilDisplay = `N° ${movilAsignado.numero}`;
+                        }
+                    }
+                    tableHTML += `<td>${movilDisplay}</td>`;
+                } 
+                // Para todos los demás campos, usamos la lógica que ya existía.
+                else if (field !== 'auth_uid') {
                     tableHTML += `<td>${item[field] || '-'}</td>`;
                 }
             });
+            // ▲▲▲ FIN DE LA MODIFICACIÓN ▲▲▲
 
             let accionesHTML = `<button onclick="window.app.editItem('${collectionName}', '${doc.id}')">Editar</button>`;
             if (collectionName === 'choferes' && item.auth_uid) {
