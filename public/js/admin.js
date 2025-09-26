@@ -60,7 +60,7 @@ export async function editItem(collection, id) {
 
     const fieldsToEdit = Object.keys(data);
     fieldsToEdit.forEach(field => {
-        if (field === 'creadoEn' || field === 'auth_uid') return;
+        if (['creadoEn', 'auth_uid', 'coordenadas'].includes(field)) return;
         
         const label = document.createElement('label');
         label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
@@ -154,7 +154,7 @@ function attachFormListeners() {
 
 function initializeAdminLists() {
     renderAdminList('clientes', 'lista-clientes', ['nombre', 'cuit', 'telefono'], ['Nombre', 'CUIT', 'Teléfono']);
-    renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'movil_actual_id', 'email', 'app_version'], ['DNI', 'Nombre', 'Móvil Asignado', 'Email de Acceso', 'Versión App']);
+    renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'movil_actual_id', 'telefono', 'email', 'app_version'], ['DNI', 'Nombre', 'Móvil Asignado', 'Teléfono', 'Email de Acceso', 'Versión App']);
     renderAdminList('moviles', 'lista-moviles', ['numero', 'patente', 'marca', 'modelo'], ['N° Móvil', 'Patente', 'Marca', 'Modelo']);
     renderAdminList('zonas', 'lista-zonas', ['numero', 'descripcion'], ['Número', 'Descripción']);
     renderUsersList();

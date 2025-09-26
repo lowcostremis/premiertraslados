@@ -4,7 +4,6 @@ import { db } from './firebase-config.js';
 
 // --- VARIABLES INTERNAS DEL MÓDULO ---
 let map, mapaModal, autocompleteOrigen, autocompleteDestino, geocoder;
-// CORRECCIÓN: Separamos los marcadores de origen y destino para no sobreescribirlos.
 let marcadoresReservas = {};
 let marcadoresChoferes = {};
 let marcadorOrigenModal, marcadorDestinoModal, infoWindowActiva = null;
@@ -93,7 +92,6 @@ export function cargarMarcadoresDeReservas() {
 
         const esPendienteDeFuturo = (estadoOriginal === 'Pendiente' && e === 'Pendiente');
 
-        // Aplicación de filtros de visualización
         if (filtroMapaActual !== 'Todos') {
             if (filtroMapaActual === 'Pendientes') { if (!esPendienteDeFuturo) return; } 
             else {
@@ -117,13 +115,11 @@ export function cargarMarcadoresDeReservas() {
         const marcadorExistente = marcadoresReservas[r.id];
         const esViajeEnCurso = ['Viaje Iniciado', 'En Origen'].includes(e);
 
-        // Lógica para mostrar marcador de ORIGEN o DESTINO
         if (esViajeEnCurso && r.destino_coords && r.destino_coords.latitude) {
-            // Mostrar marcador de DESTINO
             const posicion = { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude };
             const movil = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id);
             const numeroMovil = movil ? movil.numero.toString() : '?';
-            const icono = crearIconoDePin('#27DAF5', numeroMovil); // Azul para destino
+            const icono = crearIconoDePin('#27DAF5', numeroMovil);
             const titulo = `DESTINO: ${r.destino}`;
             const origenCoords = r.origen_coords ? { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude } : null;
 
@@ -136,20 +132,17 @@ export function cargarMarcadoresDeReservas() {
                 marcadoresReservas[r.id] = new google.maps.Marker({ position: posicion, map: map, title: titulo, icon: icono });
             }
             
-            // ADAPTACIÓN: Al hacer clic en destino, se centra en el origen y muestra info
             marcadoresReservas[r.id].addListener('click', () => {
                 if (infoWindowActiva) infoWindowActiva.close();
-                // ADAPTACIÓN: Se agrega "Hora Turno" a la info
                 const contenido = `<strong>Destino de:</strong> ${r.nombre_pasajero}<br><strong>Origen:</strong> ${r.origen}<br><strong>Hora Turno:</strong> ${r.hora_turno}`;
                 infoWindowActiva = new google.maps.InfoWindow({ content: contenido });
                 infoWindowActiva.open(map, marcadoresReservas[r.id]);
                 if (origenCoords) {
-                    map.panTo(origenCoords); // Centra el mapa en el origen
+                    map.panTo(origenCoords);
                 }
             });
 
         } else if (r.origen_coords && r.origen_coords.latitude) {
-            // Mostrar marcador de ORIGEN
             const posicion = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
             let colorFondo, textoIcono = '';
             
@@ -177,7 +170,6 @@ export function cargarMarcadoresDeReservas() {
                 marcadoresReservas[r.id] = new google.maps.Marker({ position: posicion, map: map, title: titulo, icon: icono });
             }
             
-            // Re-asignar listeners de doble clic y clic derecho
             marcadoresReservas[r.id].addListener('dblclick', () => window.app.openEditReservaModal(r.id));
             marcadoresReservas[r.id].addListener('rightclick', (event) => mostrarMenuContextualReserva(event, r, e));
 
@@ -189,7 +181,6 @@ export function cargarMarcadoresDeReservas() {
         }
     });
 
-    // Limpiar marcadores de reservas que ya no están activas
     Object.keys(marcadoresReservas).forEach(id => {
         if (!idsDeReservasActivas.has(id)) {
             marcadoresReservas[id].setMap(null);
@@ -222,50 +213,69 @@ export function filtrarMapaPorChofer(choferId) {
 
 export function escucharUbicacionChoferes() {
     if (unsubscribeChoferes) unsubscribeChoferes();
+
     unsubscribeChoferes = db.collection('choferes').onSnapshot(snapshot => {
         const mostrar = document.getElementById('toggle-choferes').checked;
-        snapshot.docChanges().forEach(change => {
-            const chofer = { id: change.doc.id, ...change.doc.data() };
-            const marcadorExistente = marcadoresChoferes[chofer.id];
 
-            if (change.type === 'removed' || !chofer.coordenadas) {
-                if (marcadorExistente) {
-                    marcadorExistente.setMap(null);
-                    delete marcadoresChoferes[chofer.id];
+        snapshot.docChanges().forEach(change => {
+            const choferData = change.doc.data();
+            const choferId = change.doc.id;
+            
+            console.log(`[MAPA] Recibido update para chofer: ${choferId}, tipo: ${change.type}`, choferData);
+
+            if (change.type === 'removed') {
+                if (marcadoresChoferes[choferId]) {
+                    marcadoresChoferes[choferId].setMap(null);
+                    delete marcadoresChoferes[choferId];
                 }
                 return;
             }
-            
-            // ADAPTACIÓN: Lógica de colores para marcadores de chofer
-            let colorFondo;
-            // El estado 'pasajero_a_bordo' viene de la App del chofer
-            if (chofer.estadoViaje === 'pasajero_a_bordo') {
-                colorFondo = '#F5A623'; // Naranja (Con Pasajero)
-            } else if (chofer.esta_en_linea) {
-                colorFondo = '#23477b'; // Azul (Online)
-            } else {
-                colorFondo = '#808080'; // Gris (Offline)
+
+            if (!choferData.coordenadas || typeof choferData.coordenadas.latitude !== 'number' || typeof choferData.coordenadas.longitude !== 'number') {
+                console.warn(`[MAPA] Chofer ${choferId} no tiene coordenadas válidas. Se omite.`);
+                if (marcadoresChoferes[choferId]) {
+                    marcadoresChoferes[choferId].setVisible(false);
+                }
+                return;
             }
 
-            const nuevaPos = new google.maps.LatLng(chofer.coordenadas.latitude, chofer.coordenadas.longitude);
-            const movilAsignado = cachesRef.moviles.find(m => m.id === chofer.movil_actual_id);
-            const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'N/A';
-            const iconoChofer = crearIconoDeChofer(colorFondo, numeroMovil);
-            const titulo = `Chofer: ${chofer.nombre || 'N/A'}\nMóvil: ${numeroMovil}`;
-            
-            if (marcadorExistente) {
-                marcadorExistente.setPosition(nuevaPos);
-                marcadorExistente.setIcon(iconoChofer);
-                marcadorExistente.setTitle(titulo);
+            let colorFondo;
+            if (choferData.estadoViaje === 'pasajero_a_bordo') {
+                colorFondo = '#F5A623'; // Naranja
+            } else if (choferData.esta_en_linea) {
+                colorFondo = '#23477b'; // Azul
             } else {
-                marcadoresChoferes[chofer.id] = new google.maps.Marker({ position: nuevaPos, map: map, title: titulo, icon: iconoChofer, zIndex: 101 });
+                colorFondo = '#808080'; // Gris
+            }
+
+            const nuevaPos = new google.maps.LatLng(choferData.coordenadas.latitude, choferData.coordenadas.longitude);
+            const movilAsignado = cachesRef.moviles.find(m => m.id === choferData.movil_actual_id);
+            const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'S/A';
+            const iconoChofer = crearIconoDeChofer(colorFondo, numeroMovil);
+            const titulo = `Chofer: ${choferData.nombre || 'N/A'}\nMóvil: ${numeroMovil}`;
+            
+            const marcador = marcadoresChoferes[choferId];
+
+            if (marcador) {
+                marcador.setPosition(nuevaPos);
+                marcador.setIcon(iconoChofer);
+                marcador.setTitle(titulo);
+            } else {
+                marcadoresChoferes[choferId] = new google.maps.Marker({
+                    position: nuevaPos,
+                    map: map,
+                    title: titulo,
+                    icon: iconoChofer,
+                    zIndex: 101
+                });
             }
             
-            const esVisible = mostrar && (!filtroChoferMapaId || chofer.id === filtroChoferMapaId);
-            marcadoresChoferes[chofer.id].setVisible(esVisible);
+            const esVisible = mostrar && (!filtroChoferMapaId || choferId === filtroChoferMapaId);
+            marcadoresChoferes[choferId].setVisible(esVisible);
         });
     });
 }
+
 
 // --- FUNCIONES INTERNAS ---
 

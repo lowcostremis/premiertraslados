@@ -497,3 +497,87 @@ exports.enviarNotificacionNuevoViaje = functions.firestore
         }
         return null;
     });
+
+    // ===== INICIO DE LA NUEVA FUNCIÓN =====
+/**
+ * Trigger que se activa cuando una reserva existente es modificada.
+ * Notifica al chofer si la reserva es cancelada o si sus detalles cambian.
+ */
+exports.notificarCambioEnReserva = functions.firestore
+    .document('reservas/{reservaId}')
+    .onUpdate(async (change, context) => {
+        const beforeData = change.before.data();
+        const afterData = change.after.data();
+        const reservaId = context.params.reservaId;
+
+        // Solo continuamos si la reserva tenía y tiene un chofer asignado.
+        const choferId = afterData.chofer_asignado_id || beforeData.chofer_asignado_id;
+        if (!choferId) {
+            console.log("La reserva no tiene chofer asignado, no se notifica.");
+            return null;
+        }
+
+        let notificationTitle = '';
+        let notificationBody = '';
+
+        // Escenario 1: La reserva fue cancelada
+        if (afterData.estado === 'cancelado' && beforeData.estado !== 'cancelado') {
+            notificationTitle = 'Reserva Cancelada';
+            notificationBody = `El viaje a ${afterData.destino_direccion || 'destino'} ha sido cancelado.`;
+        }
+        // Escenario 2: La reserva fue editada (cambió la dirección o la fecha/hora)
+        else if (afterData.estado !== 'cancelado' && (
+                 afterData.origen_direccion !== beforeData.origen_direccion ||
+                 afterData.destino_direccion !== beforeData.destino_direccion ||
+                 !afterData.fecha_hora_reserva.isEqual(beforeData.fecha_hora_reserva)
+               )) {
+            notificationTitle = 'Reserva Actualizada';
+            notificationBody = `El viaje a ${afterData.destino_direccion || 'destino'} ha sido modificado. Revisa los detalles.`;
+        }
+
+        // Si no hay nada que notificar, salimos.
+        if (!notificationTitle) {
+            return null;
+        }
+
+        // Buscamos el token del chofer y enviamos la notificación
+        const choferDoc = await db.collection('choferes').doc(choferId).get();
+        if (!choferDoc.exists || !choferDoc.data().fcm_token) {
+            console.log(`El chofer ${choferId} no tiene token, no se puede notificar del cambio.`);
+            return null;
+        }
+
+        const fcmToken = choferDoc.data().fcm_token;
+        const message = {
+            notification: {
+                title: notificationTitle,
+                body: notificationBody
+            },
+            android: {
+              notification: {
+                sound: 'reserva_sound' // Usamos el mismo sonido
+              }
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: 'reserva_sound.aiff' // Y para iOS
+                }
+              }
+            },
+            token: fcmToken,
+            data: {
+                reservaId: reservaId,
+                click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            },
+        };
+
+        try {
+            await admin.messaging().send(message);
+            console.log(`Notificación de cambio enviada con éxito al chofer ${choferId}`);
+        } catch (error) {
+            console.error(`Error al enviar notificación de cambio al chofer ${choferId}:`, error);
+        }
+
+        return null;
+    });
