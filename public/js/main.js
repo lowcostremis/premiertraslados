@@ -120,36 +120,53 @@ function toggleMenu(event) {
 }
 
 function actualizarFiltrosDeMoviles() {
+       // Selects de Reservas y Mapa (para filtrar)
     const selectReservas = document.getElementById('filtro-chofer-asignados');
     const selectMapa = document.getElementById('filtro-chofer-mapa');
-    const selects = [selectReservas, selectMapa].filter(s => s !== null);
+    
+    // Select de Admin (para asignar al crear chofer)
+    const selectAdmin = document.getElementById('chofer-movil-select');
 
-    if (selects.length === 0) return;
-
-    let optionsHTML = '<option value="">Ver todos los móviles</option>';
-    const movilesConChofer = caches.choferes
-        .map(chofer => {
-            if (chofer.movil_actual_id) {
+    // --- Lógica para los filtros de Reservas y Mapa ---
+    if (selectReservas || selectMapa) {
+        let optionsHTMLFiltro = '<option value="">Ver todos los móviles</option>';
+        const movilesConChofer = caches.choferes
+            .filter(chofer => chofer.movil_actual_id)
+            .map(chofer => {
                 const movilAsignado = caches.moviles.find(m => m.id === chofer.movil_actual_id);
-                if (movilAsignado) {
-                    return { choferId: chofer.id, choferNombre: chofer.nombre, movilNumero: movilAsignado.numero };
-                }
+                return movilAsignado ? { choferId: chofer.id, choferNombre: chofer.nombre, movilNumero: movilAsignado.numero } : null;
+            })
+            .filter(item => item !== null)
+            .sort((a, b) => a.movilNumero - b.movilNumero);
+
+        movilesConChofer.forEach(item => {
+            optionsHTMLFiltro += `<option value="${item.choferId}">Móvil ${item.movilNumero} - ${item.choferNombre}</option>`;
+        });
+
+        [selectReservas, selectMapa].forEach(select => {
+            if (select) {
+                const valorSeleccionado = select.value;
+                select.innerHTML = optionsHTMLFiltro;
+                select.value = valorSeleccionado;
             }
-            return null;
-        })
-        .filter(item => item !== null)
-        .sort((a, b) => a.movilNumero - b.movilNumero);
+        });
+    }
 
-    movilesConChofer.forEach(item => {
-        const numeroMovil = `Móvil ${item.movilNumero}`;
-        optionsHTML += `<option value="${item.choferId}">${numeroMovil} - ${item.choferNombre}</option>`;
-    });
-
-    selects.forEach(select => {
-        const valorSeleccionado = select.value;
-        select.innerHTML = optionsHTML;
-        select.value = valorSeleccionado;
-    });
+    // --- Lógica NUEVA para el formulario de Admin ---
+    if (selectAdmin) {
+        let optionsHTMLAdmin = '<option value="">(Opcional) Asignar Móvil</option>';
+        caches.moviles.forEach(movil => {
+            // Buscamos si este móvil ya está asignado a otro chofer
+            const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
+            const infoChofer = choferAsignado ? `(Asignado a ${choferAsignado.nombre})` : '(Libre)';
+            
+            optionsHTMLAdmin += `<option value="${movil.id}">N° ${movil.numero} ${infoChofer}</option>`;
+        });
+        
+        const valorSeleccionado = selectAdmin.value;
+        selectAdmin.innerHTML = optionsHTMLAdmin;
+        selectAdmin.value = valorSeleccionado;
+    }
 }
 
 function filtrarReservasAsignadasPorChofer(choferId) {

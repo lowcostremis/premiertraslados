@@ -221,15 +221,35 @@
                     <div class="admin-section">
                         <h2>Choferes</h2>
                         <form id="form-choferes" class="admin-form">
-                            <input type="text" name="dni" placeholder="DNI (será el ID)" required>
-                            <input type="text" name="nombre" placeholder="Nombre y Apellido" required>
-                            <input type="email" name="email" placeholder="Email de Acceso" required>
-                            <input type="password" name="password" placeholder="Contraseña Inicial" required>
-                            <input type="text" name="domicilio" placeholder="Domicilio">
-                            <input type="text" name="telefono" placeholder="Teléfono">
-                            <select name="movil_actual_id">
-                                <option value="">Asignar Móvil...</option>
-                            </select>
+                           <div class="form-group">
+                               <label for="chofer-movil-select">Móvil Actual (Opcional)</label>
+                               <select name="movil_actual_id" id="chofer-movil-select"></select>
+                           </div>
+                            <div class="form-group">
+                               <label for="chofer-dni">DNI (será el ID)</label>
+                               <input type="text" id="chofer-dni" name="dni" placeholder="DNI del chofer" required>
+                            </div>
+                            <div class="form-group">
+                               <label for="chofer-nombre">Nombre y Apellido</label>
+                               <input type="text" id="chofer-nombre" name="nombre" placeholder="Nombre completo" required>
+                           </div>
+                           <div class="form-group">
+                              <label for="chofer-email">Email de Acceso</label>
+                              <input type="email" id="chofer-email" name="email" placeholder="correo@ejemplo.com" required>
+                           </div>
+                           <div class="form-group">
+                              <label for="chofer-password">Contraseña Inicial</label>
+                              <input type="password" id="chofer-password" name="password" placeholder="Mínimo 6 caracteres" required>
+                           </div>
+                             <div class="form-group">
+                              <label for="chofer-domicilio">Domicilio</label>
+                              <input type="text" id="chofer-domicilio" name="domicilio" placeholder="Domicilio del chofer">
+                           </div>
+                             <div class="form-group">
+                              <label for="chofer-telefono">Teléfono</label>
+                              <input type="text" id="chofer-telefono" name="telefono" placeholder="Teléfono de contacto">
+                            </div>
+    
                             <button type="submit">Crear Chofer</button>
                         </form>
                        <input type="text" id="busqueda-choferes" placeholder="Buscar por nombre, DNI o N° de Móvil...">

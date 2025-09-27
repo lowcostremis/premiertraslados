@@ -67,7 +67,13 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
             if (estadoPrincipal === 'Finalizado' || estadoPrincipal === 'Anulado') {
                } else if (estadoPrincipal === 'Asignado' || estadoPrincipal === 'En Origen' || estadoPrincipal === 'Viaje Iniciado') {
                                           // Las asignadas van a su tabla, esto se mantiene igual.
-              targetTableId = 'tabla-asignados';
+                   targetTableId = 'tabla-asignados';
+                   if (filtroChoferAsignadosId) {
+        if (reserva.chofer_asignado_id !== filtroChoferAsignadosId) {
+            return; // Si el filtro está activo y no coincide, no dibujamos la fila.
+        }
+    }
+
             } else if (estadoPrincipal === 'Pendiente') {
                                          // ¡NUEVA LÓGICA! Manejamos explícitamente el estado 'Pendiente'.
                 if (fechaTurno && fechaTurno > limite24hs) {
@@ -321,31 +327,36 @@ export async function finalizarReserva(reservaId, caches) {
 }
 
 export async function quitarAsignacion(reservaId) {
-      if (confirm("¿Quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
-        const reservaRef = db.collection('reservas').doc(reservaId);
-        try {
-            const doc = await reservaRef.get();
-            if(!doc.exists) return;
-            const choferId = doc.data().chofer_asignado_id;
-            
-            const batch = db.batch();
-            batch.update(reservaRef, {
-                estado: { principal: 'En Curso', detalle: 'Móvil des-asignado', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() },
-                chofer_asignado_id: firebase.firestore.FieldValue.delete(),
-                movil_asignado_id: firebase.firestore.FieldValue.delete()
-            });
-            if (choferId) {
-                const choferRef = db.collection('choferes').doc(choferId);
-                batch.update(choferRef, { viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId) });
-            }
-            await batch.commit();
-            hideMapContextMenu();
-            window.app.hideTableMenus();
-        } catch (error) {
-            console.error("Error al quitar asignación:", error);
-            alert("Hubo un error al actualizar la reserva.");
-        }
-    }
+       if (confirm("¿Quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
+      const reservaRef = db.collection('reservas').doc(reservaId);
+      try {
+          const doc = await reservaRef.get();
+          if(!doc.exists) return;
+          
+          // Se obtiene el ID del chofer que tiene asignada la reserva.
+          const choferId = doc.data().chofer_asignado_id;
+          
+          const batch = db.batch();
+          batch.update(reservaRef, {
+              estado: { principal: 'En Curso', detalle: 'Móvil des-asignado', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() },
+              chofer_asignado_id: firebase.firestore.FieldValue.delete(),
+              movil_asignado_id: firebase.firestore.FieldValue.delete()
+          });
+
+          if (choferId) {
+              // CORRECCIÓN: Se usa la variable 'choferId' en lugar de un valor fijo.
+              const choferRef = db.collection('choferes').doc(choferId);
+              batch.update(choferRef, { viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId) });
+          }
+
+          await batch.commit();
+          hideMapContextMenu();
+          window.app.hideTableMenus();
+      } catch (error) {
+          console.error("Error al quitar asignación:", error);
+          alert("Hubo un error al actualizar la reserva.");
+      }
+  }
 }
 
 export async function updateHoraPickup(event, reservaId, horaTurno) {
@@ -494,7 +505,7 @@ function renderFilaReserva(tbody, reserva, caches) {
 }
   
 async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
-    const reservaRef = db.collection('reservas').doc(reservaId);
+   const reservaRef = db.collection('reservas').doc(reservaId);
     const historicoRef = db.collection('historico').doc(reservaId);
 
     try {
@@ -502,12 +513,14 @@ async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
             const reservaDoc = await transaction.get(reservaRef);
 
             if (!reservaDoc.exists) {
+                // Si la reserva ya no está en 'reservas', puede que ya se haya movido.
+                // Verificamos si ya está en 'historico' para no lanzar un error innecesario.
                 const historicoDoc = await transaction.get(historicoRef);
                 if (historicoDoc.exists) {
-                    console.log(`La reserva ${reservaId} ya se encuentra en el historial. No se requiere acción.`);
+                    console.log(`La reserva ${reservaId} ya se encuentra en el historial.`);
                     return; 
                 } else {
-                    throw "No se encontró la reserva para archivar en ninguna colección.";
+                    throw "No se encontró la reserva para archivar.";
                 }
             }
 
@@ -519,31 +532,39 @@ async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
             };
             reservaData.archivadoEn = firebase.firestore.FieldValue.serverTimestamp();
             
+            // Lógica para añadir nombres cacheados
             if (caches.clientes[reservaData.cliente]) {
                 reservaData.clienteNombre = caches.clientes[reservaData.cliente].nombre;
-            } else {
-                reservaData.clienteNombre = 'Default';
             }
-            
             if (reservaData.chofer_asignado_id) {
                 const chofer = caches.choferes.find(c => c.id === reservaData.chofer_asignado_id);
-                if (chofer) {
-                    reservaData.choferNombre = chofer.nombre;
-                }
+                if (chofer) reservaData.choferNombre = chofer.nombre;
             }
 
+            // --- INICIO DE LA CORRECCIÓN ---
+            // Si la reserva tenía un chofer, intentamos actualizarlo,
+            // pero solo si todavía existe.
             if (reservaData.chofer_asignado_id) {
                 const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
-                transaction.update(choferRef, {
-                    viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
-                });
-            }
+                const choferDoc = await transaction.get(choferRef);
 
-            transaction.set(historicoRef, reservaData);
-            transaction.delete(reservaRef);
+                // Solo actualizamos si el documento del chofer existe.
+                if (choferDoc.exists) {
+                    transaction.update(choferRef, {
+                        viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
+                    });
+                } else {
+                    console.warn(`Se intentó finalizar un viaje para el chofer ${reservaData.chofer_asignado_id}, pero no fue encontrado. Se continuará sin actualizarlo.`);
+                }
+            }
+            // --- FIN DE LA CORRECCIÓN ---
+
+            transaction.set(historicoRef, reservaData); // Mueve la reserva a histórico
+            transaction.delete(reservaRef);          // Borra la reserva de la colección activa
         });
+        
     } catch (error) {
         console.error("Error al mover reserva a histórico:", error);
-        alert("Error al archivar la reserva: " + error);
+        alert("Error al archivar la reserva: " + error.message);
     }
 }

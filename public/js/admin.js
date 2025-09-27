@@ -9,13 +9,18 @@ let adminListeners = [];
 /**
  * Inicializa el módulo de administración.
  * @param {Object} caches - Objeto con los caches de la aplicación.
+ * @param {string} selectId - El ID del elemento <select> que se va a rellenar.
+ * @param {string|null} selectedId - El ID del móvil que debe aparecer preseleccionado.
+ 
  */
 export function initAdmin(caches) {
-    // CORRECCIÓN: Guardamos la referencia al objeto 'caches' principal.
     cachesRef = caches; 
     
     attachFormListeners();
     initializeAdminLists();
+
+    
+    poblarSelectDeMovilesAdmin('chofer-movil-select');
 
     const choferesSearchInput = document.getElementById('busqueda-choferes');
     if (choferesSearchInput) {
@@ -55,8 +60,7 @@ export async function editItem(collection, id) {
         dniInput.value = id; // El ID del documento es el DNI
         dniInput.disabled = true; // El DNI no se puede editar
         form.appendChild(dniInput);
-    }
-    // --- FIN DE LA CORRECCIÓN ---
+    }   
 
     const fieldsToEdit = Object.keys(data);
     fieldsToEdit.forEach(field => {
@@ -66,17 +70,16 @@ export async function editItem(collection, id) {
         label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
         form.appendChild(label);
 
-        if (field === 'movil_actual_id' && collection === 'choferes') {
+       if (field === 'movil_actual_id' && collection === 'choferes') {
             const select = document.createElement('select');
             select.name = field;
-            let optionsHTML = '<option value="">Desasignar Móvil</option>';
-            cachesRef.moviles.forEach(movil => {
-                const selected = movil.id === data[field] ? 'selected' : '';
-                optionsHTML += `<option value="${movil.id}" ${selected}>N° ${movil.numero} (${movil.patente})</option>`;
-            });
-            select.innerHTML = optionsHTML;
+            // Damos un ID único al select del modal para poder rellenarlo
+            select.id = 'edit-chofer-movil-select'; 
             form.appendChild(select);
-        } else if (field === 'color' && data.color !== undefined) {
+            // Llamamos a nuestra nueva función
+            poblarSelectDeMovilesAdmin('edit-chofer-movil-select', data[field]);
+        } 
+        else if (field === 'color' && data.color !== undefined) {
             const colorInput = document.createElement('input');
             colorInput.type = 'color';
             colorInput.name = field;
@@ -85,7 +88,7 @@ export async function editItem(collection, id) {
         } else {
             const input = document.createElement('input');
             input.name = field;
-            // Si el campo es un array (como 'domicilios'), lo unimos con comas para mostrarlo
+            
             input.value = Array.isArray(data[field]) ? data[field].join(', ') : (data[field] || '');
             if (['uid', 'email'].includes(field)) { // Quitamos 'dni' de aquí porque ya lo manejamos arriba
                 input.disabled = true;
@@ -134,6 +137,24 @@ export function openResetPasswordModal(authUid, nombreChofer) {
     document.getElementById('reset-chofer-nombre').textContent = nombreChofer;
     document.getElementById('nueva-password').value = '';
     modal.style.display = 'block';
+}
+
+function poblarSelectDeMovilesAdmin(selectId, selectedId = null) {
+     const selectElement = document.getElementById(selectId);
+    if (!selectElement) {
+        console.error(`No se encontró el elemento select con ID: ${selectId}`);
+        return;
+    }
+
+    let optionsHTML = '<option value="">(Opcional) Asignar Móvil</option>';
+    
+    cachesRef.moviles.forEach(movil => {
+        const isSelected = movil.id === selectedId ? 'selected' : '';
+        // CORREGIDO: Se cambió 'patente' por 'patente'
+        optionsHTML += `<option value="${movil.id}" ${isSelected}>N° ${movil.numero} (${movil.patente || 'Sin Patente'})</option>`;
+    });
+
+    selectElement.innerHTML = optionsHTML;
 }
 
 function attachFormListeners() {
@@ -390,28 +411,51 @@ async function buscarEnChoferes(texto) {
 }
 
 async function handleUpdateItem(e) {
-    e.preventDefault();
+   e.preventDefault();
     const form = e.target;
     const collection = form.dataset.collection;
-    const id = form.dataset.id;
+    const originalId = form.dataset.id; // El DNI original
     const updatedData = {};
     const formData = new FormData(form);
 
     for (let [key, value] of formData.entries()) {
-    if (form.querySelector(`[name="${key}"]`) && form.querySelector(`[name="${key}"]`).disabled) continue;
-    
-    // Si el campo es 'domicilios', conviértelo de nuevo en un array
-    if (key === 'domicilios') {
-        updatedData[key] = value.split(',').map(domicilio => domicilio.trim());
-    } else {
-        updatedData[key] = value;
+        if (form.querySelector(`[name="${key}"]`) && form.querySelector(`[name="${key}"]`).disabled) continue;
+        
+        if (key === 'domicilios') {
+            updatedData[key] = value.split(',').map(domicilio => domicilio.trim());
+        } else {
+            updatedData[key] = value;
+        }
     }
-}
 
     try {
-        if (collection === 'choferes' && updatedData.movil_actual_id !== undefined) {
+        // --- INICIO DE LA LÓGICA MEJORADA ---
+        
+        // Caso especial: se está editando un chofer y el DNI (ID) ha cambiado.
+        if (collection === 'choferes' && updatedData.dni && updatedData.dni !== originalId) {
+            const nuevoDni = updatedData.dni;
+            
+            // Usamos una transacción para asegurar que la operación sea atómica
+            await db.runTransaction(async (transaction) => {
+                const oldDocRef = db.collection('choferes').doc(originalId);
+                const oldDoc = await transaction.get(oldDocRef);
+
+                if (!oldDoc.exists) {
+                    throw "El chofer original no fue encontrado.";
+                }
+
+                // Creamos una copia de los datos viejos y los mezclamos con los nuevos
+                const newData = { ...oldDoc.data(), ...updatedData };
+
+                const newDocRef = db.collection('choferes').doc(nuevoDni);
+                transaction.set(newDocRef, newData); // 1. Crea el nuevo documento
+                transaction.delete(oldDocRef);      // 2. Borra el antiguo
+            });
+
+        } else if (collection === 'choferes' && updatedData.movil_actual_id !== undefined) {
+            // Lógica para reasignar móviles si solo cambia el móvil pero no el DNI
             const batch = db.batch();
-            const choferRef = db.collection('choferes').doc(id);
+            const choferRef = db.collection('choferes').doc(originalId);
 
             const nuevoMovilId = updatedData.movil_actual_id || null;
             if (nuevoMovilId) {
@@ -419,7 +463,7 @@ async function handleUpdateItem(e) {
                 const snapshot = await q.get();
                 if (!snapshot.empty) {
                     snapshot.forEach(doc => {
-                        if (doc.id !== id) {
+                        if (doc.id !== originalId) {
                             const otroChoferRef = db.collection('choferes').doc(doc.id);
                             batch.update(otroChoferRef, { movil_actual_id: null });
                         }
@@ -429,8 +473,10 @@ async function handleUpdateItem(e) {
             batch.update(choferRef, updatedData);
             await batch.commit();
         } else {
-            await db.collection(collection).doc(id).update(updatedData);
+            // Para todas las demás colecciones, o si el DNI del chofer no cambió
+            await db.collection(collection).doc(originalId).update(updatedData);
         }
+        // --- FIN DE LA LÓGICA MEJORADA ---
         
         alert("Item actualizado.");
         document.getElementById('edit-modal').style.display = 'none';

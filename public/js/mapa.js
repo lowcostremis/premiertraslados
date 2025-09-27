@@ -231,10 +231,10 @@ export function escucharUbicacionChoferes() {
                 return;
             }
 
-            if (!choferData.coordenadas || typeof choferData.coordenadas.latitude !== 'number' || typeof choferData.coordenadas.longitude !== 'number') {
-                console.warn(`[MAPA] Chofer ${choferId} no tiene coordenadas válidas. Se omite.`);
-                if (marcadoresChoferes[choferId]) {
-                    marcadoresChoferes[choferId].setVisible(false);
+           if (!choferData.coordenadas || typeof choferData.coordenadas._lat !== 'number' || typeof choferData.coordenadas._long !== 'number') {
+               console.warn(`[MAPA] Chofer ${choferId} no tiene coordenadas válidas. Se omite.`);
+               if (marcadoresChoferes[choferId]) {
+                   marcadoresChoferes[choferId].setVisible(false);
                 }
                 return;
             }
@@ -248,7 +248,7 @@ export function escucharUbicacionChoferes() {
                 colorFondo = '#808080'; // Gris
             }
 
-            const nuevaPos = new google.maps.LatLng(choferData.coordenadas.latitude, choferData.coordenadas.longitude);
+            const nuevaPos = new google.maps.LatLng(choferData.coordenadas._lat, choferData.coordenadas._long);
             const movilAsignado = cachesRef.moviles.find(m => m.id === choferData.movil_actual_id);
             const numeroMovil = movilAsignado ? movilAsignado.numero.toString() : 'S/A';
             const iconoChofer = crearIconoDeChofer(colorFondo, numeroMovil);

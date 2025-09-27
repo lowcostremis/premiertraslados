@@ -189,46 +189,27 @@ exports.sincronizarChoferesConAlgolia = onDocumentWritten("choferes/{choferId}",
     return choferesIndex.saveObject(record);
 });
 
-// ===================================================================================
-// ====> FUNCIÓN NUEVA PARA AGREGAR NOMBRE DE CLIENTE <====
-// ===================================================================================
 exports.agregarNombreClienteAReserva = onDocumentWritten("reservas/{reservaId}", async (event) => {
     if (!event.data.after.exists) {
-        console.log("Reserva borrada, no se hace nada.");
         return null;
     }
-
     const datosReserva = event.data.after.data();
-
-    // Evita bucles infinitos: si el campo ya existe, no hace nada.
     if (datosReserva.cliente_nombre) {
-        console.log(`La reserva ${event.params.reservaId} ya tiene nombre de cliente. Saliendo.`);
         return null;
     }
-
     const clienteId = datosReserva.cliente;
     if (!clienteId) {
-        console.log(`La reserva ${event.params.reservaId} no tiene clienteId. Saliendo.`);
         return null;
     }
-    
-    console.log(`Buscando nombre para cliente con ID: ${clienteId}`);
-
     try {
         const clienteSnap = await db.collection("clientes").doc(clienteId).get();
-
         let nombreCliente = "N/A";
         if (clienteSnap.exists) {
             nombreCliente = clienteSnap.data().nombre || "N/A";
-            console.log(`Nombre encontrado: ${nombreCliente}. Actualizando reserva.`);
-        } else {
-            console.log(`Cliente no encontrado con ID: ${clienteId}. Usando 'N/A'.`);
         }
-        
         return event.data.after.ref.update({
             cliente_nombre: nombreCliente,
         });
-
     } catch (error) {
         console.error("Error al buscar o actualizar el cliente:", error);
         return null;
@@ -265,7 +246,7 @@ exports.listUsers = onCall(async (request) => {
         });
         return { users };
     } catch (error) {
-        console.error("Error al listar usuarios de la colección 'users':", error);
+        console.error("Error al listar usuarios:", error);
         throw new HttpsError('internal', 'Ocurrió un error al listar los usuarios.');
     }
 });
@@ -284,7 +265,7 @@ exports.exportarHistorico = onCall(async (request) => {
         }
         const snapshot = await query.get();
         if (snapshot.empty) {
-            return { csvData: null, message: "No se encontraron registros para los filtros aplicados." };
+            return { csvData: null, message: "No se encontraron registros." };
         }
         let csvContent = "Fecha Turno,Hora Turno,Hora PickUp,Pasajero,Cliente,Origen,Destino,Estado,Siniestro,Autorizacion\n";
         snapshot.forEach(doc => {
@@ -306,8 +287,8 @@ exports.exportarHistorico = onCall(async (request) => {
         });
         return { csvData: csvContent };
     } catch (error) {
-        console.error("Error crítico al generar el histórico:", error);
-        throw new HttpsError('internal', 'Error interno del servidor al generar el archivo.', error.message);
+        console.error("Error al generar el histórico:", error);
+        throw new HttpsError('internal', 'Error al generar el archivo.', error.message);
     }
 });
 
@@ -317,31 +298,30 @@ exports.exportarHistorico = onCall(async (request) => {
 
 exports.finalizarViajeDesdeApp = onCall(async (request) => {
     if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'El usuario no está autenticado.');
+        throw new HttpsError('unauthenticated', 'No autenticado.');
     }
     const { reservaId } = request.data;
     if (!reservaId) {
-        throw new HttpsError('invalid-argument', 'Falta el ID de la reserva.');
+        throw new HttpsError('invalid-argument', 'Falta ID de reserva.');
     }
     const reservaRef = db.collection('reservas').doc(reservaId);
     const historicoRef = db.collection('historico').doc(reservaId);
     try {
         const doc = await reservaRef.get();
         if (!doc.exists) {
-            throw new HttpsError('not-found', 'No se encontró la reserva para archivar.');
+            throw new HttpsError('not-found', 'No se encontró la reserva.');
         }
         const reservaData = doc.data();
         if (reservaData.chofer_asignado_id) {
             const choferDoc = await db.collection('choferes').doc(reservaData.chofer_asignado_id).get();
             if (choferDoc.exists && choferDoc.data().auth_uid !== request.auth.uid) {
-                throw new HttpsError('permission-denied', 'No tienes permiso para finalizar este viaje.');
+                throw new HttpsError('permission-denied', 'No tienes permiso.');
             }
         }
         if (reservaData.cliente) {
             const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
             reservaData.clienteNombre = clienteDoc.exists ? (clienteDoc.data().nombre || 'Default') : 'Default';
         }
-
         if (reservaData.chofer_asignado_id) {
             const choferDoc = await db.collection('choferes').doc(reservaData.chofer_asignado_id).get();
             if (choferDoc.exists) {
@@ -365,47 +345,40 @@ exports.finalizarViajeDesdeApp = onCall(async (request) => {
             transaction.set(historicoRef, reservaData);
             transaction.delete(reservaRef);
         });
-        return { message: 'Viaje finalizado y archivado con éxito.' };
+        return { message: 'Viaje finalizado.' };
     } catch (error) {
-        console.error("Error al finalizar viaje desde app:", error);
+        console.error("Error al finalizar viaje:", error);
         if (error instanceof HttpsError) throw error;
-        throw new HttpsError('internal', 'Ocurrió un error al procesar la solicitud.', error.message);
+        throw new HttpsError('internal', 'Error al procesar.', error.message);
     }
 });
 
 exports.gestionarRechazoDesdeApp = onCall(async (request) => {
     if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'El usuario no está autenticado.');
+        throw new HttpsError('unauthenticated', 'No autenticado.');
     }
-
     const { reservaId, esNegativo } = request.data;
     if (!reservaId) {
-        throw new HttpsError('invalid-argument', 'Falta el ID de la reserva.');
+        throw new HttpsError('invalid-argument', 'Falta ID de reserva.');
     }
-
     const reservaRef = db.collection('reservas').doc(reservaId);
-
     try {
         await db.runTransaction(async (transaction) => {
             const reservaDoc = await transaction.get(reservaRef);
             if (!reservaDoc.exists) {
-                console.log(`La reserva ${reservaId} no fue encontrada. Posiblemente ya fue procesada.`);
                 return;
             }
-
             const reservaData = reservaDoc.data();
             const choferAsignadoId = reservaData.chofer_asignado_id;
 
             if (choferAsignadoId) {
                 const choferDoc = await db.collection('choferes').doc(choferAsignadoId).get();
                 if (!choferDoc.exists || choferDoc.data().auth_uid !== request.auth.uid) {
-                    throw new HttpsError('permission-denied', 'No tienes permiso para modificar este viaje.');
+                    throw new HttpsError('permission-denied', 'No tienes permiso.');
                 }
                 
-                // --- INICIO DEL CÓDIGO CORREGIDO ---
                 const choferDocData = choferDoc.data();
                 const nombreChofer = choferDocData.nombre || 'Desconocido';
-
                 const nuevoDetalle = esNegativo 
                     ? `Traslado negativo (Chofer: ${nombreChofer})` 
                     : `Rechazado por ${nombreChofer}`;
@@ -419,152 +392,84 @@ exports.gestionarRechazoDesdeApp = onCall(async (request) => {
                     chofer_asignado_id: admin.firestore.FieldValue.delete(),
                     movil_asignado_id: admin.firestore.FieldValue.delete(),
                 });
-                // --- FIN DEL CÓDIGO CORREGIDO ---
-
             } else {
-                 throw new HttpsError('failed-precondition', 'La reserva ya no tiene un chofer asignado.');
+                 throw new HttpsError('failed-precondition', 'La reserva ya no tiene chofer.');
             }
-
             const choferRef = db.collection('choferes').doc(choferAsignadoId);
             transaction.update(choferRef, {
                 viajes_activos: admin.firestore.FieldValue.arrayRemove(reservaId)
             });
         });
-
-        return { message: 'La reserva ha sido actualizada correctamente.' };
-
+        return { message: 'Reserva actualizada.' };
     } catch (error) {
-        console.error("Error al gestionar rechazo desde app:", error);
+        console.error("Error al gestionar rechazo:", error);
         if (error instanceof HttpsError) {
             throw error;
         }
-        throw new HttpsError('internal', 'Ocurrió un error al procesar la solicitud.', error.message);
+        throw new HttpsError('internal', 'Error al procesar.', error.message);
     }
 });
 
+// ===================================================================================
+// TRIGGERS DE NOTIFICACIONES
+// ===================================================================================
 
-// ===================================================================================
-// TRIGGER DE NOTIFICACIONES (v1)
-// ===================================================================================
-exports.enviarNotificacionNuevoViaje = functions.firestore
+/**
+ * Trigger que se activa cuando una reserva existente es modificada.
+ * Maneja los escenarios de: nueva asignación, des-asignación y edición de detalles.
+ */
+exports.gestionarNotificacionesDeReservas = functions.firestore
     .document("reservas/{reservaId}")
     .onUpdate(async (change, context) => {
         const beforeData = change.before.data();
         const afterData = change.after.data();
         const reservaId = context.params.reservaId;
 
-        if (!beforeData.chofer_asignado_id && afterData.chofer_asignado_id) {
-            const choferId = afterData.chofer_asignado_id;
-            
-            const choferDoc = await db.collection('choferes').doc(choferId).get();
-            if (!choferDoc.exists || !choferDoc.data().fcm_token) {
-                console.log(`El chofer ${choferId} no tiene un token de notificación (FCM), no se puede notificar.`);
-                return null;
-            }
-
-            const fcmToken = choferDoc.data().fcm_token;
-
-            const message = {
-                notification: {
-                    title: '¡Nuevo Viaje Asignado!',
-                    body: `Origen: ${afterData.origen || 'N/A'}. Tienes una nueva reserva pendiente.`
-                },
-                android: {
-                  notification: {
-                    sound: 'reserva_sound'
-                  }
-                },
-                apns: {
-                  payload: {
-                    aps: {
-                      sound: 'reserva_sound.aiff'
-                    }
-                  }
-                },
-                token: fcmToken,
-                data: {
-                    reservaId: reservaId,
-                    click_action: 'FLUTTER_NOTIFICATION_CLICK',
-                },
-            };
-
-            try {
-                await admin.messaging().send(message);
-                console.log(`Notificación de nuevo viaje enviada con éxito al chofer ${choferId}`);
-            } catch (error) {
-                console.error(`Error al enviar notificación al chofer ${choferId}:`, error);
-            }
-        }
-        return null;
-    });
-
-    // ===== INICIO DE LA NUEVA FUNCIÓN =====
-/**
- * Trigger que se activa cuando una reserva existente es modificada.
- * Notifica al chofer si la reserva es cancelada o si sus detalles cambian.
- */
-exports.notificarCambioEnReserva = functions.firestore
-    .document('reservas/{reservaId}')
-    .onUpdate(async (change, context) => {
-        const beforeData = change.before.data();
-        const afterData = change.after.data();
-        const reservaId = context.params.reservaId;
-
-        // Solo continuamos si la reserva tenía y tiene un chofer asignado.
-        const choferId = afterData.chofer_asignado_id || beforeData.chofer_asignado_id;
-        if (!choferId) {
-            console.log("La reserva no tiene chofer asignado, no se notifica.");
-            return null;
-        }
-
+        let choferId;
         let notificationTitle = '';
         let notificationBody = '';
 
-        // Escenario 1: La reserva fue cancelada
-        if (afterData.estado === 'cancelado' && beforeData.estado !== 'cancelado') {
-            notificationTitle = 'Reserva Cancelada';
-            notificationBody = `El viaje a ${afterData.destino_direccion || 'destino'} ha sido cancelado.`;
+        // Escenario 1: NUEVA ASIGNACIÓN
+        if (!beforeData.chofer_asignado_id && afterData.chofer_asignado_id) {
+            choferId = afterData.chofer_asignado_id;
+            notificationTitle = '¡Nuevo Viaje Asignado!';
+            notificationBody = `Origen: ${afterData.origen || 'N/A'}. Tienes una nueva reserva pendiente.`;
         }
-        // Escenario 2: La reserva fue editada (cambió la dirección o la fecha/hora)
-        else if (afterData.estado !== 'cancelado' && (
-                 afterData.origen_direccion !== beforeData.origen_direccion ||
-                 afterData.destino_direccion !== beforeData.destino_direccion ||
-                 !afterData.fecha_hora_reserva.isEqual(beforeData.fecha_hora_reserva)
-               )) {
+        // Escenario 2: DES-ASIGNACIÓN (se le quita al chofer)
+        else if (beforeData.chofer_asignado_id && !afterData.chofer_asignado_id) {
+            choferId = beforeData.chofer_asignado_id; // El chofer que fue quitado
+            notificationTitle = 'Viaje Reasignado';
+            notificationBody = `El viaje desde ${afterData.origen || 'origen'} ya no está en tu lista.`;
+        }
+        // Escenario 3: EDICIÓN (el viaje ya estaba asignado y cambia un dato clave)
+        else if (afterData.chofer_asignado_id && (
+                 afterData.origen !== beforeData.origen ||
+                 afterData.destino !== beforeData.destino ||
+                 afterData.fecha_turno !== beforeData.fecha_turno ||
+                 afterData.hora_turno !== beforeData.hora_turno ||
+                 afterData.hora_pickup !== beforeData.hora_pickup)) {
+            choferId = afterData.chofer_asignado_id;
             notificationTitle = 'Reserva Actualizada';
-            notificationBody = `El viaje a ${afterData.destino_direccion || 'destino'} ha sido modificado. Revisa los detalles.`;
+            notificationBody = `El viaje a ${afterData.origen || 'origen'} ha sido modificado. Revisa los detalles.`;
         }
 
-        // Si no hay nada que notificar, salimos.
-        if (!notificationTitle) {
+        // Si no hay nada que notificar en esta actualización, salimos.
+        if (!notificationTitle || !choferId) {
             return null;
         }
 
-        // Buscamos el token del chofer y enviamos la notificación
+        // --- Lógica común para enviar la notificación ---
         const choferDoc = await db.collection('choferes').doc(choferId).get();
         if (!choferDoc.exists || !choferDoc.data().fcm_token) {
-            console.log(`El chofer ${choferId} no tiene token, no se puede notificar del cambio.`);
+            console.log(`El chofer ${choferId} no tiene token, no se puede notificar.`);
             return null;
         }
 
         const fcmToken = choferDoc.data().fcm_token;
         const message = {
-            notification: {
-                title: notificationTitle,
-                body: notificationBody
-            },
-            android: {
-              notification: {
-                sound: 'reserva_sound' // Usamos el mismo sonido
-              }
-            },
-            apns: {
-              payload: {
-                aps: {
-                  sound: 'reserva_sound.aiff' // Y para iOS
-                }
-              }
-            },
+            notification: { title: notificationTitle, body: notificationBody },
+            android: { notification: { sound: 'reserva_sound' } },
+            apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
             token: fcmToken,
             data: {
                 reservaId: reservaId,
@@ -574,10 +479,66 @@ exports.notificarCambioEnReserva = functions.firestore
 
         try {
             await admin.messaging().send(message);
-            console.log(`Notificación de cambio enviada con éxito al chofer ${choferId}`);
+            console.log(`Notificación de tipo "${notificationTitle}" enviada con éxito al chofer ${choferId}`);
         } catch (error) {
-            console.error(`Error al enviar notificación de cambio al chofer ${choferId}:`, error);
+            console.error(`Error al enviar notificación al chofer ${choferId}:`, error);
         }
-
         return null;
     });
+
+/**
+ * Trigger que se activa cuando una reserva es BORRADA (Anulada).
+ * Si la reserva tenía un chofer asignado, le notifica la cancelación.
+ */
+exports.notificarCancelacionDeReserva = functions.firestore
+    .document('reservas/{reservaId}')
+    .onDelete(async (snap, context) => {
+        const reservaBorrada = snap.data();
+        const choferId = reservaBorrada.chofer_asignado_id;
+
+        if (!choferId) {
+            return null;
+        }
+
+        const choferDoc = await db.collection('choferes').doc(choferId).get();
+        if (!choferDoc.exists || !choferDoc.data().fcm_token) {
+            console.log(`Chofer ${choferId} sin token para notificar cancelación.`);
+            return null;
+        }
+
+        const fcmToken = choferDoc.data().fcm_token;
+        const message = {
+            notification: {
+                title: 'Viaje Cancelado',
+                body: `El viaje desde ${reservaBorrada.origen || 'origen'} ha sido cancelado por el operador.`
+            },
+            // ▼▼▼ BLOQUE AÑADIDO ▼▼▼
+            android: {
+              notification: {
+                sound: 'reserva_sound'
+              }
+            },
+            apns: {
+              payload: {
+                aps: {
+                  sound: 'reserva_sound.aiff'
+                }
+              }
+            },
+
+            token: fcmToken,
+            data: {
+                reservaId: context.params.reservaId,
+                click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            },
+        };
+
+        try {
+            await admin.messaging().send(message);
+            console.log(`Notificación de cancelación enviada con éxito al chofer ${choferId}`);
+        } catch (error) {
+            console.error(`Error al enviar notificación de cancelación al chofer ${choferId}:`, error);
+        }
+        return null;
+    });
+    
