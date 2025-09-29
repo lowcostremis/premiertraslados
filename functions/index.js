@@ -468,12 +468,21 @@ exports.gestionarNotificacionesDeReservas = functions.firestore
         const fcmToken = choferDoc.data().fcm_token;
         const message = {
             notification: { title: notificationTitle, body: notificationBody },
-            android: { notification: { sound: 'reserva_sound' } },
+            android: {
+                 notification: {
+                   channel_id: 'high_importance_channel'
+                }
+           },
             apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
             token: fcmToken,
-            data: {
-                reservaId: reservaId,
-                click_action: 'FLUTTER_NOTIFICATION_CLICK',
+            data: { // ▼▼▼ ESTE ES EL CAMBIO CLAVE ▼▼▼
+        // Replicamos la información aquí para que nuestro código la procese
+                "title": notificationTitle,
+                "body": notificationBody,
+                "reservaId": reservaId, // El ID ya estaba, lo mantenemos
+                "click_action": "FLUTTER_NOTIFICATION_CLICK",
+        // Podemos añadir un tipo para saber qué hacer
+                "tipo": "actualizacion_reserva"
             },
         };
 
@@ -486,19 +495,36 @@ exports.gestionarNotificacionesDeReservas = functions.firestore
         return null;
     });
 
-/**
- * Trigger que se activa cuando una reserva es BORRADA (Anulada).
- * Si la reserva tenía un chofer asignado, le notifica la cancelación.
- */
+
 exports.notificarCancelacionDeReserva = functions.firestore
-    .document('reservas/{reservaId}')
+     .document('reservas/{reservaId}')
     .onDelete(async (snap, context) => {
+        const reservaId = context.params.reservaId;
+        
+        // =======================================================================
+        // ▼▼▼ INICIO DE LA CORRECCIÓN ▼▼▼
+        // =======================================================================
+        // 1. Antes de hacer nada, verificamos si el viaje fue archivado en 'historico'.
+        const historicoDocRef = db.collection('historico').doc(reservaId);
+        const historicoDoc = await historicoDocRef.get();
+
+        // 2. Si el documento existe en 'historico', significa que se finalizó y no se canceló.
+        //    Por lo tanto, salimos de la función para no enviar la notificación.
+        if (historicoDoc.exists) {
+            console.log(`El viaje ${reservaId} fue finalizado y archivado. No se enviará notificación de cancelación.`);
+            return null; 
+        }
+        // =======================================================================
+        // ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
+        // =======================================================================
+
+        // Si el código llega hasta aquí, significa que fue una cancelación real.
+        console.log(`El viaje ${reservaId} fue realmente cancelado. Preparando notificación.`);
+
         const reservaBorrada = snap.data();
         const choferId = reservaBorrada.chofer_asignado_id;
 
-        if (!choferId) {
-            return null;
-        }
+        if (!choferId) { return null; }
 
         const choferDoc = await db.collection('choferes').doc(choferId).get();
         if (!choferDoc.exists || !choferDoc.data().fcm_token) {
@@ -506,30 +532,28 @@ exports.notificarCancelacionDeReserva = functions.firestore
             return null;
         }
 
+        const notificationTitle = 'Viaje Cancelado';
+        const notificationBody = `El viaje desde ${reservaBorrada.origen || 'origen'} ha sido cancelado por el operador.`;
+
         const fcmToken = choferDoc.data().fcm_token;
         const message = {
             notification: {
-                title: 'Viaje Cancelado',
-                body: `El viaje desde ${reservaBorrada.origen || 'origen'} ha sido cancelado por el operador.`
+                title: notificationTitle,
+                body: notificationBody
             },
-            // ▼▼▼ BLOQUE AÑADIDO ▼▼▼
             android: {
               notification: {
-                sound: 'reserva_sound'
+                channel_id: 'high_importance_channel'
               }
             },
-            apns: {
-              payload: {
-                aps: {
-                  sound: 'reserva_sound.aiff'
-                }
-              }
-            },
-
+            apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
             token: fcmToken,
             data: {
-                reservaId: context.params.reservaId,
-                click_action: 'FLUTTER_NOTIFICATION_CLICK',
+                "title": notificationTitle,
+                "body": notificationBody,
+                "reservaId": context.params.reservaId,
+                "click_action": 'FLUTTER_NOTIFICATION_CLICK',
+                "tipo": "cancelacion_reserva"
             },
         };
 
@@ -541,4 +565,5 @@ exports.notificarCancelacionDeReserva = functions.firestore
         }
         return null;
     });
-    
+
+

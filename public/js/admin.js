@@ -29,7 +29,7 @@ export function initAdmin(caches) {
 }
 
 export async function editItem(collection, id) {
-     let doc;
+    let doc;
     if (collection === 'users') {
         const userDoc = await db.collection('users').doc(id).get();
         if (!userDoc.exists) { alert("Error: Usuario no encontrado."); return; }
@@ -45,26 +45,22 @@ export async function editItem(collection, id) {
     form.dataset.collection = collection;
     form.dataset.id = id;
 
-    // --- INICIO DE LA CORRECCIÓN PARA PASAJEROS ---
-    // Si la colección es 'pasajeros', creamos manualmente el campo DNI primero,
-    // ya que el DNI es el ID del documento y no un campo dentro de 'data'.
     if (collection === 'pasajeros') {
-        // Crear label para DNI
         const dniLabel = document.createElement('label');
         dniLabel.textContent = 'DNI';
         form.appendChild(dniLabel);
 
-        // Crear input para DNI
         const dniInput = document.createElement('input');
         dniInput.name = 'dni';
-        dniInput.value = id; // El ID del documento es el DNI
-        dniInput.disabled = true; // El DNI no se puede editar
+        dniInput.value = id; 
+        dniInput.disabled = true; 
         form.appendChild(dniInput);
     }   
 
     const fieldsToEdit = Object.keys(data);
     fieldsToEdit.forEach(field => {
-        if (['creadoEn', 'auth_uid', 'coordenadas'].includes(field)) return;
+        // ▼▼▼ ¡AQUÍ ESTÁ LA MODIFICACIÓN! ▼▼▼
+        if (['creadoEn', 'auth_uid', 'coordenadas', 'fcm_token'].includes(field)) return;
         
         const label = document.createElement('label');
         label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
@@ -73,10 +69,8 @@ export async function editItem(collection, id) {
        if (field === 'movil_actual_id' && collection === 'choferes') {
             const select = document.createElement('select');
             select.name = field;
-            // Damos un ID único al select del modal para poder rellenarlo
             select.id = 'edit-chofer-movil-select'; 
             form.appendChild(select);
-            // Llamamos a nuestra nueva función
             poblarSelectDeMovilesAdmin('edit-chofer-movil-select', data[field]);
         } 
         else if (field === 'color' && data.color !== undefined) {
@@ -90,7 +84,7 @@ export async function editItem(collection, id) {
             input.name = field;
             
             input.value = Array.isArray(data[field]) ? data[field].join(', ') : (data[field] || '');
-            if (['uid', 'email'].includes(field)) { // Quitamos 'dni' de aquí porque ya lo manejamos arriba
+            if (['uid', 'email'].includes(field)) {
                 input.disabled = true;
             }
             form.appendChild(input);
