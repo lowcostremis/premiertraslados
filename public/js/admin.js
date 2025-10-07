@@ -397,12 +397,85 @@ function renderAdminList(collectionName, containerId, fields, headers) {
 }
 
 function renderChoferesTable(documentos) {
-    // ...
+ const container = document.getElementById('lista-choferes');
+    if (!container) return;
+
+    if (!documentos || documentos.length === 0) {
+        container.innerHTML = '<p>No se encontraron choferes con ese criterio.</p>';
+        return;
+    }
+
+    // Reutilizamos la misma estructura de la tabla principal para consistencia
+    let tableHTML = `<div class="table-wrapper"><table><thead><tr>
+        <th>DNI</th>
+        <th>Nombre</th>
+        <th>Móvil Asignado</th>
+        <th>Teléfono</th>
+        <th>Email de Acceso</th>
+        <th>Versión App</th>
+        <th>Acciones</th></tr></thead><tbody>`;
+
+    documentos.forEach(item => {
+        const movilId = item.movil_actual_id;
+        let movilDisplay = '-';
+        if (movilId && cachesRef.moviles) {
+            const movilAsignado = cachesRef.moviles.find(m => m.id === movilId);
+            if (movilAsignado) {
+                movilDisplay = `N° ${movilAsignado.numero}`;
+            }
+        }
+
+        tableHTML += `<tr>
+            <td>${item.dni || '-'}</td>
+            <td>${item.nombre || '-'}</td>
+            <td>${movilDisplay}</td>
+            <td>${item.telefono || '-'}</td>
+            <td>${item.email || '-'}</td>
+            <td>${item.app_version || '-'}</td>
+            <td class="acciones">
+                <button onclick="window.app.editItem('choferes', '${item.objectID}')">Editar</button>
+                <button onclick="window.app.openResetPasswordModal('${item.auth_uid}', '${item.nombre}')">Resetear Contraseña</button>
+                <button class="btn-danger" onclick="window.app.deleteItem('choferes', '${item.objectID}', '${item.auth_uid}')">Borrar</button>
+            </td>
+        </tr>`;
+    });
+
+    tableHTML += `</tbody></table></div>`;
+    container.innerHTML = tableHTML;
 }
 
+
 async function buscarEnChoferes(texto) {
-    // ...
+    // Si el texto de búsqueda está vacío, volvemos a renderizar la lista completa original.
+    if (!texto || texto.trim() === '') {
+        // Limpiamos los listeners anteriores para evitar duplicados
+        adminListeners.forEach(unsubscribe => unsubscribe());
+        adminListeners = [];
+        // Re-renderizamos la lista original de choferes
+        renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'movil_actual_id', 'telefono', 'email', 'app_version'], ['DNI', 'Nombre', 'Móvil Asignado', 'Teléfono', 'Email de Acceso', 'Versión App']);
+        return;
+    }
+
+     adminListeners.forEach(unsubscribe => unsubscribe());
+    adminListeners = []; // Vaciamos el array ya que los oyentes están inactivos.
+
+    try {
+        // Usamos el índice de búsqueda importado para buscar
+        const resultados = await choferesSearchIndex.search(texto);
+        
+        // Algolia devuelve los resultados en la propiedad 'hits'
+        const documentos = resultados.hits.map(hit => ({ ...hit, id: hit.objectID }));
+
+        // Renderizamos la tabla con los resultados de la búsqueda
+        renderChoferesTable(documentos);
+
+    } catch (error) {
+        console.error("Error al buscar en choferes:", error);
+        const container = document.getElementById('lista-choferes');
+        container.innerHTML = `<p style="color:red;">Error al realizar la búsqueda.</p>`;
+    }
 }
+
 
 async function handleUpdateItem(e) {
    e.preventDefault();
