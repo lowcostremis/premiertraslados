@@ -94,9 +94,7 @@ export function cargarMarcadoresDeReservas() {
             if (fT && fT <= lim) e = 'En Curso';
         }
         
-        // Lógica de filtrado (se mantiene igual)
-        // ... (Tu lógica de filtros 'Pendientes', 'Asignados', 'En Curso', y por horas)
-         const esPendienteDeFuturo = (estadoOriginal === 'Pendiente' && e === 'Pendiente');
+        const esPendienteDeFuturo = (estadoOriginal === 'Pendiente' && e === 'Pendiente');
 
         if (filtroMapaActual !== 'Todos') {
             if (filtroMapaActual === 'Pendientes') { if (!esPendienteDeFuturo) return; } 
@@ -117,18 +115,18 @@ export function cargarMarcadoresDeReservas() {
             if (horasDiferencia > filtroHorasMapa) return;
         }
 
-
         idsDeReservasActivas.add(r.id);
         const marcadorExistente = marcadoresReservas[r.id];
+        
         let posicion, icono, titulo;
 
-        // --- LÓGICA DE ICONOS Y POSICIÓN (MODIFICADA PARA REUTILIZACIÓN) ---
         if (['Viaje Iniciado', 'En Origen'].includes(e) && r.destino_coords && r.destino_coords.latitude) {
             posicion = { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude };
             const movil = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id);
             const numeroMovil = movil ? movil.numero.toString() : '?';
             icono = crearIconoDePin('#27DAF5', numeroMovil);
             titulo = `DESTINO: ${r.destino}`;
+
         } else if (r.origen_coords && r.origen_coords.latitude) {
             posicion = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
             let colorFondo, textoIcono = '';
@@ -144,22 +142,28 @@ export function cargarMarcadoresDeReservas() {
                 case 'Pendiente': colorFondo = '#C15DE8'; textoIcono = (r.hora_pickup || r.hora_turno || '').substring(0, 5); break;
                 default: colorFondo = '#808080'; textoIcono = '•'; break;
             }
+
             icono = crearIconoDePin(colorFondo, textoIcono);
-            titulo = `Origen: ${r.origen} (${e})`;
+
+            let fechaFormateada = 'Sin Fecha';
+            if (r.fecha_turno) {
+                const [year, month, day] = r.fecha_turno.split('-');
+                fechaFormateada = `${day}/${month}/${year}`;
+            }
+            const horaReserva = r.hora_turno || r.hora_pickup || 'S/H';
+            titulo = `Origen: ${r.origen}\nFecha: ${fechaFormateada}\nHora: ${horaReserva}\nEstado: ${e}`;
+            
         } else {
-             if (marcadorExistente) {
+            if (marcadorExistente) {
                 marcadorExistente.setMap(null);
                 delete marcadoresReservas[r.id];
             }
-            return; // Si no hay coordenadas, no continuamos
+            return;
         }
 
-        // --- INICIO DE LA ADAPTACIÓN PARA SELECCIÓN MÚLTIPLE ---
-        // Si el marcador está en la lista de seleccionados, sobreescribimos su icono
         if (selectedReservas.has(r.id)) {
-            icono = crearIconoDePin('#007BFF', '✓'); // Icono especial de selección
+            icono = crearIconoDePin('#007BFF', '✓');
         }
-        // --- FIN DE LA ADAPTACIÓN ---
 
         if (marcadorExistente) {
             marcadorExistente.setPosition(posicion);
@@ -172,12 +176,10 @@ export function cargarMarcadoresDeReservas() {
         
         const marcadorActual = marcadoresReservas[r.id];
 
-        // --- LÓGICA DE LISTENERS MODIFICADA ---
         marcadorActual.addListener('click', () => {
             if (isMultiSelectMode) {
                 handleMarkerSelection(r);
             } else {
-                // Comportamiento de click normal (si lo hay)
                 if (infoWindowActiva) infoWindowActiva.close();
                 const contenido = `<strong>Pasajero:</strong> ${r.nombre_pasajero}<br><strong>Origen:</strong> ${r.origen}<br><strong>Destino:</strong> ${r.destino}<br><strong>Hora Turno:</strong> ${r.hora_turno}`;
                 infoWindowActiva = new google.maps.InfoWindow({ content: contenido });
@@ -200,7 +202,6 @@ export function cargarMarcadoresDeReservas() {
         }
     });
 }
-
 
 export function filtrarMapa(estado) {
     filtroMapaActual = estado;
@@ -225,7 +226,6 @@ export function filtrarMapaPorChofer(choferId) {
 }
 
 export function escucharUbicacionChoferes() {
-    // Esta función se mantiene sin cambios
     if (unsubscribeChoferes) unsubscribeChoferes();
 
     unsubscribeChoferes = db.collection('choferes').onSnapshot(snapshot => {
@@ -287,7 +287,7 @@ export function toggleMultiSelectMode() {
         panel.style.display = 'none';
         selectedReservas.clear();
         actualizarPanelMultiSelect();
-        cargarMarcadoresDeReservas(); // Redibuja para quitar estilos de selección
+        cargarMarcadoresDeReservas();
     }
 }
 
@@ -300,16 +300,11 @@ function handleMarkerSelection(reserva) {
     if (!marcador) return;
 
     if (selectedReservas.has(reserva.id)) {
-        // Deseleccionar
         selectedReservas.delete(reserva.id);
-        // El icono se restaurará con la llamada a cargarMarcadoresDeReservas,
-        // pero para una respuesta visual instantánea, lo recalculamos aquí.
-        // (Esta parte es una simplificación, cargarMarcadores es más seguro)
         cargarMarcadoresDeReservas(); 
     } else {
-        // Seleccionar
         selectedReservas.set(reserva.id, reserva);
-        marcador.setIcon(crearIconoDePin('#007BFF', '✓')); // Icono azul de selección
+        marcador.setIcon(crearIconoDePin('#007BFF', '✓'));
     }
     actualizarPanelMultiSelect();
 }
