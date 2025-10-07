@@ -129,21 +129,8 @@ export function cargarMarcadoresDeReservas() {
 
         } else if (r.origen_coords && r.origen_coords.latitude) {
             posicion = { lat: r.origen_coords.latitude, lng: r.origen_coords.longitude };
-            let colorFondo, textoIcono = '';
             
-            switch (e) {
-                case 'En Curso': colorFondo = '#F54927'; textoIcono = (r.hora_pickup || r.hora_turno || '').substring(0, 5); break;
-                case 'Asignado':
-                    const detalleEstado = r.estado?.detalle;
-                    colorFondo = (detalleEstado === 'Aceptada') ? '#4DF527' : '#F5A623';
-                    const movilAsignado = cachesRef.moviles.find(mov => mov.id === r.movil_asignado_id);
-                    if (movilAsignado) textoIcono = movilAsignado.numero.toString();
-                    break;
-                case 'Pendiente': colorFondo = '#C15DE8'; textoIcono = (r.hora_pickup || r.hora_turno || '').substring(0, 5); break;
-                default: colorFondo = '#808080'; textoIcono = '•'; break;
-            }
-
-            icono = crearIconoDePin(colorFondo, textoIcono);
+            icono = _getIconoParaReserva(r);
 
             let fechaFormateada = 'Sin Fecha';
             if (r.fecha_turno) {
@@ -295,20 +282,6 @@ export function getSelectedReservasIds() {
     return Array.from(selectedReservas.keys());
 }
 
-function handleMarkerSelection(reserva) {
-    const marcador = marcadoresReservas[reserva.id];
-    if (!marcador) return;
-
-    if (selectedReservas.has(reserva.id)) {
-        selectedReservas.delete(reserva.id);
-        cargarMarcadoresDeReservas(); 
-    } else {
-        selectedReservas.set(reserva.id, reserva);
-        marcador.setIcon(crearIconoDePin('#007BFF', '✓'));
-    }
-    actualizarPanelMultiSelect();
-}
-
 function actualizarPanelMultiSelect() {
     const panelList = document.getElementById('multi-select-list');
     const contador = document.getElementById('contador-seleccion');
@@ -346,7 +319,83 @@ function poblarSelectMovilesPanel() {
 // --- FIN: NUEVAS FUNCIONES PARA SELECCIÓN MÚLTIPLE ---
 
 
-// --- FUNCIONES INTERNAS (SIN CAMBIOS O CON CAMBIOS MENORES) ---
+// --- FUNCIONES INTERNAS ---
+
+/**
+ * ▼▼▼ INICIO DE LA CORRECCIÓN ▼▼▼
+ * Se reemplaza la función handleMarkerSelection por esta versión más eficiente
+ * y se añade la función auxiliar _getIconoParaReserva.
+ */
+function handleMarkerSelection(reserva) {
+    const marcador = marcadoresReservas[reserva.id];
+    if (!marcador) return;
+
+    if (selectedReservas.has(reserva.id)) {
+        // --- LÓGICA CORREGIDA (DESELECCIÓN) ---
+        selectedReservas.delete(reserva.id);
+        // En lugar de redibujar todo, restauramos solo el ícono de este marcador.
+        const iconoOriginal = _getIconoParaReserva(reserva);
+        marcador.setIcon(iconoOriginal);
+    } else {
+        // --- LÓGICA EXISTENTE (SELECCIÓN) ---
+        selectedReservas.set(reserva.id, reserva);
+        // Le ponemos el ícono de "seleccionado".
+        marcador.setIcon(crearIconoDePin('#007BFF', '✓'));
+    }
+    
+    // Actualizamos el panel lateral en ambos casos.
+    actualizarPanelMultiSelect();
+}
+
+/**
+ * Función interna para determinar el ícono correcto de una reserva según su estado.
+ * Reutiliza la lógica de `cargarMarcadoresDeReservas`.
+ * @param {object} reserva - El objeto de la reserva.
+ * @returns {object} - El objeto de ícono de Google Maps.
+ */
+function _getIconoParaReserva(reserva) {
+    let e = (typeof reserva.estado === 'object') ? reserva.estado.principal : reserva.estado;
+    let colorFondo, textoIcono = '';
+
+    const ahora = new Date();
+    const lim = new Date(ahora.getTime() + (24 * 60 * 60 * 1000));
+    const fechaTurno = reserva.fecha_turno ? new Date(`${reserva.fecha_turno}T${reserva.hora_turno || '00:00'}`) : null;
+    
+    if (!reserva.chofer_asignado_id && e === 'Pendiente' && fechaTurno && fechaTurno <= lim) {
+        e = 'En Curso';
+    }
+
+    if (['Viaje Iniciado', 'En Origen'].includes(e)) {
+        const movil = cachesRef.moviles.find(mov => mov.id === reserva.movil_asignado_id);
+        const numeroMovil = movil ? movil.numero.toString() : '?';
+        return crearIconoDePin('#27DAF5', numeroMovil);
+    }
+    
+    switch (e) {
+        case 'En Curso':
+            colorFondo = '#F54927';
+            textoIcono = (reserva.hora_pickup || reserva.hora_turno || '').substring(0, 5);
+            break;
+        case 'Asignado':
+            const detalleEstado = reserva.estado?.detalle;
+            colorFondo = (detalleEstado === 'Aceptada') ? '#4DF527' : '#F5A623';
+            const movilAsignado = cachesRef.moviles.find(mov => mov.id === reserva.movil_asignado_id);
+            if (movilAsignado) textoIcono = movilAsignado.numero.toString();
+            break;
+        case 'Pendiente':
+            colorFondo = '#C15DE8';
+            textoIcono = (reserva.hora_pickup || reserva.hora_turno || '').substring(0, 5);
+            break;
+        default:
+            colorFondo = '#808080';
+            textoIcono = '•';
+            break;
+    }
+    return crearIconoDePin(colorFondo, textoIcono);
+}
+/**
+ * ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
+ */
 
 function mostrarMenuContextualReserva(event, reserva, estado) {
     event.domEvent.preventDefault();
@@ -362,9 +411,9 @@ function mostrarMenuContextualReserva(event, reserva, estado) {
 
     if (menuHTML) {
         mapContextMenuItems.innerHTML = menuHTML;
-        mapContextMenu.style.left = `${event.domEvent.clientX}px`;
-        mapContextMenu.style.top = `${event.domEvent.clientY}px`;
-        mapContextMenu.style.display = 'block';
+        mapContextMenuItems.style.left = `${event.domEvent.clientX}px`;
+        mapContextMenuItems.style.top = `${event.domEvent.clientY}px`;
+        mapContextMenuItems.style.display = 'block';
     }
 }
 
