@@ -418,11 +418,12 @@ export async function asignarMultiplesReservas(reservaIds, movilId, caches) {
             batch.update(reservaRef, {
                 movil_asignado_id: movilId,
                 chofer_asignado_id: choferAsignado.id,
-                estado: { principal: 'Asignado', detalle: 'Asignación múltiple', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() }
+                // ▼▼▼ CAMBIO CLAVE AQUÍ ▼▼▼
+                // Revertimos al estado original para que la app del chofer pida confirmación.
+                estado: { principal: 'Asignado', detalle: 'Enviada al chofer', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() }
             });
         });
 
-        // Actualizamos los viajes activos del chofer en una sola operación
         const choferRef = db.collection('choferes').doc(choferAsignado.id);
         batch.update(choferRef, { 
             viajes_activos: firebase.firestore.FieldValue.arrayUnion(...reservaIds) 
