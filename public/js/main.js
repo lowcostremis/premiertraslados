@@ -7,6 +7,8 @@ import { initHistorial, cargarHistorial, poblarFiltroClientes } from './historia
 import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
 import { initMapa, initMapInstance, initMapaModal, cargarMarcadoresDeReservas, filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer, escucharUbicacionChoferes } from './mapa.js';
+import { toggleMultiSelectMode, getSelectedReservasIds } from './mapa.js';
+import { asignarMultiplesReservas } from './reservas.js';
 import {
     listenToReservas,
     renderAllReservas,
@@ -215,45 +217,59 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
 
 // 5. INICIALIZACIÓN CENTRAL DE LA APLICACIÓN
 function initApp() {
-    // --- ADAPTACIÓN DE DEPURACIÓN 1 ---
-    // Log para verificar cuántas veces se intenta inicializar la app.
-    console.log("Intentando inicializar la aplicación en:", new Date().toLocaleTimeString());
+ console.log("Intentando inicializar la aplicación en:", new Date().toLocaleTimeString());
     
     if (appInitialized) {
-        // Si ya se inicializó, no hagas nada más y sal de la función.
         console.warn("ADVERTENCIA: La aplicación ya estaba inicializada. Se evitó una re-inicialización.");
         return;
     }
-    appInitialized = true; // Si es la primera vez, levanta la bandera.
+    appInitialized = true;
     console.log("Aplicación Inicializada y Módulos Conectados");
 
     // --- EVENT LISTENERS DE ELEMENTOS GLOBALES ---
-    const nuevaReservaBtn = document.getElementById('btn-nueva-reserva');
-    if (nuevaReservaBtn) {
-        nuevaReservaBtn.addEventListener('click', () => {
-            document.getElementById('reserva-form').reset();
-            poblarSelectDeMoviles(caches);
-            document.getElementById('modal-title').textContent = 'Nueva Reserva';
-            document.getElementById('reserva-id').value = '';
-            document.getElementById('reserva-modal').style.display = 'block';
-            initMapaModal(null, null);
-        });
-    }
+    document.getElementById('btn-nueva-reserva')?.addEventListener('click', () => {
+        document.getElementById('reserva-form').reset();
+        poblarSelectDeMoviles(caches);
+        document.getElementById('modal-title').textContent = 'Nueva Reserva';
+        document.getElementById('reserva-id').value = '';
+        document.getElementById('reserva-modal').style.display = 'block';
+        initMapaModal(null, null);
+    });
 
     const closeModal = (modalId) => {
         const modal = document.getElementById(modalId);
         if(modal) modal.style.display = 'none';
-     };
+    };
     document.querySelector('.close-btn')?.addEventListener('click', () => closeModal('reserva-modal'));
     document.querySelector('.close-edit-btn')?.addEventListener('click', () => closeModal('edit-modal'));
     document.querySelector('.close-reset-password-btn')?.addEventListener('click', () => closeModal('reset-password-modal'));
+    
+    document.getElementById('busqueda-reservas')?.addEventListener('input', (e) => {
+        buscarEnReservas(e.target.value, caches);
+    });
 
-    const busquedaReservasInput = document.getElementById('busqueda-reservas');
-    if (busquedaReservasInput) {
-        busquedaReservasInput.addEventListener('input', (e) => {
-            buscarEnReservas(e.target.value, caches);
-        });
-    }
+    // ▼▼▼ INICIO DE LA ADAPTACIÓN PARA ASIGNACIÓN MÚLTIPLE ▼▼▼
+    document.getElementById('btn-multi-select')?.addEventListener('click', toggleMultiSelectMode);
+    
+    document.getElementById('btn-cancel-multi')?.addEventListener('click', () => {
+        toggleMultiSelectMode(); 
+    });
+
+    document.getElementById('btn-assign-multi')?.addEventListener('click', async () => {
+        const movilId = document.getElementById('multi-select-movil').value;
+        const reservaIds = window.app.getSelectedReservasIds();
+
+        if (!movilId) {
+            alert('Por favor, selecciona un móvil para asignar.');
+            return;
+        }
+
+        const exito = await asignarMultiplesReservas(reservaIds, movilId, caches);
+        
+        if (exito) {
+            toggleMultiSelectMode(); // Cierra y resetea el panel
+        }
+    });
 
     // --- OBJETO GLOBAL PARA FUNCIONES ACCESIBLES DESDE HTML ---
     window.app = {
@@ -267,7 +283,8 @@ function initApp() {
         hideTableMenus,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer,
-        filtrarPorHoras
+        filtrarPorHoras,
+        getSelectedReservasIds
     };
     
     window.openTab = (event, tabName) => openTab(event, tabName, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });

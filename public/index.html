@@ -169,7 +169,7 @@
                         <button class="map-filter-btn active" onclick="window.app.filtrarMapa('Todos')">Todos</button>
                         <button class="map-filter-btn" onclick="window.app.filtrarMapa('En Curso')">En Curso</button>
                         <button class="map-filter-btn" onclick="window.app.filtrarMapa('Asignado')">Asignados</button>
-                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('Pendiente')">Pendientes</button>
+                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('Pendiente')">Pendientes</button> <button id="btn-multi-select" class="map-filter-btn">Selección Múltiple</button>
                     </div>
                     <div class="time-filters-map">
                         <button class="map-filter-btn active" onclick="window.app.filtrarMapaPorHoras(null)">24hs</button>
@@ -177,6 +177,7 @@
                         <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(8)">8hs</button>
                         <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(12)">12hs</button>
                     </div>
+                    
                     <div class="chofer-filter">
                         <select id="filtro-chofer-mapa" onchange="window.app.filtrarMapaPorChofer(this.value)">
                             <option value="">Ver todos los móviles</option>
@@ -186,12 +187,14 @@
                         <label for="toggle-choferes">Mostrar Móviles</label>
                         <input type="checkbox" id="toggle-choferes" checked>
                     </div>
+                    
                 </div>
                 <div id="map-container"></div>
                 <div id="map-context-menu" style="display:none; position:absolute; background-color:white; border:1px solid #ccc; z-index:1000;">
                     <ul id="map-context-menu-items" style="list-style:none; margin:0; padding:5px;"></ul>
                 </div>
             </div>
+            
             
             <div id="Administracion" class="tab-content" style="display: none;">
                 <nav class="sub-nav">
@@ -473,6 +476,18 @@
             </form>
         </div>
     </div>
+    <div id="multi-select-panel" style="display: none;">
+    <h3>Viajes Seleccionados (<span id="contador-seleccion">0</span>)</h3>
+    <ul id="multi-select-list">
+        </ul>
+    <div class="panel-acciones">
+        <select id="multi-select-movil">
+            <option value="">Seleccionar móvil...</option>
+        </select>
+        <button id="btn-assign-multi" disabled>Asignar</button>
+        <button id="btn-cancel-multi">Cancelar</button>
+    </div>
+</div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>

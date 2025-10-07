@@ -398,6 +398,47 @@ export async function handleDniBlur(e) {
     }
 }
 
+export async function asignarMultiplesReservas(reservaIds, movilId, caches) {
+    if (!movilId || reservaIds.length === 0) {
+        alert("Seleccione un móvil y al menos una reserva.");
+        return false;
+    }
+
+    const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movilId);
+    if (!choferAsignado) {
+        alert("Error: El móvil seleccionado no tiene un chofer vinculado.");
+        return false;
+    }
+
+    try {
+        const batch = db.batch();
+
+        reservaIds.forEach(reservaId => {
+            const reservaRef = db.collection('reservas').doc(reservaId);
+            batch.update(reservaRef, {
+                movil_asignado_id: movilId,
+                chofer_asignado_id: choferAsignado.id,
+                estado: { principal: 'Asignado', detalle: 'Asignación múltiple', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() }
+            });
+        });
+
+        // Actualizamos los viajes activos del chofer en una sola operación
+        const choferRef = db.collection('choferes').doc(choferAsignado.id);
+        batch.update(choferRef, { 
+            viajes_activos: firebase.firestore.FieldValue.arrayUnion(...reservaIds) 
+        });
+
+        await batch.commit();
+        alert(`${reservaIds.length} viajes asignados correctamente al móvil ${choferAsignado.nombre}.`);
+        return true;
+
+    } catch (error) {
+        console.error("Error en asignación múltiple:", error);
+        alert("Error al asignar los viajes: " + error.message);
+        return false;
+    }
+}
+
 // --- FUNCIONES INTERNAS (NO EXPORTADAS) ---
 
 function renderFilaReserva(tbody, reserva, caches) {

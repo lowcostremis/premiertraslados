@@ -523,3 +523,75 @@ td button, td select {
 .context-menu ul li a:hover {
     background-color: #f0f0f0;
 }
+#multi-select-panel {
+    position: absolute;
+    top: 120px; /* Ajusta según la altura de tu cabecera y filtros */
+    right: 20px;
+    width: 300px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    display: none; /* Se controla con JS */
+}
+
+#multi-select-panel h3 {
+    font-size: 16px;
+    margin: 0;
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+#multi-select-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#multi-select-list li {
+    padding: 10px 15px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+}
+
+#multi-select-panel .panel-acciones {
+    padding: 15px;
+    background-color: #f7f7f7;
+    border-top: 1px solid #eee;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#multi-select-panel .panel-acciones select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#multi-select-panel .panel-acciones button {
+    padding: 10px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+#btn-assign-multi {
+    background-color: #28a745; /* Verde */
+    color: white;
+}
+
+#btn-assign-multi:disabled {
+    background-color: #a5d6a7;
+    cursor: not-allowed;
+}
+
+#btn-cancel-multi {
+    background-color: #6c757d; /* Gris */
+    color: white;
+}
