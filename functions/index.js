@@ -252,8 +252,8 @@ exports.listUsers = onCall(async (request) => {
 });
 
 exports.exportarHistorico = onCall(async (request) => {
-    try {
-        const { fechaDesde, fechaHasta, clienteId } = request.data;
+   try {
+       const { fechaDesde, fechaHasta, clienteId } = request.data;
         if (!fechaDesde || !fechaHasta) {
             return { csvData: null, message: "Las fechas 'desde' y 'hasta' son obligatorias." };
         }
@@ -267,22 +267,31 @@ exports.exportarHistorico = onCall(async (request) => {
         if (snapshot.empty) {
             return { csvData: null, message: "No se encontraron registros." };
         }
-        let csvContent = "Fecha Turno,Hora Turno,Hora PickUp,Pasajero,Cliente,Origen,Destino,Estado,Siniestro,Autorizacion\n";
+        
+        // 1. MODIFICACIÓN: Añadir BOM para UTF-8 (acentos)
+        let csvContent = "\uFEFF"; 
+        
+        // 2. MODIFICACIÓN: Usar punto y coma (;) en encabezados (ya incluye "Chofer")
+        csvContent += "Fecha Turno;Hora Turno;Hora PickUp;Pasajero;Cliente;Chofer;Origen;Destino;Estado;Siniestro;Autorizacion\n";
+        
         snapshot.forEach(doc => {
             const viaje = doc.data();
             const escapeCSV = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
+            
+            // 3. MODIFICACIÓN: Usar punto y coma (;) para unir los datos
             const fila = [
                 viaje.fecha_turno || 'N/A',
                 viaje.hora_turno || 'N/A',
                 viaje.hora_pickup || 'N/A',
                 escapeCSV(viaje.nombre_pasajero),
                 escapeCSV(viaje.clienteNombre),
+                escapeCSV(viaje.choferNombre), // <-- Este campo ya estaba
                 escapeCSV(viaje.origen),
                 escapeCSV(viaje.destino),
                 (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A',
                 viaje.siniestro || 'N/A',
                 viaje.autorizacion || 'N/A'
-            ].join(',');
+            ].join(';'); // <-- CAMBIO CLAVE
             csvContent += fila + "\n";
         });
         return { csvData: csvContent };
