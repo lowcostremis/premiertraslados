@@ -595,3 +595,15 @@ td button, td select {
     background-color: #6c757d; /* Gris */
     color: white;
 }
+
+/* En style.css */
+.selected-row {
+    background-color: #fff3cd !important; /* Amarillo claro */
+    border-left: 5px solid #ffc107 !important; /* Borde amarillo más oscuro */
+}
+/* Estilo para el botón cuando está activo */
+#btn-toggle-select-table.active {
+    background-color: #ffc107 !important;
+    color: #333 !important;
+    font-weight: bold;
+}

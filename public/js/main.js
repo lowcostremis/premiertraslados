@@ -8,8 +8,9 @@ import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
 import { initMapa, initMapInstance, initMapaModal, cargarMarcadoresDeReservas, filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer, escucharUbicacionChoferes } from './mapa.js';
 import { toggleMultiSelectMode, getSelectedReservasIds } from './mapa.js';
-import { asignarMultiplesReservas } from './reservas.js';
-import {
+// Importamos asignarMultiplesReservas estáticamente para evitar problemas con import dinámico si no es necesario
+import { 
+    asignarMultiplesReservas,
     listenToReservas,
     renderAllReservas,
     buscarEnReservas,
@@ -33,10 +34,18 @@ let caches = {
     zonas: [],
     moviles: []
 };
+// CORRECCIÓN 1: Asignación fuera del objeto
+window.appCaches = caches;
+
 let lastReservasSnapshot = null;
-let appInitialized = false; // Bandera para controlar la inicialización
+let appInitialized = false; 
 let filtroChoferAsignadosId = null;
 let filtroHoras = null;
+
+// VARIABLES PARA SELECCIÓN MÚLTIPLE EN TABLA
+window.isTableMultiSelectMode = false;
+let selectedTableIds = new Set();
+
 
 // 3. LÓGICA DE AUTENTICACIÓN
 auth.onAuthStateChanged(user => {
@@ -46,11 +55,11 @@ auth.onAuthStateChanged(user => {
         authSection.style.display = 'none';
         appContent.style.display = 'block';
         document.getElementById('user-email-display').textContent = user.email;
-        initApp(); // Inicializa la aplicación cuando el usuario está logueado
+        initApp(); 
     } else {
         authSection.style.display = 'flex';
         appContent.style.display = 'none';
-        appInitialized = false; // Resetea la bandera si el usuario cierra sesión
+        appInitialized = false; 
     }
 });
 
@@ -121,15 +130,57 @@ function toggleMenu(event) {
     event.currentTarget.nextElementSibling.classList.toggle('visible');
 }
 
+// CORRECCIÓN 2: Función auxiliar para selección múltiple integrada
+function updateTablePanelVisibility() {
+    const panel = document.getElementById('multi-select-panel');
+    const contador = document.getElementById('contador-seleccion');
+    const lista = document.getElementById('multi-select-list');
+    const selectMovil = document.getElementById('multi-select-movil');
+    const btnAsignar = document.getElementById('btn-assign-multi');
+
+    if (selectedTableIds.size > 0) {
+        panel.style.display = 'block';
+        if(contador) contador.textContent = selectedTableIds.size;
+        
+        // Mostrar lista simple
+        lista.innerHTML = `<li style="padding:10px">Has seleccionado ${selectedTableIds.size} viajes de la lista.</li>`;
+
+        // Poblar select si está vacío
+        if (selectMovil.options.length <= 1 && caches.moviles) {
+             let opts = '<option value="">Seleccionar móvil...</option>';
+             caches.moviles.forEach(m => {
+                 const ch = caches.choferes.find(c => c.movil_actual_id === m.id);
+                 const nm = ch ? `(${ch.nombre})` : '';
+                 opts += `<option value="${m.id}">Móvil ${m.numero} ${nm}</option>`;
+             });
+             selectMovil.innerHTML = opts;
+        }
+
+        // Habilitamos el botón, pero NO tocamos sus eventos aquí
+        btnAsignar.disabled = false;
+        
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function toggleTableSelection(reservaId, rowElement) {
+    if (selectedTableIds.has(reservaId)) {
+        selectedTableIds.delete(reservaId);
+        rowElement.classList.remove('selected-row');
+    } else {
+        selectedTableIds.add(reservaId);
+        rowElement.classList.add('selected-row');
+    }
+    updateTablePanelVisibility();
+}
+
+
 function actualizarFiltrosDeMoviles() {
-       // Selects de Reservas y Mapa (para filtrar)
     const selectReservas = document.getElementById('filtro-chofer-asignados');
     const selectMapa = document.getElementById('filtro-chofer-mapa');
-    
-    // Select de Admin (para asignar al crear chofer)
     const selectAdmin = document.getElementById('chofer-movil-select');
 
-    // --- Lógica para los filtros de Reservas y Mapa ---
     if (selectReservas || selectMapa) {
         let optionsHTMLFiltro = '<option value="">Ver todos los móviles</option>';
         const movilesConChofer = caches.choferes
@@ -154,14 +205,11 @@ function actualizarFiltrosDeMoviles() {
         });
     }
 
-    // --- Lógica NUEVA para el formulario de Admin ---
     if (selectAdmin) {
         let optionsHTMLAdmin = '<option value="">(Opcional) Asignar Móvil</option>';
         caches.moviles.forEach(movil => {
-            // Buscamos si este móvil ya está asignado a otro chofer
             const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
             const infoChofer = choferAsignado ? `(Asignado a ${choferAsignado.nombre})` : '(Libre)';
-            
             optionsHTMLAdmin += `<option value="${movil.id}">N° ${movil.numero} ${infoChofer}</option>`;
         });
         
@@ -217,10 +265,10 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
 
 // 5. INICIALIZACIÓN CENTRAL DE LA APLICACIÓN
 function initApp() {
- console.log("Intentando inicializar la aplicación en:", new Date().toLocaleTimeString());
+    console.log("Intentando inicializar la aplicación en:", new Date().toLocaleTimeString());
     
     if (appInitialized) {
-        console.warn("ADVERTENCIA: La aplicación ya estaba inicializada. Se evitó una re-inicialización.");
+        console.warn("ADVERTENCIA: La aplicación ya estaba inicializada.");
         return;
     }
     appInitialized = true;
@@ -235,6 +283,24 @@ function initApp() {
         document.getElementById('reserva-modal').style.display = 'block';
         initMapaModal(null, null);
     });
+    
+    // CORRECCIÓN 3: Listener para activar selección múltiple en tabla (Integrado)
+    document.getElementById('btn-toggle-select-table')?.addEventListener('click', function() {
+        window.isTableMultiSelectMode = !window.isTableMultiSelectMode;
+        const btn = this;
+        
+        if (window.isTableMultiSelectMode) {
+            btn.textContent = 'Cancelar Selección';
+            btn.classList.add('active');
+            window.app.hideTableMenus(); 
+        } else {
+            btn.textContent = 'Activar Selección Múltiple';
+            btn.classList.remove('active');
+            selectedTableIds.clear();
+            document.querySelectorAll('.selected-row').forEach(r => r.classList.remove('selected-row'));
+            document.getElementById('multi-select-panel').style.display = 'none';
+        }
+    });
 
     const closeModal = (modalId) => {
         const modal = document.getElementById(modalId);
@@ -248,26 +314,57 @@ function initApp() {
         buscarEnReservas(e.target.value, caches);
     });
 
-    // ▼▼▼ INICIO DE LA ADAPTACIÓN PARA ASIGNACIÓN MÚLTIPLE ▼▼▼
+    // LISTENER PARA MAPA (SELECCIÓN MÚLTIPLE) - Lógica existente
     document.getElementById('btn-multi-select')?.addEventListener('click', toggleMultiSelectMode);
     
     document.getElementById('btn-cancel-multi')?.addEventListener('click', () => {
-        toggleMultiSelectMode(); 
+        // Comprobamos qué modo está activo para cancelar el correcto
+        if (window.isTableMultiSelectMode) {
+            document.getElementById('btn-toggle-select-table').click();
+        } else {
+            toggleMultiSelectMode(); 
+        }
     });
 
+    // LÓGICA DE ASIGNACIÓN (MAPA Y TABLA)
     document.getElementById('btn-assign-multi')?.addEventListener('click', async () => {
         const movilId = document.getElementById('multi-select-movil').value;
-        const reservaIds = window.app.getSelectedReservasIds();
-
+        
         if (!movilId) {
             alert('Por favor, selecciona un móvil para asignar.');
             return;
         }
 
+        let reservaIds = [];
+        let origenDeLaAccion = '';
+
+        // Determinamos de dónde vienen los IDs según el modo activo
+        if (window.isTableMultiSelectMode) {
+            reservaIds = Array.from(selectedTableIds);
+            origenDeLaAccion = 'tabla';
+        } else {
+            // Asumimos modo mapa
+            reservaIds = window.app.getSelectedReservasIds(); 
+            origenDeLaAccion = 'mapa';
+        }
+
+        if (reservaIds.length === 0) {
+            alert("No hay viajes seleccionados.");
+            return;
+        }
+
+        // Ejecutamos la asignación (importada de reservas.js)
         const exito = await asignarMultiplesReservas(reservaIds, movilId, caches);
         
         if (exito) {
-            toggleMultiSelectMode(); // Cierra y resetea el panel
+            // Cerramos el modo correspondiente
+            if (origenDeLaAccion === 'tabla') {
+                document.getElementById('btn-toggle-select-table').click(); // Click para apagar modo tabla
+            } else {
+                toggleMultiSelectMode(); // Función importada para apagar modo mapa
+            }
+            // Limpiamos el selector para la próxima
+            document.getElementById('multi-select-movil').value = "";
         }
     });
 
@@ -284,7 +381,9 @@ function initApp() {
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer,
         filtrarPorHoras,
-        getSelectedReservasIds
+        getSelectedReservasIds,
+        // CORRECCIÓN 4: Agregamos la función de selección de tabla aquí
+        toggleTableSelection
     };
     
     window.openTab = (event, tabName) => openTab(event, tabName, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
@@ -309,10 +408,7 @@ function initApp() {
 
     // --- LISTENER PRINCIPAL DE RESERVAS ---
     listenToReservas(snapshot => {
-        // --- ADAPTACIÓN DE DEPURACIÓN 2 ---
-        // Log para ver cuándo se activa el listener y con cuántos datos.
         console.log("Listener de 'reservas' activado con", snapshot.size, "documentos.");
-        
         lastReservasSnapshot = snapshot;
         renderAllReservas(snapshot, caches, filtroChoferAsignadosId, filtroHoras);
         
@@ -327,6 +423,5 @@ function initApp() {
         cargarMarcadoresDeReservas();
     });
 
-    // --- PESTAÑA INICIAL ---
     openTab(null, 'Reservas');
 }

@@ -445,6 +445,23 @@ export async function asignarMultiplesReservas(reservaIds, movilId, caches) {
 function renderFilaReserva(tbody, reserva, caches) {
     const cliente = caches.clientes[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
     const row = tbody.insertRow();
+    row.dataset.id = reserva.id;
+
+    row.addEventListener('click', (e) => {
+        // 1. Verificamos si el modo selección está activo
+        if (!window.isTableMultiSelectMode) return;
+
+        // 2. Evitamos que se active si clicks en botones, inputs o el menú desplegable
+        if (e.target.closest('button') || 
+            e.target.closest('select') || 
+            e.target.closest('input') || 
+            e.target.closest('a')) {
+            return;
+        }
+
+        // 3. Ejecutamos la selección
+        window.app.toggleTableSelection(reserva.id, row);
+    });
     
     const estadoPrincipal = (typeof reserva.estado === 'object' && reserva.estado.principal) ? reserva.estado.principal : reserva.estado;
     const estadoDetalle = (typeof reserva.estado === 'object' && reserva.estado.detalle) ? reserva.estado.detalle : '---';
