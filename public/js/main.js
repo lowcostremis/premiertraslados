@@ -273,6 +273,31 @@ function initApp() {
     }
     appInitialized = true;
     console.log("Aplicación Inicializada y Módulos Conectados");
+    // --- CÓDIGO PARA EL BOTÓN DE IMPORTAR EXCEL ---
+    const btnImportar = document.getElementById('btn-importar-excel');
+    const inputExcel = document.getElementById('input-excel');
+
+    if (btnImportar && inputExcel) {
+        // 1. Al hacer clic en el botón verde, abrimos el selector de archivos oculto
+        btnImportar.addEventListener('click', () => {
+            inputExcel.click();
+        });
+
+        // 2. Cuando el usuario elige un archivo, llamamos a la lógica de reservas.js
+        inputExcel.addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                console.log("Archivo detectado, iniciando importación...");
+                try {
+                    // Importamos la función dinámicamente
+                    const { manejarImportacionExcel } = await import('./reservas.js');
+                    manejarImportacionExcel(e);
+                } catch (err) {
+                    console.error("Error al importar el módulo:", err);
+                    alert("Error al cargar el módulo de importación.");
+                }
+            }
+        });
+    }
 
     // --- EVENT LISTENERS DE ELEMENTOS GLOBALES ---
     document.getElementById('btn-nueva-reserva')?.addEventListener('click', () => {

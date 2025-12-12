@@ -575,4 +575,80 @@ exports.notificarCancelacionDeReserva = functions.firestore
         return null;
     });
 
+    // ===================================================================================
+// IMPORTACIÓN DE IA (Asegúrate de haber instalado: npm install @google/generative-ai)
+// ===================================================================================
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+// Inicializa la IA (toma la clave del archivo .env automáticamente)
+// PEGA TU CLAVE REAL AQUÍ ENTRE COMILLAS
+// Inicializa la IA con la NUEVA CLAVE
+const genAI = new GoogleGenerativeAI("AIzaSyDM86eZFplsu9_NbdW5To_yy9NU7_4rru0");
+
+exports.interpretarExcelIA = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Debes estar logueado.');
+    }
+
+    const { datosCrudos, fechaSeleccionada } = request.data; 
+
+    if (!datosCrudos || datosCrudos.length === 0) {
+        return { reservas: [] };
+    }
+
+   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+   const prompt = `
+    Actúa como un operador de logística experto en Rosario, Argentina.
+    Analiza esta lista de viajes y conviértela en JSON limpio para Firebase.
+    
+    Fecha del viaje: ${fechaSeleccionada} (YYYY-MM-DD).
+    
+    Reglas de interpretación:
+    1. **Hora:** Usa la columna "HORARIO". Si está vacía, usa "TURNO". Formato HH:mm.
+    2. **Pasajero:** Columna "Apellido y Nombre Pasajero".
+    3. **Teléfono:** Columna "N° de Telefono".
+    4. **Origen:** Concatena "Calle Origen Recorrido" + "N° Calle Origen" + "Localidad Origen". 
+       - Si es "VGG", pon "Villa Gobernador Gálvez".
+       - Si es solo "Rosario", agrega ", Santa Fe".
+    5. **Destino:** Concatena "Calle Destino Recorrido" + "N° Calle Destin" + "Localidad Destino".
+    
+    6. **Cliente (TRADUCCIÓN):**
+       La columna "EMPRESA" trae siglas. Tradúcelas al nombre real del sistema:
+       - "SPA" -> "PREVENCION ART"
+       - "SPI" -> "La Segunda ART"
+       - "RDT" -> "RED DE TRASLADOS"
+       - "INTEGRO" -> "INTEGRO ART"
+       - "ASOCIART" -> "ASOCIART"
+       - "LLT" -> "LLT"
+       - Si la sigla no está aquí, escribe el nombre tal cual aparece (ej: "SANCOR").
+
+    7. **Siniestro:** Columna "SINIESTRO".
+    8. **Autorización:** Columna "AUTORIZACIÓN".
+    9. **Observaciones:** Si la columna "CHOFER" tiene un número, pon: "Chofer sugerido: [numero]".
+    10. **Limpieza:** Ignora filas vacías o tachadas (-).
+
+    IMPORTANTE: Devuelve SOLO un array JSON válido bajo la clave "reservas".
+    Claves JSON: hora_turno, nombre_pasajero, telefono_pasajero, origen, destino, cliente, siniestro, autorizacion, observaciones.
+
+    Datos a procesar: ${JSON.stringify(datosCrudos)}
+    `;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        let text = response.text();
+        
+        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const jsonResponse = JSON.parse(text);
+        const reservasFinales = Array.isArray(jsonResponse) ? jsonResponse : jsonResponse.reservas;
+
+        return { reservas: reservasFinales || [] };
+
+    } catch (error) {
+        console.error("Error IA:", error);
+        throw new HttpsError('internal', 'Error al procesar con IA.');
+    }
+});
+
 

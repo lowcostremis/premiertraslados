@@ -39,6 +39,12 @@
                 <div class="reservas-header">
                     <button id="btn-nueva-reserva">Nueva Reserva</button>
                     <button id="btn-toggle-select-table" style="margin-left: 10px; background-color: #6c757d;">Activar Selección Múltiple</button>
+                    <div style="display: inline-flex; gap: 10px; align-items: center; margin-left: 10px;">
+                    <input type="file" id="input-excel" accept=".xlsx, .xls" style="display: none;" />
+                    <button id="btn-importar-excel" style="background-color: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px;">
+                         📂 Importar Excel
+                    </button>
+                    </div>
                     
                     <div class="search-container">
                         <input type="text" id="busqueda-reservas" placeholder="Buscar pasajero, origen, destino...">
@@ -497,6 +503,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4.23.3/dist/algoliasearch-lite.umd.js"></script>
     <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places" defer></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     
     <script type="module" src="js/main.js"></script>
 </body>

@@ -626,4 +626,173 @@ async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
         console.error("Error al mover reserva a histórico:", error);
         alert("Error al archivar la reserva: " + error.message);
     }
+    
+  }
+    // ===================================================================================
+// IMPORTACIÓN DE EXCEL CON IA
+// ===================================================================================
+// Función principal para leer el Excel y enviarlo a la IA
+export async function manejarImportacionExcel(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // 1. Pedimos la fecha al usuario (para asignarla a todos los viajes)
+    const fechaSeleccionada = prompt("Ingrese la fecha de estos viajes (Formato: YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+    
+    if (!fechaSeleccionada) {
+        alert("Importación cancelada: Se requiere una fecha.");
+        event.target.value = ''; // Limpiar input
+        return;
+    }
+
+    const reader = new FileReader();
+    
+    reader.onload = async (e) => {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Convertimos a JSON crudo
+            const todosLosDatos = XLSX.utils.sheet_to_json(worksheet);
+            
+            // --- LIMITADOR TEMPORAL (Borrar esto cuando ya confíes en el sistema) ---
+            const jsonData = todosLosDatos; 
+            // -----------------------------------------------------------------------
+
+            console.log(`Enviando a IA: ${jsonData.length} filas.`);
+            
+            // Mostramos aviso de carga
+            const btnImportar = document.getElementById('btn-importar-excel');
+            if(btnImportar) {
+                btnImportar.textContent = "⏳ Analizando con IA...";
+                btnImportar.disabled = true;
+            }
+
+            // Llamada al Backend (Cloud Function)
+            const interpretarExcel = firebase.functions().httpsCallable('interpretarExcelIA');
+            const result = await interpretarExcel({ datosCrudos: jsonData, fechaSeleccionada });
+            
+            console.log("IA Respondió:", result.data.reservas);
+
+            // --- CORRECCIÓN CLAVE: Inyectamos la fecha manual en cada reserva ---
+            const reservasProcesadas = result.data.reservas.map(r => ({
+                ...r,
+                fecha_turno: fechaSeleccionada // Forzamos la fecha que ingresaste
+            }));
+
+            // Confirmación antes de guardar
+            if (confirm(`La IA detectó ${reservasProcesadas.length} reservas para el día ${fechaSeleccionada}.\n\n¿Deseas guardarlas en la base de datos?`)) {
+                await guardarReservasEnLote(reservasProcesadas);
+            }
+
+        } catch (error) {
+            console.error("Error importando:", error);
+            alert("Hubo un error al procesar: " + error.message);
+        } finally {
+            // Restaurar botón
+            const btnImportar = document.getElementById('btn-importar-excel');
+            if(btnImportar) {
+                btnImportar.textContent = "📂 Importar Excel";
+                btnImportar.disabled = false;
+            }
+            event.target.value = ''; // Limpiar para permitir importar el mismo archivo de nuevo
+        }
+    };
+
+    reader.readAsArrayBuffer(file);
+}
+
+// Función auxiliar para guardar todo de una vez (Con creación automática de clientes)
+async function guardarReservasEnLote(reservas) {
+    const db = firebase.firestore();
+    const batch = db.batch();
+    
+    // Accedemos a los clientes cargados en memoria
+    const clientesCache = window.appCaches ? window.appCaches.clientes : {};
+    
+    // Cache temporal para no crear el mismo cliente 2 veces si aparece repetido en el mismo Excel
+    const clientesNuevosEnEsteLote = {}; 
+    
+    let contador = 0;
+    
+    // Usamos 'for...of' para poder usar 'await' dentro del bucle (necesario para crear clientes)
+    for (const reserva of reservas) {
+        const docRef = db.collection('reservas').doc(); // ID automático para la reserva
+        
+        // --- LÓGICA DE GESTIÓN DE CLIENTE ---
+        let clienteIdFinal = null;
+        // Normalizamos el nombre que vino de la IA (Mayúsculas y sin espacios extra)
+        const nombreClienteIA = (reserva.cliente || 'PARTICULARES').trim().toUpperCase();
+
+        // 1. Buscar en los clientes que YA existen en el sistema
+        for (const [id, datos] of Object.entries(clientesCache)) {
+            if (datos.nombre.toUpperCase().trim() === nombreClienteIA) {
+                clienteIdFinal = id;
+                break;
+            }
+        }
+
+        // 2. Si no existe, buscar si lo acabamos de crear en este mismo proceso (filas anteriores)
+        if (!clienteIdFinal && clientesNuevosEnEsteLote[nombreClienteIA]) {
+            clienteIdFinal = clientesNuevosEnEsteLote[nombreClienteIA];
+        }
+
+        // 3. Si sigue sin existir: ¡LO CREAMOS!
+        if (!clienteIdFinal) {
+            try {
+                // Creamos el cliente en la colección 'clientes'
+                // Usamos el nombre tal cual vino de la IA (pero 'Bonito', no todo mayúsculas si prefieres)
+                const nombreParaGuardar = (reserva.cliente || 'Nuevo Cliente').trim();
+                
+                const nuevoClienteRef = await db.collection('clientes').add({
+                    nombre: nombreParaGuardar,
+                    creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+                    origen_dato: 'Importación Automática Excel',
+                    telefono: '', // Se deja vacío para que el operador complete después
+                    cuit: ''
+                });
+
+                clienteIdFinal = nuevoClienteRef.id;
+                
+                // Lo guardamos en el cache temporal por si aparece de nuevo en la siguiente fila
+                clientesNuevosEnEsteLote[nombreClienteIA] = clienteIdFinal;
+                
+                console.log(`🆕 Cliente creado automáticamente: ${nombreParaGuardar} (ID: ${clienteIdFinal})`);
+
+            } catch (error) {
+                console.error(`Error creando cliente ${nombreClienteIA}:`, error);
+                clienteIdFinal = 'Default'; // Fallback por seguridad
+            }
+        }
+
+        // --- PREPARAR DATOS DE LA RESERVA ---
+        const nuevaReserva = {
+            ...reserva,
+            cliente: clienteIdFinal, // Aquí va el ID (sea viejo o recién creado)
+            estado: { 
+                principal: 'Pendiente', 
+                detalle: 'Importado vía Excel/IA', 
+                actualizado_en: firebase.firestore.FieldValue.serverTimestamp() 
+            },
+            creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
+            cantidad_pasajeros: '1', 
+            es_exclusivo: false
+        };
+        
+        batch.set(docRef, nuevaReserva);
+        contador++;
+    }
+
+    try {
+        await batch.commit();
+        alert(`¡Éxito! Se procesaron ${contador} reservas.\n(Se crearon ${Object.keys(clientesNuevosEnEsteLote).length} clientes nuevos automáticamente).`);
+        
+        // Recargar la tabla visualmente
+        if (window.app && window.app.filtrarPorHoras) window.app.filtrarPorHoras(null); 
+    } catch (error) {
+        console.error("Error guardando lote:", error);
+        alert("Error al guardar en base de datos: " + error.message);
+    }
 }
