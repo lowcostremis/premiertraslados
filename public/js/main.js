@@ -1,6 +1,5 @@
 // js/main.js
 
-// 1. IMPORTACIONES DE TODOS LOS MÓDULOS
 import { auth, db } from './firebase-config.js';
 import { openTab, showReservasTab, openAdminTab } from './tabs.js';
 import { initHistorial, cargarHistorial, poblarFiltroClientes } from './historial.js';
@@ -8,7 +7,7 @@ import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
 import { initMapa, initMapInstance, initMapaModal, cargarMarcadoresDeReservas, filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer, escucharUbicacionChoferes } from './mapa.js';
 import { toggleMultiSelectMode, getSelectedReservasIds } from './mapa.js';
-// Importamos asignarMultiplesReservas estáticamente para evitar problemas con import dinámico si no es necesario
+
 import { 
     asignarMultiplesReservas,
     listenToReservas,
@@ -23,7 +22,10 @@ import {
     quitarAsignacion,
     updateHoraPickup,
     updateZona,
-    handleDniBlur
+    handleDniBlur,
+    confirmarReservaImportada,
+    handleConfirmarDesdeModal
+    // SE ELIMINÓ 'toggleTableSelection' DE AQUÍ PORQUE YA ESTÁ DEFINIDA ABAJO
 } from './reservas.js';
 
 
@@ -34,7 +36,6 @@ let caches = {
     zonas: [],
     moviles: []
 };
-// CORRECCIÓN 1: Asignación fuera del objeto
 window.appCaches = caches;
 
 let lastReservasSnapshot = null;
@@ -42,7 +43,7 @@ let appInitialized = false;
 let filtroChoferAsignadosId = null;
 let filtroHoras = null;
 
-// VARIABLES PARA SELECCIÓN MÚLTIPLE EN TABLA
+// Variables para selección múltiple en tabla
 window.isTableMultiSelectMode = false;
 let selectedTableIds = new Set();
 
@@ -130,7 +131,6 @@ function toggleMenu(event) {
     event.currentTarget.nextElementSibling.classList.toggle('visible');
 }
 
-// CORRECCIÓN 2: Función auxiliar para selección múltiple integrada
 function updateTablePanelVisibility() {
     const panel = document.getElementById('multi-select-panel');
     const contador = document.getElementById('contador-seleccion');
@@ -142,10 +142,8 @@ function updateTablePanelVisibility() {
         panel.style.display = 'block';
         if(contador) contador.textContent = selectedTableIds.size;
         
-        // Mostrar lista simple
         lista.innerHTML = `<li style="padding:10px">Has seleccionado ${selectedTableIds.size} viajes de la lista.</li>`;
 
-        // Poblar select si está vacío
         if (selectMovil.options.length <= 1 && caches.moviles) {
              let opts = '<option value="">Seleccionar móvil...</option>';
              caches.moviles.forEach(m => {
@@ -156,7 +154,6 @@ function updateTablePanelVisibility() {
              selectMovil.innerHTML = opts;
         }
 
-        // Habilitamos el botón, pero NO tocamos sus eventos aquí
         btnAsignar.disabled = false;
         
     } else {
@@ -164,6 +161,7 @@ function updateTablePanelVisibility() {
     }
 }
 
+// ESTA ES LA DEFINICIÓN LOCAL QUE ENTRABA EN CONFLICTO CON LA IMPORTACIÓN
 function toggleTableSelection(reservaId, rowElement) {
     if (selectedTableIds.has(reservaId)) {
         selectedTableIds.delete(reservaId);
@@ -273,22 +271,19 @@ function initApp() {
     }
     appInitialized = true;
     console.log("Aplicación Inicializada y Módulos Conectados");
-    // --- CÓDIGO PARA EL BOTÓN DE IMPORTAR EXCEL ---
+    
     const btnImportar = document.getElementById('btn-importar-excel');
     const inputExcel = document.getElementById('input-excel');
 
     if (btnImportar && inputExcel) {
-        // 1. Al hacer clic en el botón verde, abrimos el selector de archivos oculto
         btnImportar.addEventListener('click', () => {
             inputExcel.click();
         });
 
-        // 2. Cuando el usuario elige un archivo, llamamos a la lógica de reservas.js
         inputExcel.addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
                 console.log("Archivo detectado, iniciando importación...");
                 try {
-                    // Importamos la función dinámicamente
                     const { manejarImportacionExcel } = await import('./reservas.js');
                     manejarImportacionExcel(e);
                 } catch (err) {
@@ -299,7 +294,6 @@ function initApp() {
         });
     }
 
-    // --- EVENT LISTENERS DE ELEMENTOS GLOBALES ---
     document.getElementById('btn-nueva-reserva')?.addEventListener('click', () => {
         document.getElementById('reserva-form').reset();
         poblarSelectDeMoviles(caches);
@@ -309,7 +303,6 @@ function initApp() {
         initMapaModal(null, null);
     });
     
-    // CORRECCIÓN 3: Listener para activar selección múltiple en tabla (Integrado)
     document.getElementById('btn-toggle-select-table')?.addEventListener('click', function() {
         window.isTableMultiSelectMode = !window.isTableMultiSelectMode;
         const btn = this;
@@ -339,11 +332,9 @@ function initApp() {
         buscarEnReservas(e.target.value, caches);
     });
 
-    // LISTENER PARA MAPA (SELECCIÓN MÚLTIPLE) - Lógica existente
     document.getElementById('btn-multi-select')?.addEventListener('click', toggleMultiSelectMode);
     
     document.getElementById('btn-cancel-multi')?.addEventListener('click', () => {
-        // Comprobamos qué modo está activo para cancelar el correcto
         if (window.isTableMultiSelectMode) {
             document.getElementById('btn-toggle-select-table').click();
         } else {
@@ -351,7 +342,6 @@ function initApp() {
         }
     });
 
-    // LÓGICA DE ASIGNACIÓN (MAPA Y TABLA)
     document.getElementById('btn-assign-multi')?.addEventListener('click', async () => {
         const movilId = document.getElementById('multi-select-movil').value;
         
@@ -363,12 +353,10 @@ function initApp() {
         let reservaIds = [];
         let origenDeLaAccion = '';
 
-        // Determinamos de dónde vienen los IDs según el modo activo
         if (window.isTableMultiSelectMode) {
             reservaIds = Array.from(selectedTableIds);
             origenDeLaAccion = 'tabla';
         } else {
-            // Asumimos modo mapa
             reservaIds = window.app.getSelectedReservasIds(); 
             origenDeLaAccion = 'mapa';
         }
@@ -378,22 +366,18 @@ function initApp() {
             return;
         }
 
-        // Ejecutamos la asignación (importada de reservas.js)
         const exito = await asignarMultiplesReservas(reservaIds, movilId, caches);
         
         if (exito) {
-            // Cerramos el modo correspondiente
             if (origenDeLaAccion === 'tabla') {
-                document.getElementById('btn-toggle-select-table').click(); // Click para apagar modo tabla
+                document.getElementById('btn-toggle-select-table').click(); 
             } else {
-                toggleMultiSelectMode(); // Función importada para apagar modo mapa
+                toggleMultiSelectMode(); 
             }
-            // Limpiamos el selector para la próxima
             document.getElementById('multi-select-movil').value = "";
         }
     });
 
-    // --- OBJETO GLOBAL PARA FUNCIONES ACCESIBLES DESDE HTML ---
     window.app = {
         editItem, deleteItem, openResetPasswordModal,
         openEditReservaModal: (reservaId) => openEditReservaModal(reservaId, caches, initMapaModal),
@@ -407,8 +391,9 @@ function initApp() {
         filtrarReservasAsignadasPorChofer,
         filtrarPorHoras,
         getSelectedReservasIds,
-        // CORRECCIÓN 4: Agregamos la función de selección de tabla aquí
-        toggleTableSelection
+        confirmarReservaImportada,
+        toggleTableSelection, // Se usa la función local
+        handleConfirmarDesdeModal
     };
     
     window.openTab = (event, tabName) => openTab(event, tabName, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
@@ -420,6 +405,11 @@ function initApp() {
         if (datosParaRegreso) {
             openNuevaReservaConDatos(datosParaRegreso, initMapaModal);
         }
+    });
+    
+    // --- LISTENER PARA EL NUEVO BOTÓN DE CONFIRMAR ---
+    document.getElementById('btn-confirmar-modal')?.addEventListener('click', (e) => {
+        handleConfirmarDesdeModal(e, caches);
     });
     
     document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
