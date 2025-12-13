@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "target": "app-cliente",
     "public": "public",
     "ignore": [
       "firebase.json",

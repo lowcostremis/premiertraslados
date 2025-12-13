@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "premiertraslados-31ee2"
-  }
+  },
+  "targets": {
+    "premiertraslados-31ee2": {
+      "hosting": {
+        "app-cliente": [
+          "premiertraslados-31ee2"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
