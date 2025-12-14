@@ -583,7 +583,7 @@ exports.notificarCancelacionDeReserva = functions.firestore
 
 
 
-exports.interpretarExcelIA = onCall(async (request) => {
+exports.interpretarExcelIA = onCall({ cors: true, timeoutSeconds: 300 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'Debes estar logueado.');
     }
@@ -670,7 +670,7 @@ exports.interpretarExcelIA = onCall(async (request) => {
 // INTEGRACIÓN GMAIL + IA
 // ===================================================================================
 
-exports.procesarReservasGmail = onCall(async (request) => {
+exports.procesarReservasGmail = onCall({ cors: true, timeoutSeconds: 300 }, async (request) => {
     // 1. Verificar autenticación
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'Debes estar logueado como operador.');
@@ -695,12 +695,13 @@ exports.procesarReservasGmail = onCall(async (request) => {
     // 3. Inicializar Servicios
     const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
-    if (!process.env.GOOGLE_GEMINI_KEY) {
-         throw new HttpsError('internal', "Falta la API Key de Gemini en el archivo .env");
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+         throw new HttpsError('internal', "Falta la API Key de Gemini (GEMINI_API_KEY) en el archivo .env");
     }
     
-  
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
+    const genAI = new GoogleGenerativeAI(apiKey);
     
     // MODELO: Asegúrate de usar 'gemini-2.0-flash' o 'gemini-1.5-flash'
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
@@ -800,7 +801,7 @@ exports.procesarReservasGmail = onCall(async (request) => {
     }
 });
 
-exports.interpretarPDFIA = onCall(async (request) => {
+exports.interpretarPDFIA = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Logueate primero.');
 
     const { pdfBase64, fechaSeleccionada } = request.data;
@@ -981,4 +982,4 @@ exports.chequearCorreosCron = onSchedule("every 15 minutes", async (event) => {
     }
 });
 
-
+// Actualizacion forzada v3 - CORS Fix
