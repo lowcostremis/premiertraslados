@@ -594,12 +594,13 @@ exports.interpretarExcelIA = onCall(async (request) => {
     }
 
     try {
-        // --- CORRECCIÓN: USAR LA CLAVE DEL .ENV ---
-        // --- CORRECCIÓN FINAL: Usamos la configuración segura de Firebase ---
-    const aiKey = functions.config().google.gemini_key;
-    if (!aiKey) throw new Error("Falta la configuración de google.gemini_key");
+        
+    // --- CORRECCIÓN: USAR LA CLAVE DEL .ENV (IGUAL QUE EN GMAIL) ---
+    if (!process.env.GOOGLE_GEMINI_KEY) {
+        throw new HttpsError('internal', "Falta la API Key de Gemini en el archivo .env");
+    }
 
-    const genAI = new GoogleGenerativeAI(aiKey);
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
 
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
@@ -668,39 +669,39 @@ exports.interpretarExcelIA = onCall(async (request) => {
 // ===================================================================================
 
 exports.procesarReservasGmail = onCall(async (request) => {
-    // Verificar autenticación
+    // 1. Verificar autenticación
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'Debes estar logueado como operador.');
     }
     
-    // --- CAMBIO: LEER CONFIGURACIÓN SEGURA DE FIREBASE ---
-    const config = functions.config();
-
-    //console.log("DIAGNÓSTICO DE CONFIGURACIÓN:", JSON.stringify(config, null, 2));
-    
-    // Validación rápida para evitar errores si falta algo
-    if (!config.gmail || !config.gmail.client_id || !config.gmail.client_secret || !config.gmail.refresh_token) {
-        throw new HttpsError('internal', 'Faltan credenciales de Gmail en la configuración del servidor.');
+    // --- VALIDACIÓN (Solo process.env) ---
+    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
+        throw new HttpsError('internal', 'Faltan credenciales de Gmail en el archivo .env');
     }
 
+    // 2. Inicializar Cliente OAuth
     const oAuth2Client = new google.auth.OAuth2(
-        config.gmail.client_id,
-        config.gmail.client_secret,
-        config.gmail.redirect_uri
+        process.env.GMAIL_CLIENT_ID,
+        process.env.GMAIL_CLIENT_SECRET,
+        process.env.GMAIL_REDIRECT_URI
     );
     
-    oAuth2Client.setCredentials({ refresh_token: config.gmail.refresh_token });
+    oAuth2Client.setCredentials({
+        refresh_token: process.env.GMAIL_REFRESH_TOKEN
+    });
 
+    // 3. Inicializar Servicios
     const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
-    // --- CONFIGURACIÓN DE GEMINI (Ya segura desde el paso anterior) ---
-    const aiKey = config.google.gemini_key;
-    if (!aiKey) throw new HttpsError('internal', "Falta la API Key de Gemini.");
-
-    const genAI = new GoogleGenerativeAI(aiKey);
+    if (!process.env.GOOGLE_GEMINI_KEY) {
+         throw new HttpsError('internal', "Falta la API Key de Gemini en el archivo .env");
+    }
     
-    // Definimos el modelo aquí arriba una sola vez
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); 
+  
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
+    
+    // MODELO: Asegúrate de usar 'gemini-2.0-flash' o 'gemini-1.5-flash'
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     try {
         // 2. Buscar correos NO LEÍDOS
@@ -714,7 +715,7 @@ exports.procesarReservasGmail = onCall(async (request) => {
             return { message: "No hay correos nuevos de reservas que coincidan con la búsqueda." };
         }
 
-        // --- AQUÍ BORRAMOS EL BLOQUE REPETIDO QUE CAUSABA ERROR --- 
+        
 
         let procesados = 0;
         let batch = db.batch();
