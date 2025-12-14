@@ -386,6 +386,32 @@ function initApp() {
         }
     });
 
+    // --- NUEVO CÓDIGO PARA PDF ---
+    const btnImportarPDF = document.getElementById('btn-importar-pdf');
+    const inputPDF = document.getElementById('input-pdf');
+
+    if (btnImportarPDF && inputPDF) {
+        // 1. Al hacer clic en el botón naranja, abrimos el selector de archivos oculto
+        btnImportarPDF.addEventListener('click', () => {
+            inputPDF.click();
+        });
+
+        // 2. Cuando el usuario selecciona un archivo...
+        inputPDF.addEventListener('change', async (e) => {
+            if (e.target.files.length > 0) {
+                console.log("PDF detectado, iniciando procesamiento...");
+                try {
+                    // Importamos la función dinámicamente desde reservas.js
+                    const { manejarImportacionPDF } = await import('./reservas.js');
+                    manejarImportacionPDF(e);
+                } catch (err) {
+                    console.error("Error al importar módulo PDF:", err);
+                    alert("Error al cargar la función de PDF.");
+                }
+            }
+        });
+    }
+
 
     document.getElementById('btn-nueva-reserva')?.addEventListener('click', () => {
         document.getElementById('reserva-form').reset();
@@ -534,29 +560,4 @@ function initApp() {
     openTab(null, 'Reservas');
 }
 
-// --- NUEVO CÓDIGO PARA PDF ---
-    const btnImportarPDF = document.getElementById('btn-importar-pdf');
-    const inputPDF = document.getElementById('input-pdf');
 
-    if (btnImportarPDF && inputPDF) {
-        // 1. Al hacer clic en el botón naranja, abrimos el selector de archivos oculto
-        btnImportarPDF.addEventListener('click', () => {
-            inputPDF.click();
-        });
-
-        // 2. Cuando el usuario selecciona un archivo...
-        inputPDF.addEventListener('change', async (e) => {
-            if (e.target.files.length > 0) {
-                console.log("PDF detectado, iniciando procesamiento...");
-                try {
-                    // Importamos la función dinámicamente desde reservas.js
-                    const { manejarImportacionPDF } = await import('./reservas.js');
-                    manejarImportacionPDF(e);
-                } catch (err) {
-                    console.error("Error al importar módulo PDF:", err);
-                    alert("Error al cargar la función de PDF.");
-                }
-            }
-        });
-    }
-    

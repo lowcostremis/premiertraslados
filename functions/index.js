@@ -815,7 +815,7 @@ exports.interpretarPDFIA = onCall(async (request) => {
         
         const genAI = new GoogleGenerativeAI(apiKey);
         // Usamos Flash porque es rápido y multimodal (lee documentos)
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); // ✅ MODELO NUEVO
 
         const prompt = `
             Actúa como experto en logística. Analiza este documento PDF adjunto.
