@@ -595,16 +595,17 @@ exports.interpretarExcelIA = onCall(async (request) => {
 
     try {
         
-    // --- CORRECCIÓN: USAR LA CLAVE DEL .ENV (IGUAL QUE EN GMAIL) ---
-    if (!process.env.GOOGLE_GEMINI_KEY) {
-        throw new HttpsError('internal', "Falta la API Key de Gemini en el archivo .env");
+    // --- CORRECCIÓN: USAR LA CLAVE DEL .ENV UNIFICADA ---
+    const apiKey = process.env.GEMINI_API_KEY; 
+
+    if (!apiKey) {
+        throw new HttpsError('internal', "Falta API Key Gemini (GEMINI_API_KEY) en .env");
     }
+         const genAI = new GoogleGenerativeAI(apiKey);
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
+         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-        const prompt = `
+         const prompt = `
             Actúa como un operador de logística experto en Rosario, Argentina.
             Analiza esta lista de viajes y conviértela en JSON limpio para Firebase.
             
@@ -805,11 +806,14 @@ exports.interpretarPDFIA = onCall(async (request) => {
     if (!pdfBase64) throw new HttpsError('invalid-argument', 'Falta el archivo PDF.');
 
     try {
-        if (!process.env.GOOGLE_GEMINI_KEY) {
-            throw new HttpsError('internal', "Falta API Key Gemini");
+        // ✅ CORRECCIÓN: Usamos la misma clave unificada que en Excel y Gmail
+        const apiKey = process.env.GEMINI_API_KEY; 
+
+        if (!apiKey) {
+            throw new HttpsError('internal', "Falta API Key Gemini (GEMINI_API_KEY) en .env");
         }
         
-        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
+        const genAI = new GoogleGenerativeAI(apiKey);
         // Usamos Flash porque es rápido y multimodal (lee documentos)
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
