@@ -78,26 +78,39 @@
 
                 <div id="reservas-importadas" class="reservas-container" style="display: none; border: 2px solid #d63384; border-radius: 8px;">
                     <h2 style="color: #d63384;">Reservas Importadas (Requieren Confirmación)</h2>
-                    <p style="padding: 0 15px; color: #666;">Estos viajes <strong>no son visibles</strong> para los choferes hasta que los confirmes.</p>
-                    <div class="table-wrapper">
-                        <table id="tabla-importadas">
-                            <thead>
-                                <tr>
-                                    <th>Autorización</th>
-                                    <th>Siniestro</th>
-                                    <th>Fecha</th>
-                                    <th>Hora Turno</th>
-                                    <th>Pasajero</th>
-                                    <th>Origen</th>
-                                    <th>Destino</th>
-                                    <th>Cliente</th>
-                                    <th>Estado</th> 
-                                    <th>Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
+    
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #fdf2f8; margin-bottom: 10px;">
+                        <div id="panel-acciones-lote" style="display: none;">
+                            <span style="font-weight: bold; margin-right: 10px;">Seleccionadas: <span id="contador-check-revision">0</span></span>
+                           <button id="btn-confirmar-lote" class="btn-success-small">✅ Confirmar Seleccionadas</button>
+                           <button id="btn-borrar-lote" class="btn-danger-small">🗑️ Borrar Seleccionadas</button>
+                         </div>
+        
+                         <button id="btn-limpiar-revision" class="btn-danger">🔥 Borrar TODAS las de Revisión</button>
+                     </div>
+           
+                     <div class="table-wrapper">
+                          <table id="tabla-importadas">
+                             <thead>
+                                 <tr>
+                                 <th style="width: 40px; text-align: center;">
+                                       <input type="checkbox" id="check-all-revision">
+                                 </th>
+                                 <th>Autorización</th>
+                                 <th>Siniestro</th>
+                                 <th>Fecha</th>
+                                 <th>Hora Turno</th>
+                                 <th>Pasajero</th>
+                                 <th>Origen</th>
+                                 <th>Destino</th>
+                                 <th>Cliente</th>
+                                  <th>Estado</th> 
+                                 <th>Acciones</th>
+                             </tr>
+                          </thead>
+                          <tbody></tbody>
+                      </table>
+                  </div>
                 </div>
 
                 <div id="reservas-en-curso" class="reservas-container">

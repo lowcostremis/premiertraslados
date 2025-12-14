@@ -629,7 +629,13 @@ function renderFilaReserva(tbody, reserva, caches) {
             </div>
         </td>`;
 
+        let checkboxHTML = '';
+        if (isRevision) {
+             checkboxHTML = `<td style="text-align: center;"><input type="checkbox" class="check-reserva-revision" value="${reserva.id}"></td>`;
+       }
+
     row.innerHTML = `
+        ${checkboxHTML}
         <td>${reserva.autorizacion || ''}</td>
         <td>${reserva.siniestro || ''}</td>
         <td>${fechaFormateada}</td>
@@ -892,4 +898,80 @@ async function guardarReservasEnLote(reservas) {
     alert(`¡Éxito! Se cargaron ${totalGuardados} reservas en la pestaña "Importadas".`);
     const btnImportadas = document.querySelector('button[data-tab="importadas"]');
     if(btnImportadas) btnImportadas.click();
+}
+// ===================================================================================
+// FUNCIONES DE GESTIÓN MASIVA (REVISIÓN) - PEGAR AL FINAL DE RESERVAS.JS
+// ===================================================================================
+
+export async function limpiarReservasDeRevision() {
+    const batchSize = 500;
+    console.warn("INICIANDO LIMPIEZA MASIVA...");
+    
+    // Consulta: Solo estado 'Revision'
+    const query = db.collection('reservas')
+                    .where('estado.principal', '==', 'Revision')
+                    .limit(batchSize);
+
+    try {
+        let totalEliminado = 0;
+        let eliminadosEnBatch = 0;
+        
+        do {
+            const snapshot = await query.get();
+            eliminadosEnBatch = snapshot.size;
+
+            if (eliminadosEnBatch === 0) break;
+
+            const batch = db.batch();
+            snapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+
+            await batch.commit();
+            totalEliminado += eliminadosEnBatch;
+            console.log(`🧹 Lote de ${eliminadosEnBatch} eliminado.`);
+
+        } while (eliminadosEnBatch === batchSize); 
+
+        console.log(`✅ Limpieza completada. Total: ${totalEliminado}`);
+
+    } catch (error) {
+        console.error("Error limpieza:", error);
+        throw error; 
+    }
+}
+
+export async function procesarLoteRevision(accion, ids) {
+    if (!ids || ids.length === 0) return;
+    
+    const batch = db.batch();
+    
+    ids.forEach(id => {
+        const ref = db.collection('reservas').doc(id);
+        if (accion === 'borrar') {
+            batch.delete(ref);
+        } else if (accion === 'confirmar') {
+            batch.update(ref, {
+                estado: { 
+                    principal: 'Pendiente', 
+                    detalle: 'Confirmado masivamente', 
+                    actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
+                }
+            });
+        }
+    });
+
+    try {
+        await batch.commit();
+        // Limpiamos la selección visualmente
+        document.querySelectorAll('.check-reserva-revision:checked').forEach(c => c.checked = false);
+        document.getElementById('panel-acciones-lote').style.display = 'none';
+        
+        if (accion === 'borrar') alert(`🗑️ Se han eliminado ${ids.length} reservas.`);
+        if (accion === 'confirmar') alert(`✅ Se han confirmado ${ids.length} reservas.`);
+        
+    } catch (error) {
+        console.error("Error lote:", error);
+        throw new Error("Error al procesar lote: " + error.message);
+    }
 }

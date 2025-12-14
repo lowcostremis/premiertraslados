@@ -73,7 +73,68 @@ document.getElementById('login-btn').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
+// 1. Botón "Borrar TODAS"
+    document.getElementById('btn-limpiar-revision')?.addEventListener('click', async () => {
+        if (confirm("⚠️ ¡PELIGRO!\n\nEstás a punto de borrar TODAS las reservas de la lista de revisión.\nEsta acción no se puede deshacer.\n\n¿Estás seguro?")) {
+            const btn = document.getElementById('btn-limpiar-revision');
+            btn.disabled = true;
+            btn.textContent = "⏳ Borrando...";
+            
+            // Importamos dinámicamente o usamos si ya está importada en window.app (ver abajo)
+            const { limpiarReservasDeRevision } = await import('./reservas.js');
+            await limpiarReservasDeRevision();
+            
+            btn.disabled = false;
+            btn.textContent = "🔥 Borrar TODAS las de Revisión";
+        }
+    });
 
+// 2. Checkbox "Seleccionar Todo"
+    document.getElementById('check-all-revision')?.addEventListener('change', (e) => {
+        const checked = e.target.checked;
+        document.querySelectorAll('.check-reserva-revision').forEach(chk => {
+            chk.checked = checked;
+        });
+        actualizarPanelLote();
+    });
+
+    // 3. Listener delegado para los checkboxes individuales (porque se crean dinámicamente)
+    document.getElementById('tabla-importadas')?.addEventListener('change', (e) => {
+        if (e.target.classList.contains('check-reserva-revision')) {
+            actualizarPanelLote();
+        }
+    });
+
+    function actualizarPanelLote() {
+        const checks = document.querySelectorAll('.check-reserva-revision:checked');
+        const count = checks.length;
+        const panel = document.getElementById('panel-acciones-lote');
+        document.getElementById('contador-check-revision').textContent = count;
+
+        if (count > 0) {
+            panel.style.display = 'flex';
+        } else {
+            panel.style.display = 'none';
+        }
+    }
+
+    // 4. Botones de Acción Lote
+    document.getElementById('btn-borrar-lote')?.addEventListener('click', async () => {
+        const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
+        if (confirm(`¿Borrar estas ${ids.length} reservas?`)) {
+            const { procesarLoteRevision } = await import('./reservas.js');
+            await procesarLoteRevision('borrar', ids);
+        }
+    });
+
+    document.getElementById('btn-confirmar-lote')?.addEventListener('click', async () => {
+        const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
+        if (confirm(`¿Confirmar estas ${ids.length} reservas para que pasen a Pendientes?`)) {
+            const { procesarLoteRevision } = await import('./reservas.js');
+            await procesarLoteRevision('confirmar', ids);
+        }
+    });
+    
 // 4. FUNCIONES PRINCIPALES Y DE UTILIDAD
 
 function loadAuxData() {
