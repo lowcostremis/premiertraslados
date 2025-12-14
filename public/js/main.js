@@ -293,6 +293,37 @@ function initApp() {
             }
         });
     }
+    // --- NUEVO LISTENER PARA IMPORTAR GMAIL ---
+    document.getElementById('btn-importar-gmail')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-importar-gmail');
+        const confirmacion = confirm("¿Deseas buscar nuevos viajes en la bandeja de entrada de Gmail (no leídos)?");
+        if (!confirmacion) return;
+
+        try {
+            btn.disabled = true;
+            btn.textContent = '⏳ Buscando en Gmail...';
+            
+            // Importamos 'functions' de firebase-config.js y llamamos a la nueva función de Cloud Functions
+            
+            const procesarReservasGmail = firebase.functions().httpsCallable('procesarReservasGmail');
+            
+            const result = await procesarReservasGmail();
+
+            alert(result.data.message || "Búsqueda finalizada. Revisa la pestaña 'Importadas'.");
+            
+            // Cambia a la pestaña de "Importadas (Revisión)"
+            const btnImportadas = document.querySelector('button[data-tab="importadas"]');
+            if(btnImportadas) btnImportadas.click(); 
+            
+        } catch (error) {
+            console.error("Error al importar desde Gmail:", error);
+            alert("Error al buscar en Gmail. Revisa la consola.");
+        } finally {
+            btn.textContent = '✉️ Importar Gmail';
+            btn.disabled = false;
+        }
+    });
+
 
     document.getElementById('btn-nueva-reserva')?.addEventListener('click', () => {
         document.getElementById('reserva-form').reset();

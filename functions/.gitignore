@@ -15,6 +15,12 @@ yarn-debug.log*
 yarn-error.log*
 firebase-debug.log
 
-# Carpetas de configuración de Editores de Código (Opcional pero recomendado)
+# Carpetas de configuración de Editores de Código
 .vscode/
 .idea/
+
+# Archivos de configuración secretos (¡ESTO ES LO QUE PROTEGE TUS CLAVES!)
+.env
+.runtimeconfig.json
+firebase-debug.log
+generar_config.js

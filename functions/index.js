@@ -7,7 +7,8 @@ const admin = require("firebase-admin");
 const { Client } = require("@googlemaps/google-maps-services-js");
 const algoliasearch = require("algoliasearch");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
-
+const { google } = require("googleapis"); 
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // ===================================================================================
 // INICIALIZACIÓN DE SERVICIOS
@@ -578,10 +579,8 @@ exports.notificarCancelacionDeReserva = functions.firestore
     // ===================================================================================
 // IMPORTACIÓN DE IA (Asegúrate de haber instalado: npm install @google/generative-ai)
 // ===================================================================================
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// YA NO INICIALIZAMOS AQUÍ AFUERA PARA EVITAR EL CRASH DE ARRANQUE
-// const genAI = ... (BORRAR O COMENTAR ESTO DE AQUÍ)
+
 
 exports.interpretarExcelIA = onCall(async (request) => {
     if (!request.auth) {
@@ -594,11 +593,14 @@ exports.interpretarExcelIA = onCall(async (request) => {
         return { reservas: [] };
     }
 
-    // --- MVOEMOS LA INICIALIZACIÓN AQUÍ ADENTRO ---
     try {
-        // Intenta leer de la config de Firebase, si falla, usa la clave 'hardcodeada' como respaldo
-        const aiKey = functions.config().google ? functions.config().google.ai_key : "AIzaSyCLJ5RgY5PTODnFa94gzBnjLn-a7sT7dsY";
-        const genAI = new GoogleGenerativeAI(aiKey);
+        // --- CORRECCIÓN: USAR LA CLAVE DEL .ENV ---
+        // --- CORRECCIÓN FINAL: Usamos la configuración segura de Firebase ---
+    const aiKey = functions.config().google.gemini_key;
+    if (!aiKey) throw new Error("Falta la configuración de google.gemini_key");
+
+    const genAI = new GoogleGenerativeAI(aiKey);
+
         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
         const prompt = `
@@ -658,6 +660,141 @@ exports.interpretarExcelIA = onCall(async (request) => {
     } catch (error) {
         console.error("Error IA:", error);
         throw new HttpsError('internal', 'Error al procesar con IA: ' + error.message);
+    }
+});
+
+// ===================================================================================
+// INTEGRACIÓN GMAIL + IA
+// ===================================================================================
+
+exports.procesarReservasGmail = onCall(async (request) => {
+    // Verificar autenticación
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'Debes estar logueado como operador.');
+    }
+    
+    // --- CAMBIO: LEER CONFIGURACIÓN SEGURA DE FIREBASE ---
+    const config = functions.config();
+
+    //console.log("DIAGNÓSTICO DE CONFIGURACIÓN:", JSON.stringify(config, null, 2));
+    
+    // Validación rápida para evitar errores si falta algo
+    if (!config.gmail || !config.gmail.client_id || !config.gmail.client_secret || !config.gmail.refresh_token) {
+        throw new HttpsError('internal', 'Faltan credenciales de Gmail en la configuración del servidor.');
+    }
+
+    const oAuth2Client = new google.auth.OAuth2(
+        config.gmail.client_id,
+        config.gmail.client_secret,
+        config.gmail.redirect_uri
+    );
+    
+    oAuth2Client.setCredentials({ refresh_token: config.gmail.refresh_token });
+
+    const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+
+    // --- CONFIGURACIÓN DE GEMINI (Ya segura desde el paso anterior) ---
+    const aiKey = config.google.gemini_key;
+    if (!aiKey) throw new HttpsError('internal', "Falta la API Key de Gemini.");
+
+    const genAI = new GoogleGenerativeAI(aiKey);
+    
+    // Definimos el modelo aquí arriba una sola vez
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); 
+
+    try {
+        // 2. Buscar correos NO LEÍDOS
+        const res = await gmail.users.messages.list({
+            userId: 'me', 
+            q: 'is:unread subject:(Reserva OR Viaje OR Pedido OR RDT OR Autorizaciones)' 
+        });
+
+        const messages = res.data.messages;
+        if (!messages || messages.length === 0) {
+            return { message: "No hay correos nuevos de reservas que coincidan con la búsqueda." };
+        }
+
+        // --- AQUÍ BORRAMOS EL BLOQUE REPETIDO QUE CAUSABA ERROR --- 
+
+        let procesados = 0;
+        let batch = db.batch();
+        let contadorBatch = 0;
+        const batchLimit = 400;
+
+        // 3. Iterar sobre los correos encontrados
+        for (const message of messages) {
+            const msgData = await gmail.users.messages.get({
+                userId: 'me',
+                id: message.id
+            });
+
+            const snippet = msgData.data.snippet || ''; 
+            
+            if (!snippet.trim()) continue;
+
+            // 4. Procesar con Gemini
+            const prompt = `
+                Actúa como operador de logística. Extrae los datos de esta reserva para un traslado en Rosario, Argentina:
+                Texto del correo: "${snippet}"
+                Fecha Referencia: ${new Date().toISOString().split('T')[0]}
+                
+                Reglas:
+                - Devuelve un JSON con: fecha_turno, hora_turno, nombre_pasajero, telefono_pasajero, origen, destino, cliente, observaciones, siniestro, autorizacion.
+                - Si falta un dato, pon la cadena vacía ("") o intenta deducirlo.
+                - Cliente: Si menciona una empresa, ponla. Si no, "PARTICULARES".
+                - Formato JSON puro sin markdown (ej: sin \`\`\`json).
+            `;
+
+            const result = await model.generateContent(prompt);
+            const responseText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+            
+            let reservaData;
+            try {
+                reservaData = JSON.parse(responseText);
+                if (Array.isArray(reservaData)) reservaData = reservaData[0];
+            } catch (e) {
+                console.error("Error parseando JSON de IA para mail " + message.id, e);
+                continue; 
+            }
+
+            // 5. Preparar guardado
+            const docRef = db.collection('reservas').doc();
+            batch.set(docRef, {
+                ...reservaData,
+                origen_dato: 'Gmail',
+                email_id: message.id,
+                estado: { 
+                    principal: 'Revision', 
+                    detalle: 'Importado desde Gmail para revisión', 
+                    actualizado_en: new Date() // <--- ✅ SOLUCIÓN: Fecha simple
+                },
+                creadoEn: new Date() // <--- ✅ SOLUCIÓN: Fecha simple
+            });
+
+            // 6. Marcar correo como LEÍDO
+            await gmail.users.messages.modify({
+                userId: 'me',
+                id: message.id,
+                requestBody: { removeLabelIds: ['UNREAD'] }
+            });
+
+            procesados++;
+            contadorBatch++;
+            
+            if (contadorBatch >= batchLimit) {
+                await batch.commit();
+                batch = db.batch();
+                contadorBatch = 0;
+            }
+        }
+
+        if (contadorBatch > 0) await batch.commit();
+
+        return { message: `Procesados ${procesados} correos correctamente. Se guardaron en la pestaña de revisión.` };
+
+    } catch (error) {
+        console.error("Error procesando Gmail:", error);
+        throw new HttpsError('internal', 'Error al leer y procesar Gmail: ' + error.message);
     }
 });
 
