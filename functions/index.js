@@ -3,6 +3,7 @@
 // ===================================================================================
 const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const { Client } = require("@googlemaps/google-maps-services-js");
 const algoliasearch = require("algoliasearch");
@@ -857,6 +858,126 @@ exports.interpretarPDFIA = onCall(async (request) => {
     } catch (error) {
         console.error("Error interpretando PDF:", error);
         throw new HttpsError('internal', 'Error IA PDF: ' + error.message);
+    }
+});
+
+// ===================================================================================
+// CRON JOB: CHEQUEO AUTOMÁTICO DE GMAIL (CADA 15 MINUTOS)
+// ===================================================================================
+
+exports.chequearCorreosCron = onSchedule("every 15 minutes", async (event) => {
+    console.log("⏰ Iniciando chequeo automático de Gmail...");
+
+    // 1. Configuración de Credenciales (Igual que la función manual)
+    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
+        console.error("❌ Faltan credenciales de Gmail en .env");
+        return;
+    }
+
+    const oAuth2Client = new google.auth.OAuth2(
+        process.env.GMAIL_CLIENT_ID,
+        process.env.GMAIL_CLIENT_SECRET,
+        process.env.GMAIL_REDIRECT_URI
+    );
+    
+    oAuth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
+    const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+
+    // 2. Configuración de IA
+    const apiKey = process.env.GEMINI_API_KEY; 
+    if (!apiKey) {
+        console.error("❌ Falta API Key Gemini");
+        return;
+    }
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    try {
+        // 3. Buscar correos NO LEÍDOS
+        // Usamos 'me' porque el cliente OAuth ya está autenticado con tu cuenta
+        const res = await gmail.users.messages.list({
+            userId: 'me', 
+            q: 'is:unread subject:(Reserva OR Viaje OR Pedido OR RDT OR Autorizaciones)' 
+        });
+
+        const messages = res.data.messages;
+        if (!messages || messages.length === 0) {
+            console.log("✅ Chequeo finalizado: No hay correos nuevos.");
+            return;
+        }
+
+        console.log(`📬 Se encontraron ${messages.length} correos nuevos. Procesando...`);
+
+        let procesados = 0;
+        let batch = admin.firestore().batch(); // Usamos admin.firestore() directo aquí
+        let contadorBatch = 0;
+        const batchLimit = 400;
+
+        for (const message of messages) {
+            // Leer contenido del correo
+            const msgData = await gmail.users.messages.get({ userId: 'me', id: message.id });
+            const snippet = msgData.data.snippet || ''; 
+            
+            if (!snippet.trim()) continue;
+
+            // Procesar con Gemini
+            const prompt = `
+                Actúa como operador de logística. Extrae los datos de esta reserva:
+                Texto: "${snippet}"
+                Fecha Ref: ${new Date().toISOString().split('T')[0]}
+                Devuelve JSON puro con: fecha_turno, hora_turno, nombre_pasajero, telefono_pasajero, origen, destino, cliente, observaciones, siniestro, autorizacion.
+                Si falta dato usa "". Cliente default "PARTICULARES".
+            `;
+
+            const result = await model.generateContent(prompt);
+            const responseText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+            
+            let reservaData;
+            try {
+                reservaData = JSON.parse(responseText);
+                if (Array.isArray(reservaData)) reservaData = reservaData[0];
+            } catch (e) {
+                console.error(`Error JSON mail ${message.id}`, e);
+                continue; 
+            }
+
+            // Guardar en Firestore
+            const docRef = db.collection('reservas').doc();
+            batch.set(docRef, {
+                ...reservaData,
+                origen_dato: 'Gmail Automático', // Marcamos que vino del Cron
+                email_id: message.id,
+                estado: { 
+                    principal: 'Revision', 
+                    detalle: 'Importado automáticamente (Cron)', 
+                    actualizado_en: new Date()
+                },
+                creadoEn: new Date()
+            });
+
+            // Marcar como LEÍDO para que no se procese de nuevo en 15 min
+            await gmail.users.messages.modify({
+                userId: 'me',
+                id: message.id,
+                requestBody: { removeLabelIds: ['UNREAD'] }
+            });
+
+            procesados++;
+            contadorBatch++;
+            
+            if (contadorBatch >= batchLimit) {
+                await batch.commit();
+                batch = admin.firestore().batch();
+                contadorBatch = 0;
+            }
+        }
+
+        if (contadorBatch > 0) await batch.commit();
+
+        console.log(`🚀 Éxito: Se procesaron ${procesados} reservas automáticamente.`);
+
+    } catch (error) {
+        console.error("🔥 Error crítico en Cron Gmail:", error);
     }
 });
 
