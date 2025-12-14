@@ -716,7 +716,6 @@ exports.procesarReservasGmail = onCall(async (request) => {
         }
 
         
-
         let procesados = 0;
         let batch = db.batch();
         let contadorBatch = 0;
@@ -796,6 +795,64 @@ exports.procesarReservasGmail = onCall(async (request) => {
     } catch (error) {
         console.error("Error procesando Gmail:", error);
         throw new HttpsError('internal', 'Error al leer y procesar Gmail: ' + error.message);
+    }
+});
+
+exports.interpretarPDFIA = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Logueate primero.');
+
+    const { pdfBase64, fechaSeleccionada } = request.data;
+    if (!pdfBase64) throw new HttpsError('invalid-argument', 'Falta el archivo PDF.');
+
+    try {
+        if (!process.env.GOOGLE_GEMINI_KEY) {
+            throw new HttpsError('internal', "Falta API Key Gemini");
+        }
+        
+        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_KEY);
+        // Usamos Flash porque es rápido y multimodal (lee documentos)
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        const prompt = `
+            Actúa como experto en logística. Analiza este documento PDF adjunto.
+            Contiene una lista de solicitudes de traslados/viajes.
+            
+            Fecha Ref: ${fechaSeleccionada}.
+            
+            Extrae CADA viaje y devuélvelo en JSON.
+            Campos requeridos: fecha_turno (YYYY-MM-DD), hora_turno (HH:MM), nombre_pasajero, telefono_pasajero, origen, destino, cliente, siniestro, autorizacion, observaciones, es_exclusivo (boolean).
+
+            Reglas:
+            1. Si la fecha en el doc es "12/05" usa el año de la Fecha Ref.
+            2. Origen/Destino: Si dice solo calle, agrega ", Rosario". Si dice "VGG", es "Villa Gobernador Gálvez".
+            3. Si detectas palabras como "Ida y vuelta", genera dos objetos JSON separados si es posible, o ponlo en observaciones.
+            4. Cliente: Deduce el nombre de la empresa por el encabezado o logo si es texto.
+            
+            Salida: Un array JSON puro bajo la clave "reservas". Ejemplo: {"reservas": [...]}.
+            Sin markdown.
+        `;
+
+        // Aquí está el truco: Enviamos Texto + Datos del PDF
+        const result = await model.generateContent([
+            prompt,
+            {
+                inlineData: {
+                    data: pdfBase64,
+                    mimeType: "application/pdf",
+                },
+            },
+        ]);
+
+        const responseText = result.response.text();
+        // Limpieza de JSON habitual
+        const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const jsonResponse = JSON.parse(jsonString);
+
+        return { reservas: jsonResponse.reservas || jsonResponse };
+
+    } catch (error) {
+        console.error("Error interpretando PDF:", error);
+        throw new HttpsError('internal', 'Error IA PDF: ' + error.message);
     }
 });
 

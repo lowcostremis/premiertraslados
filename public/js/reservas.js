@@ -975,3 +975,82 @@ export async function procesarLoteRevision(accion, ids) {
         throw new Error("Error al procesar lote: " + error.message);
     }
 }
+
+// ===================================================================================
+// IMPORTACIÓN DE PDF CON IA
+// ===================================================================================
+
+export async function manejarImportacionPDF(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validar tamaño (Cloud Functions tiene límite de 10MB en el body, PDFs > 5MB pueden fallar)
+    if (file.size > 5 * 1024 * 1024) {
+        alert("El archivo es demasiado grande. Por favor, sube un PDF de menos de 5MB.");
+        event.target.value = '';
+        return;
+    }
+
+    const fechaSeleccionada = prompt("Fecha de referencia para estos viajes (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+    if (!fechaSeleccionada) {
+        event.target.value = '';
+        return;
+    }
+
+    const btn = document.getElementById('btn-importar-pdf');
+    const textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⏳ Subiendo y Analizando...";
+
+    const reader = new FileReader();
+
+    // Leemos el archivo como URL de datos (Base64)
+    reader.readAsDataURL(file);
+
+    reader.onload = async (e) => {
+        try {
+            // El resultado viene como "data:application/pdf;base64,JVBERi0xLjQK..."
+            // Necesitamos quitar la primera parte y dejar solo lo que está después de la coma.
+            const base64Data = e.target.result.split(',')[1];
+
+            const interpretarPDF = firebase.functions().httpsCallable('interpretarPDFIA');
+            
+            // Enviamos el chorro de letras (el PDF codificado) a la nube
+            const result = await interpretarPDF({ 
+                pdfBase64: base64Data, 
+                fechaSeleccionada 
+            });
+
+            const reservas = result.data.reservas;
+
+            if (reservas && reservas.length > 0) {
+                if (confirm(`La IA detectó ${reservas.length} reservas en el PDF.\n\n¿Deseas importarlas a Revisión?`)) {
+                    btn.textContent = "💾 Guardando...";
+                    // Reutilizamos tu función de guardar lotes que ya creamos para el Excel
+                    // Nota: Asegúrate de que guardarReservasEnLote esté accesible o pásala aquí
+                    await guardarReservasEnLote(reservas); 
+                }
+            } else {
+                alert("La IA analizó el PDF pero no encontró datos con formato de reserva.");
+            }
+
+        } catch (error) {
+            console.error("Error PDF:", error);
+            alert("Error al procesar el PDF: " + error.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = textoOriginal;
+            event.target.value = '';
+        }
+    };
+    
+    reader.onerror = (error) => {
+        console.error("Error leyendo archivo:", error);
+        alert("Error al leer el archivo local.");
+        btn.disabled = false;
+        btn.textContent = textoOriginal;
+    };
+}
+
+// Nota: Asegúrate de que la función 'guardarReservasEnLote' (que creamos para Excel)
+// esté disponible en este ámbito o exportada/importada correctamente.
