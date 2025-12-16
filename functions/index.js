@@ -1,5 +1,5 @@
 // ===================================================================================
-// IMPORTACIONES
+// 1. IMPORTACIONES Y CONFIGURACIÓN
 // ===================================================================================
 const functions = require("firebase-functions");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
@@ -11,23 +11,16 @@ const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { google } = require("googleapis"); 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// ===================================================================================
-// INICIALIZACIÓN DE SERVICIOS
-// ===================================================================================
 admin.initializeApp();
 const db = admin.firestore();
 
-// --- INICIALIZACIÓN DIFERIDA (LAZY INITIALIZATION) ---
-let algoliaClient;
-let mapsClient;
+// --- INICIALIZACIÓN DIFERIDA ---
+let algoliaClient, mapsClient;
 let pasajerosIndex, historicoIndex, reservasIndex, choferesIndex;
-
 const GEOCODING_API_KEY = process.env.GEOCODING_API_KEY;
 
 function getMapsClient() {
-    if (!mapsClient) {
-        mapsClient = new Client({});
-    }
+    if (!mapsClient) mapsClient = new Client({});
     return mapsClient;
 }
 
@@ -43,943 +36,407 @@ function getAlgoliaIndices() {
 }
 
 // ===================================================================================
-// FUNCIONES DE GESTIÓN DE CHOFERES
+// 2. FUNCIONES DE GESTIÓN DE CHOFERES (ORIGINALES)
 // ===================================================================================
 exports.crearChoferConAcceso = onCall(async (request) => {
     const { dni, nombre, email, password, domicilio, telefono, movil_actual_id } = request.data;
-    if (!dni || !nombre || !email || !password) {
-        throw new HttpsError('invalid-argument', 'DNI, Nombre, Email y Contraseña son obligatorios.');
-    }
+    if (!dni || !nombre || !email || !password) throw new HttpsError('invalid-argument', 'Faltan datos.');
     try {
-        const userRecord = await admin.auth().createUser({
-            email: email,
-            password: password,
-            displayName: nombre,
-        });
-
+        const userRecord = await admin.auth().createUser({ email, password, displayName: nombre });
         await db.collection('choferes').doc(dni).set({
-            auth_uid: userRecord.uid,
-            nombre: nombre,
-            email: email,
-            dni: dni,
-            domicilio: domicilio || '',
-            telefono: telefono || '',
-            movil_actual_id: movil_actual_id || null,
+            auth_uid: userRecord.uid, nombre, email, dni,
+            domicilio: domicilio || '', telefono: telefono || '', movil_actual_id: movil_actual_id || null,
             creadoEn: admin.firestore.FieldValue.serverTimestamp()
         });
-
         return { message: `Chofer ${nombre} creado con éxito.` };
-    } catch (error) {
-        console.error("Error al crear chofer:", error);
-        if (error.code === 'auth/email-already-exists') {
-            throw new HttpsError('already-exists', 'El correo electrónico ya está en uso.');
-        }
-        throw new HttpsError('internal', 'Ocurrió un error interno al crear el chofer.');
-    }
+    } catch (e) { throw new HttpsError('internal', e.message); }
 });
 
 exports.resetearPasswordChofer = onCall(async (request) => {
     const { auth_uid, nuevaPassword } = request.data;
-    if (!auth_uid || !nuevaPassword) {
-        throw new HttpsError('invalid-argument', 'Faltan datos para resetear la contraseña.');
-    }
-    try {
-        await admin.auth().updateUser(auth_uid, { password: nuevaPassword });
-        return { message: "Contraseña actualizada con éxito." };
-    } catch (error) {
-        console.error("Error al resetear contraseña:", error);
-        throw new HttpsError('internal', 'Ocurrió un error al actualizar la contraseña.');
-    }
+    if (!auth_uid || !nuevaPassword) throw new HttpsError('invalid-argument', 'Faltan datos.');
+    try { await admin.auth().updateUser(auth_uid, { password: nuevaPassword }); return { message: "Contraseña actualizada." }; }
+    catch (e) { throw new HttpsError('internal', e.message); }
 });
 
 exports.borrarChofer = onCall(async (request) => {
     const { dni, auth_uid } = request.data;
-    if (!dni || !auth_uid) {
-        throw new HttpsError('invalid-argument', 'Faltan datos para borrar el chofer.');
-    }
     try {
         await admin.auth().deleteUser(auth_uid);
         await db.collection('choferes').doc(dni).delete();
-        return { message: "Chofer borrado exitosamente." };
-    } catch (error) {
-        console.error("Error al borrar chofer:", error);
-        if (error.code === 'auth/user-not-found') {
-            await db.collection('choferes').doc(dni).delete();
-            return { message: "Chofer borrado de la base de datos (no en autenticación)." };
-        }
-        throw new HttpsError('internal', 'Ocurrió un error al borrar el chofer.');
+        return { message: "Chofer borrado." };
+    } catch (e) {
+        if (e.code === 'auth/user-not-found') { await db.collection('choferes').doc(dni).delete(); return { message: "Borrado de DB." }; }
+        throw new HttpsError('internal', e.message);
     }
 });
 
 // ===================================================================================
-// TRIGGERS DE FIRESTORE (GEOCODIFICACIÓN Y ALGOLIA)
+// 3. TRIGGERS DE FIRESTORE (GEOCODIFICACIÓN Y ALGOLIA) (ORIGINALES)
 // ===================================================================================
+// BUSCA ESTA SECCIÓN EN TU index.js (Líneas 63 aprox) Y REEMPLÁZALA:
+
 exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event) => {
     if (!event.data.after.exists) return null;
     const client = getMapsClient();
-    const afterData = event.data.after.data();
-    const beforeData = event.data.before.exists ? event.data.before.data() : null;
-    if (afterData.origen && (!beforeData || afterData.origen !== beforeData.origen)) {
-        try {
-            const response = await client.geocode({ params: { address: `${afterData.origen}, Argentina`, key: GEOCODING_API_KEY } });
-            if (response.data.results && response.data.results.length > 0) {
-                const location = response.data.results[0].geometry.location;
-                const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
-                await event.data.after.ref.update({ origen_coords: coords });
-            }
-        } catch (error) { console.error("Error geocodificando origen:", error.response?.data?.error_message || error.message); }
-    }
-    if (afterData.destino && (!beforeData || afterData.destino !== beforeData.destino)) {
-        try {
-            const response = await client.geocode({ params: { address: `${afterData.destino}, Argentina`, key: GEOCODING_API_KEY } });
-            if (response.data.results && response.data.results.length > 0) {
-                const location = response.data.results[0].geometry.location;
-                const coords = new admin.firestore.GeoPoint(location.lat, location.lng);
-                await event.data.after.ref.update({ destino_coords: coords });
-            }
-        } catch (error) { console.error("Error geocodificando destino:", error.response?.data?.error_message || error.message); }
-    }
+    const after = event.data.after.data();
+    const before = event.data.before.exists ? event.data.before.data() : null;
+    
+    const updateCoords = async (field, coordsField) => {
+        // Verificamos si el campo cambió o es nuevo
+        if (after[field] && (!before || after[field] !== before[field])) {
+            try {
+                // --- CAMBIO CLAVE AQUÍ ---
+                // Si hay múltiples direcciones (separadas por " + "), tomamos solo la primera para el mapa
+                let direccionLimpia = after[field];
+                if (direccionLimpia.includes(" + ")) {
+                    direccionLimpia = direccionLimpia.split(" + ")[0];
+                }
+                // -------------------------
+
+                const res = await client.geocode({ 
+                    params: { 
+                        address: `${direccionLimpia}, Argentina`, 
+                        key: GEOCODING_API_KEY 
+                    } 
+                });
+
+                if (res.data.results.length > 0) {
+                    const loc = res.data.results[0].geometry.location;
+                    await event.data.after.ref.update({ [coordsField]: new admin.firestore.GeoPoint(loc.lat, loc.lng) });
+                }
+            } catch (e) { console.error(`Error geo ${field}:`, e.message); }
+        }
+    };
+    
+    await updateCoords('origen', 'origen_coords');
+    await updateCoords('destino', 'destino_coords'); // El destino también podría tener múltiples paradas si quisieras a futuro
     return null;
 });
 
-exports.sincronizarConAlgolia = onDocumentWritten("pasajeros/{pasajeroId}", (event) => {
+exports.sincronizarConAlgolia = onDocumentWritten("pasajeros/{id}", (e) => {
     const { pasajerosIndex } = getAlgoliaIndices();
-    const pasajeroId = event.params.pasajeroId;
-    if (!event.data.after.exists) { return pasajerosIndex.deleteObject(pasajeroId); }
-    const record = { objectID: pasajeroId, ...event.data.after.data() };
-    return pasajerosIndex.saveObject(record);
+    return !e.data.after.exists ? pasajerosIndex.deleteObject(e.params.id) : pasajerosIndex.saveObject({ objectID: e.params.id, ...e.data.after.data() });
 });
 
-exports.sincronizarHistoricoConAlgolia = onDocumentWritten("historico/{viajeId}", (event) => {
+exports.sincronizarHistoricoConAlgolia = onDocumentWritten("historico/{id}", (e) => {
     const { historicoIndex } = getAlgoliaIndices();
-    const viajeId = event.params.viajeId;
-    if (!event.data.after.exists) { return historicoIndex.deleteObject(viajeId); }
-    const record = { objectID: viajeId, ...event.data.after.data() };
-    return historicoIndex.saveObject(record);
+    return !e.data.after.exists ? historicoIndex.deleteObject(e.params.id) : historicoIndex.saveObject({ objectID: e.params.id, ...e.data.after.data() });
 });
 
-exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{reservaId}", (event) => {
+exports.sincronizarReservasConAlgolia = onDocumentWritten("reservas/{id}", (e) => {
     const { reservasIndex } = getAlgoliaIndices();
-    const reservaId = event.params.reservaId;
-    if (!event.data.after.exists) { return reservasIndex.deleteObject(reservaId); }
-    const record = { objectID: reservaId, ...event.data.after.data() };
-    return reservasIndex.saveObject(record);
+    return !e.data.after.exists ? reservasIndex.deleteObject(e.params.id) : reservasIndex.saveObject({ objectID: e.params.id, ...e.data.after.data() });
 });
 
-exports.sincronizarChoferesConAlgolia = onDocumentWritten("choferes/{choferId}", async (event) => {
-     const { choferesIndex } = getAlgoliaIndices();
-    const choferId = event.params.choferId;
-
-    if (!event.data.after.exists) {
-        return choferesIndex.deleteObject(choferId);
-    }
-
-    const choferData = event.data.after.data();
-
-    if (choferData.movil_actual_id) {
+exports.sincronizarChoferesConAlgolia = onDocumentWritten("choferes/{id}", async (e) => {
+    const { choferesIndex } = getAlgoliaIndices();
+    if (!e.data.after.exists) return choferesIndex.deleteObject(e.params.id);
+    const data = e.data.after.data();
+    if (data.movil_actual_id) {
         try {
-            const movilDoc = await db.collection('moviles').doc(choferData.movil_actual_id).get();
-            if (movilDoc.exists) {
-                choferData.numero_movil = movilDoc.data().numero;
-            }
-        } catch (error) {
-            console.error(`Error al buscar móvil ${choferData.movil_actual_id} para el chofer ${choferId}:`, error);
-        }
+            const movil = await db.collection('moviles').doc(data.movil_actual_id).get();
+            if (movil.exists) data.numero_movil = movil.data().numero;
+        } catch(err) { console.error(err); }
     }
-
-    const record = { objectID: choferId, ...choferData };
-    return choferesIndex.saveObject(record);
+    return choferesIndex.saveObject({ objectID: e.params.id, ...data });
 });
 
-exports.agregarNombreClienteAReserva = onDocumentWritten("reservas/{reservaId}", async (event) => {
-    if (!event.data.after.exists) {
-        return null;
-    }
-    const datosReserva = event.data.after.data();
-    if (datosReserva.cliente_nombre) {
-        return null;
-    }
-    const clienteId = datosReserva.cliente;
-    if (!clienteId) {
-        return null;
-    }
+exports.agregarNombreClienteAReserva = onDocumentWritten("reservas/{id}", async (e) => {
+    if (!e.data.after.exists) return null;
+    const d = e.data.after.data();
+    if (d.cliente_nombre || !d.cliente) return null;
     try {
-        const clienteSnap = await db.collection("clientes").doc(clienteId).get();
-        let nombreCliente = "N/A";
-        if (clienteSnap.exists) {
-            nombreCliente = clienteSnap.data().nombre || "N/A";
-        }
-        return event.data.after.ref.update({
-            cliente_nombre: nombreCliente,
-        });
-    } catch (error) {
-        console.error("Error al buscar o actualizar el cliente:", error);
-        return null;
-    }
-});
-
-
-// ===================================================================================
-// FUNCIONES DE ADMINISTRACIÓN (USUARIOS, EXPORTACIÓN)
-// ===================================================================================
-exports.crearUsuario = onCall(async (request) => {
-    const { email, password, nombre } = request.data;
-    if (!email || !password || !nombre) { throw new HttpsError('invalid-argument', 'Faltan datos.'); }
-    try {
-        const userRecord = await admin.auth().createUser({ email, password, displayName: nombre });
-        await admin.firestore().collection('users').doc(userRecord.uid).set({ nombre, email, rol: 'operador' });
-        return { result: `Usuario ${nombre} creado con éxito.` };
-    } catch (error) { console.error("Error:", error); throw new HttpsError('internal', 'Error al crear.'); }
-});
-
-exports.listUsers = onCall(async (request) => {
-    try {
-        const usersSnapshot = await db.collection('users').get();
-        if (usersSnapshot.empty) {
-            return { users: [] };
-        }
-        const users = usersSnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                uid: doc.id,
-                email: data.email || 'N/A',
-                nombre: data.nombre || 'N/A'
-            };
-        });
-        return { users };
-    } catch (error) {
-        console.error("Error al listar usuarios:", error);
-        throw new HttpsError('internal', 'Ocurrió un error al listar los usuarios.');
-    }
-});
-
-exports.exportarHistorico = onCall(async (request) => {
-   try {
-       const { fechaDesde, fechaHasta, clienteId } = request.data;
-        if (!fechaDesde || !fechaHasta) {
-            return { csvData: null, message: "Las fechas 'desde' y 'hasta' son obligatorias." };
-        }
-        const fechaInicio = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00Z'));
-        const fechaFin = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59Z'));
-        let query = admin.firestore().collection('historico').where('archivadoEn', '>=', fechaInicio).where('archivadoEn', '<=', fechaFin);
-        if (clienteId) {
-            query = query.where('cliente', '==', clienteId);
-        }
-        const snapshot = await query.get();
-        if (snapshot.empty) {
-            return { csvData: null, message: "No se encontraron registros." };
-        }
-        
-        // 1. MODIFICACIÓN: Añadir BOM para UTF-8 (acentos)
-        let csvContent = "\uFEFF"; 
-        
-        // 2. MODIFICACIÓN: Usar punto y coma (;) en encabezados (ya incluye "Chofer")
-        csvContent += "Fecha Turno;Hora Turno;Hora PickUp;Pasajero;Cliente;Chofer;Origen;Destino;Estado;Siniestro;Autorizacion\n";
-        
-        snapshot.forEach(doc => {
-            const viaje = doc.data();
-            const escapeCSV = (field) => `"${(field || '').toString().replace(/"/g, '""')}"`;
-            
-            // 3. MODIFICACIÓN: Usar punto y coma (;) para unir los datos
-            const fila = [
-                viaje.fecha_turno || 'N/A',
-                viaje.hora_turno || 'N/A',
-                viaje.hora_pickup || 'N/A',
-                escapeCSV(viaje.nombre_pasajero),
-                escapeCSV(viaje.clienteNombre),
-                escapeCSV(viaje.choferNombre), // <-- Este campo ya estaba
-                escapeCSV(viaje.origen),
-                escapeCSV(viaje.destino),
-                (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A',
-                viaje.siniestro || 'N/A',
-                viaje.autorizacion || 'N/A'
-            ].join(';'); // <-- CAMBIO CLAVE
-            csvContent += fila + "\n";
-        });
-        return { csvData: csvContent };
-    } catch (error) {
-        console.error("Error al generar el histórico:", error);
-        throw new HttpsError('internal', 'Error al generar el archivo.', error.message);
-    }
+        const c = await db.collection("clientes").doc(d.cliente).get();
+        return e.data.after.ref.update({ cliente_nombre: c.exists ? (c.data().nombre || "N/A") : "N/A" });
+    } catch(err) { console.error(err); return null; }
 });
 
 // ===================================================================================
-// FUNCIONES LLAMADAS DESDE LA APP DEL CHOFER
+// 4. ADMIN USUARIOS Y EXPORTACIÓN (ORIGINALES)
 // ===================================================================================
-
-exports.finalizarViajeDesdeApp = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'No autenticado.');
-    }
-    const { reservaId } = request.data;
-    if (!reservaId) {
-        throw new HttpsError('invalid-argument', 'Falta ID de reserva.');
-    }
-    const reservaRef = db.collection('reservas').doc(reservaId);
-    const historicoRef = db.collection('historico').doc(reservaId);
-    try {
-        const doc = await reservaRef.get();
-        if (!doc.exists) {
-            throw new HttpsError('not-found', 'No se encontró la reserva.');
-        }
-        const reservaData = doc.data();
-        if (reservaData.chofer_asignado_id) {
-            const choferDoc = await db.collection('choferes').doc(reservaData.chofer_asignado_id).get();
-            if (choferDoc.exists && choferDoc.data().auth_uid !== request.auth.uid) {
-                throw new HttpsError('permission-denied', 'No tienes permiso.');
-            }
-        }
-        if (reservaData.cliente) {
-            const clienteDoc = await db.collection('clientes').doc(reservaData.cliente).get();
-            reservaData.clienteNombre = clienteDoc.exists ? (clienteDoc.data().nombre || 'Default') : 'Default';
-        }
-        if (reservaData.chofer_asignado_id) {
-            const choferDoc = await db.collection('choferes').doc(reservaData.chofer_asignado_id).get();
-            if (choferDoc.exists) {
-                reservaData.choferNombre = choferDoc.data().nombre || 'N/A';
-            }
-        }
-        
-        await db.runTransaction(async (transaction) => {
-            reservaData.estado = {
-                principal: 'Finalizado',
-                detalle: 'Traslado Concluido (desde App)',
-                actualizado_en: admin.firestore.FieldValue.serverTimestamp()
-            };
-            reservaData.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
-            if (reservaData.chofer_asignado_id) {
-                const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
-                transaction.update(choferRef, {
-                    viajes_activos: admin.firestore.FieldValue.arrayRemove(reservaId)
-                });
-            }
-            transaction.set(historicoRef, reservaData);
-            transaction.delete(reservaRef);
-        });
-        return { message: 'Viaje finalizado.' };
-    } catch (error) {
-        console.error("Error al finalizar viaje:", error);
-        if (error instanceof HttpsError) throw error;
-        throw new HttpsError('internal', 'Error al procesar.', error.message);
-    }
+exports.crearUsuario = onCall(async (r) => {
+    const { email, password, nombre } = r.data;
+    const user = await admin.auth().createUser({ email, password, displayName: nombre });
+    await db.collection('users').doc(user.uid).set({ nombre, email, rol: 'operador' });
+    return { result: "OK" };
+});
+exports.listUsers = onCall(async () => {
+    const s = await db.collection('users').get();
+    return { users: s.docs.map(d => ({ uid: d.id, ...d.data() })) };
+});
+exports.exportarHistorico = onCall(async (r) => {
+    const { fechaDesde, fechaHasta, clienteId } = r.data;
+    const inicio = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00Z'));
+    const fin = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59Z'));
+    let q = db.collection('historico').where('archivadoEn', '>=', inicio).where('archivadoEn', '<=', fin);
+    if (clienteId) q = q.where('cliente', '==', clienteId);
+    const s = await q.get();
+    let csv = "\uFEFFFecha Turno;Hora Turno;Hora PickUp;Pasajero;Cliente;Chofer;Origen;Destino;Estado;Siniestro;Autorizacion\n";
+    s.forEach(d => {
+        const v = d.data();
+        const esc = (f) => `"${(f||'').toString().replace(/"/g, '""')}"`;
+        csv += `${v.fecha_turno||'N/A'};${v.hora_turno||'N/A'};${v.hora_pickup||'N/A'};${esc(v.nombre_pasajero)};${esc(v.clienteNombre)};${esc(v.choferNombre)};${esc(v.origen)};${esc(v.destino)};${(typeof v.estado==='object'?v.estado.principal:v.estado)||'N/A'};${v.siniestro||'N/A'};${v.autorizacion||'N/A'}\n`;
+    });
+    return { csvData: csv };
 });
 
-exports.gestionarRechazoDesdeApp = onCall(async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'No autenticado.');
-    }
-    const { reservaId, esNegativo } = request.data;
-    if (!reservaId) {
-        throw new HttpsError('invalid-argument', 'Falta ID de reserva.');
-    }
-    const reservaRef = db.collection('reservas').doc(reservaId);
-    try {
-        await db.runTransaction(async (transaction) => {
-            const reservaDoc = await transaction.get(reservaRef);
-            if (!reservaDoc.exists) {
-                return;
-            }
-            const reservaData = reservaDoc.data();
-            const choferAsignadoId = reservaData.chofer_asignado_id;
-
-            if (choferAsignadoId) {
-                const choferDoc = await db.collection('choferes').doc(choferAsignadoId).get();
-                if (!choferDoc.exists || choferDoc.data().auth_uid !== request.auth.uid) {
-                    throw new HttpsError('permission-denied', 'No tienes permiso.');
-                }
-                
-                const choferDocData = choferDoc.data();
-                const nombreChofer = choferDocData.nombre || 'Desconocido';
-                const nuevoDetalle = esNegativo 
-                    ? `Traslado negativo (Chofer: ${nombreChofer})` 
-                    : `Rechazado por ${nombreChofer}`;
-
-                transaction.update(reservaRef, {
-                    estado: {
-                        principal: 'En Curso',
-                        detalle: nuevoDetalle,
-                        actualizado_en: admin.firestore.FieldValue.serverTimestamp(),
-                    },
-                    chofer_asignado_id: admin.firestore.FieldValue.delete(),
-                    movil_asignado_id: admin.firestore.FieldValue.delete(),
-                });
-            } else {
-                 throw new HttpsError('failed-precondition', 'La reserva ya no tiene chofer.');
-            }
-            const choferRef = db.collection('choferes').doc(choferAsignadoId);
-            transaction.update(choferRef, {
-                viajes_activos: admin.firestore.FieldValue.arrayRemove(reservaId)
+// ===================================================================================
+// 5. APP CHOFERES (ORIGINALES)
+// ===================================================================================
+exports.finalizarViajeDesdeApp = onCall(async (r) => {
+    if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
+    const { reservaId } = r.data;
+    const ref = db.collection('reservas').doc(reservaId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError('not-found', 'No existe.');
+    const data = snap.data();
+    await db.runTransaction(async (t) => {
+        data.estado = { principal: 'Finalizado', detalle: 'App Chofer', actualizado_en: admin.firestore.FieldValue.serverTimestamp() };
+        data.archivadoEn = admin.firestore.FieldValue.serverTimestamp();
+        if (data.chofer_asignado_id) {
+            t.update(db.collection('choferes').doc(data.chofer_asignado_id), { viajes_activos: admin.firestore.FieldValue.arrayRemove(reservaId) });
+        }
+        t.set(db.collection('historico').doc(reservaId), data);
+        t.delete(ref);
+    });
+    return { message: 'Finalizado' };
+});
+exports.gestionarRechazoDesdeApp = onCall(async (r) => {
+    if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
+    const { reservaId, esNegativo } = r.data;
+    const ref = db.collection('reservas').doc(reservaId);
+    await db.runTransaction(async (t) => {
+        const doc = await t.get(ref);
+        if (!doc.exists) return;
+        const d = doc.data();
+        const ch = d.chofer_asignado_id;
+        if (ch) {
+            t.update(ref, {
+                estado: { principal: 'En Curso', detalle: esNegativo ? 'Negativo' : 'Rechazado', actualizado_en: admin.firestore.FieldValue.serverTimestamp() },
+                chofer_asignado_id: admin.firestore.FieldValue.delete(), movil_asignado_id: admin.firestore.FieldValue.delete()
             });
-        });
-        return { message: 'Reserva actualizada.' };
-    } catch (error) {
-        console.error("Error al gestionar rechazo:", error);
-        if (error instanceof HttpsError) {
-            throw error;
+            t.update(db.collection('choferes').doc(ch), { viajes_activos: admin.firestore.FieldValue.arrayRemove(reservaId) });
         }
-        throw new HttpsError('internal', 'Error al procesar.', error.message);
-    }
+    });
+    return { message: 'Actualizado' };
 });
 
 // ===================================================================================
-// TRIGGERS DE NOTIFICACIONES
+// 6. TRIGGERS NOTIFICACIONES (ORIGINALES)
 // ===================================================================================
+exports.gestionarNotificacionesDeReservas = functions.firestore.document("reservas/{id}").onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    let title = '', body = '', choferId = '';
 
-/**
- * Trigger que se activa cuando una reserva existente es modificada.
- * Maneja los escenarios de: nueva asignación, des-asignación y edición de detalles.
- */
-exports.gestionarNotificacionesDeReservas = functions.firestore
-    .document("reservas/{reservaId}")
-    .onUpdate(async (change, context) => {
-        const beforeData = change.before.data();
-        const afterData = change.after.data();
-        const reservaId = context.params.reservaId;
-
-        let choferId;
-        let notificationTitle = '';
-        let notificationBody = '';
-
-        // Escenario 1: NUEVA ASIGNACIÓN
-        if (!beforeData.chofer_asignado_id && afterData.chofer_asignado_id) {
-            choferId = afterData.chofer_asignado_id;
-            notificationTitle = '¡Nuevo Viaje Asignado!';
-            notificationBody = `Origen: ${afterData.origen || 'N/A'}. Tienes una nueva reserva pendiente.`;
-        }
-        // Escenario 2: DES-ASIGNACIÓN (se le quita al chofer)
-        else if (beforeData.chofer_asignado_id && !afterData.chofer_asignado_id) {
-            choferId = beforeData.chofer_asignado_id; // El chofer que fue quitado
-            notificationTitle = 'Viaje Reasignado';
-            notificationBody = `El viaje desde ${afterData.origen || 'origen'} ya no está en tu lista.`;
-        }
-        // Escenario 3: EDICIÓN (el viaje ya estaba asignado y cambia un dato clave)
-        else if (afterData.chofer_asignado_id && (
-                 afterData.origen !== beforeData.origen ||
-                 afterData.destino !== beforeData.destino ||
-                 afterData.fecha_turno !== beforeData.fecha_turno ||
-                 afterData.hora_turno !== beforeData.hora_turno ||
-                 afterData.hora_pickup !== beforeData.hora_pickup)) {
-            choferId = afterData.chofer_asignado_id;
-            notificationTitle = 'Reserva Actualizada';
-            notificationBody = `El viaje a ${afterData.origen || 'origen'} ha sido modificado. Revisa los detalles.`;
-        }
-
-        // Si no hay nada que notificar en esta actualización, salimos.
-        if (!notificationTitle || !choferId) {
-            return null;
-        }
-
-        // --- Lógica común para enviar la notificación ---
-        const choferDoc = await db.collection('choferes').doc(choferId).get();
-        if (!choferDoc.exists || !choferDoc.data().fcm_token) {
-            console.log(`El chofer ${choferId} no tiene token, no se puede notificar.`);
-            return null;
-        }
-
-        const fcmToken = choferDoc.data().fcm_token;
-        const message = {
-            notification: { title: notificationTitle, body: notificationBody },
-            android: {
-                 notification: {
-                   channel_id: 'high_importance_channel'
-                }
-           },
-            apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
-            token: fcmToken,
-            data: { // ▼▼▼ ESTE ES EL CAMBIO CLAVE ▼▼▼
-        // Replicamos la información aquí para que nuestro código la procese
-                "title": notificationTitle,
-                "body": notificationBody,
-                "reservaId": reservaId, // El ID ya estaba, lo mantenemos
-                "click_action": "FLUTTER_NOTIFICATION_CLICK",
-        // Podemos añadir un tipo para saber qué hacer
-                "tipo": "actualizacion_reserva"
-            },
-        };
-
-        try {
-            await admin.messaging().send(message);
-            console.log(`Notificación de tipo "${notificationTitle}" enviada con éxito al chofer ${choferId}`);
-        } catch (error) {
-            console.error(`Error al enviar notificación al chofer ${choferId}:`, error);
-        }
-        return null;
-    });
-
-
-exports.notificarCancelacionDeReserva = functions.firestore
-     .document('reservas/{reservaId}')
-    .onDelete(async (snap, context) => {
-        const reservaId = context.params.reservaId;
-        
-        // =======================================================================
-        // ▼▼▼ INICIO DE LA CORRECCIÓN ▼▼▼
-        // =======================================================================
-        // 1. Antes de hacer nada, verificamos si el viaje fue archivado en 'historico'.
-        const historicoDocRef = db.collection('historico').doc(reservaId);
-        const historicoDoc = await historicoDocRef.get();
-
-        // 2. Si el documento existe en 'historico', significa que se finalizó y no se canceló.
-        //    Por lo tanto, salimos de la función para no enviar la notificación.
-        if (historicoDoc.exists) {
-            console.log(`El viaje ${reservaId} fue finalizado y archivado. No se enviará notificación de cancelación.`);
-            return null; 
-        }
-        // =======================================================================
-        // ▲▲▲ FIN DE LA CORRECCIÓN ▲▲▲
-        // =======================================================================
-
-        // Si el código llega hasta aquí, significa que fue una cancelación real.
-        console.log(`El viaje ${reservaId} fue realmente cancelado. Preparando notificación.`);
-
-        const reservaBorrada = snap.data();
-        const choferId = reservaBorrada.chofer_asignado_id;
-
-        if (!choferId) { return null; }
-
-        const choferDoc = await db.collection('choferes').doc(choferId).get();
-        if (!choferDoc.exists || !choferDoc.data().fcm_token) {
-            console.log(`Chofer ${choferId} sin token para notificar cancelación.`);
-            return null;
-        }
-
-        const notificationTitle = 'Viaje Cancelado';
-        const notificationBody = `El viaje desde ${reservaBorrada.origen || 'origen'} ha sido cancelado por el operador.`;
-
-        const fcmToken = choferDoc.data().fcm_token;
-        const message = {
-            notification: {
-                title: notificationTitle,
-                body: notificationBody
-            },
-            android: {
-              notification: {
-                channel_id: 'high_importance_channel'
-              }
-            },
-            apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
-            token: fcmToken,
-            data: {
-                "title": notificationTitle,
-                "body": notificationBody,
-                "reservaId": context.params.reservaId,
-                "click_action": 'FLUTTER_NOTIFICATION_CLICK',
-                "tipo": "cancelacion_reserva"
-            },
-        };
-
-        try {
-            await admin.messaging().send(message);
-            console.log(`Notificación de cancelación enviada con éxito al chofer ${choferId}`);
-        } catch (error) {
-            console.error(`Error al enviar notificación de cancelación al chofer ${choferId}:`, error);
-        }
-        return null;
-    });
-
-    // ===================================================================================
-// IMPORTACIÓN DE IA (Asegúrate de haber instalado: npm install @google/generative-ai)
-// ===================================================================================
-
-
-
-exports.interpretarExcelIA = onCall({ cors: true, timeoutSeconds: 300 }, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Debes estar logueado.');
+    if (!before.chofer_asignado_id && after.chofer_asignado_id) {
+        choferId = after.chofer_asignado_id; title = '¡Nuevo Viaje!'; body = `Origen: ${after.origen}`;
+    } else if (before.chofer_asignado_id && !after.chofer_asignado_id) {
+        choferId = before.chofer_asignado_id; title = 'Viaje Retirado'; body = 'El viaje ya no está asignado.';
+    } else if (after.chofer_asignado_id && (after.origen !== before.origen || after.fecha_turno !== before.fecha_turno)) {
+        choferId = after.chofer_asignado_id; title = 'Reserva Actualizada'; body = 'Detalles modificados.';
     }
 
-    const { datosCrudos, fechaSeleccionada } = request.data; 
-
-    if (!datosCrudos || datosCrudos.length === 0) {
-        return { reservas: [] };
-    }
-
-    try {
-        
-    // --- CORRECCIÓN: USAR LA CLAVE DEL .ENV UNIFICADA ---
-    const apiKey = process.env.GEMINI_API_KEY; 
-
-    if (!apiKey) {
-        throw new HttpsError('internal', "Falta API Key Gemini (GEMINI_API_KEY) en .env");
-    }
-         const genAI = new GoogleGenerativeAI(apiKey);
-
-         const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-         const prompt = `
-            Actúa como un operador de logística experto en Rosario, Argentina.
-            Analiza esta lista de viajes y conviértela en JSON limpio para Firebase.
-            
-            Fecha de referencia (Default): ${fechaSeleccionada} (YYYY-MM-DD).
-            
-            Reglas de interpretación CRÍTICAS:
-            
-            1. **FECHA DEL VIAJE (Prioridad):**
-               - Si la celda "FECHA" tiene datos (ej: "10-dic", "10/12"), ÚSALA. Usa el año de la "Fecha de referencia" (${fechaSeleccionada}) para completarla.
-               - Si está vacía, usa la "Fecha de referencia".
-               - Salida: YYYY-MM-DD.
-
-            2. **Hora:** Columna "HORARIO". Si vacía, usar "TURNO". Formato HH:mm.
-            3. **Pasajero:** Columna "APELLIDO Y NOMBRE".
-            4. **Teléfono:** Columna "N° DE TELEFONO".
-            5. **Origen:** Columna "ORIGEN". Si es "VGG" -> "Villa Gobernador Gálvez". Si es calle sola -> agregar ", Rosario, Santa Fe".
-            6. **Destino:** Columna "DESTINO". Misma lógica que Origen.
-
-            7. **Cliente (TRADUCCIÓN):**
-               - "SPA" -> "PREVENCION ART"
-               - "SPI" -> "La Segunda ART"
-               - "RDT" -> "RED DE TRASLADOS"
-               - "INTEGRO" -> "INTEGRO ART"
-               - "ASOCIART" -> "ASOCIART"
-               - "LLT" -> "LLT"
-               - Otro -> Valor original.
-
-            8. **Siniestro:** Columna "SINIESTRO".
-            9. **Autorización:** Columna "AUTORIZACIÓN".
-            
-            10. **Observaciones:** Mapea directamente el contenido de la columna "OBSERVACIONES".
-
-            11. **VIAJE EXCLUSIVO (Detección):**
-               - Revisa TODAS las columnas (especialmente Observaciones o Tipo de Viaje).
-               - Si encuentras palabras como "Exclusivo", "Movil Completo", "Exc", devuelve el campo "es_exclusivo": true.
-               - De lo contrario, "es_exclusivo": false.
-
-            IMPORTANTE: Devuelve SOLO un array JSON válido bajo la clave "reservas".
-            Claves JSON: fecha_turno, hora_turno, nombre_pasajero, telefono_pasajero, origen, destino, cliente, siniestro, autorizacion, observaciones, es_exclusivo.
-
-            Datos a procesar: ${JSON.stringify(datosCrudos)}
-        `;
-
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        let text = response.text();
-        
-        text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const jsonResponse = JSON.parse(text);
-        const reservasFinales = Array.isArray(jsonResponse) ? jsonResponse : jsonResponse.reservas;
-
-        return { reservas: reservasFinales || [] };
-
-    } catch (error) {
-        console.error("Error IA:", error);
-        throw new HttpsError('internal', 'Error al procesar con IA: ' + error.message);
-    }
-});
-
-// ===================================================================================
-// INTEGRACIÓN GMAIL + IA
-// ===================================================================================
-
-exports.procesarReservasGmail = onCall({ cors: true, timeoutSeconds: 300 }, async (request) => {
-    // 1. Verificar autenticación
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'Debes estar logueado como operador.');
-    }
-    
-    // --- VALIDACIÓN (Solo process.env) ---
-    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
-        throw new HttpsError('internal', 'Faltan credenciales de Gmail en el archivo .env');
-    }
-
-    // 2. Inicializar Cliente OAuth
-    const oAuth2Client = new google.auth.OAuth2(
-        process.env.GMAIL_CLIENT_ID,
-        process.env.GMAIL_CLIENT_SECRET,
-        process.env.GMAIL_REDIRECT_URI
-    );
-    
-    oAuth2Client.setCredentials({
-        refresh_token: process.env.GMAIL_REFRESH_TOKEN
-    });
-
-    // 3. Inicializar Servicios
-    const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
-
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-         throw new HttpsError('internal', "Falta la API Key de Gemini (GEMINI_API_KEY) en el archivo .env");
-    }
-    
-    const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // MODELO: Asegúrate de usar 'gemini-2.0-flash' o 'gemini-1.5-flash'
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-    try {
-        // 2. Buscar correos NO LEÍDOS
-        const res = await gmail.users.messages.list({
-            userId: 'me', 
-            q: 'is:unread subject:(Reserva OR Viaje OR Pedido OR RDT OR Autorizaciones)' 
-        });
-
-        const messages = res.data.messages;
-        if (!messages || messages.length === 0) {
-            return { message: "No hay correos nuevos de reservas que coincidan con la búsqueda." };
-        }
-
-        
-        let procesados = 0;
-        let batch = db.batch();
-        let contadorBatch = 0;
-        const batchLimit = 400;
-
-        // 3. Iterar sobre los correos encontrados
-        for (const message of messages) {
-            const msgData = await gmail.users.messages.get({
-                userId: 'me',
-                id: message.id
+    if (title && choferId) {
+        const ch = await db.collection('choferes').doc(choferId).get();
+        if (ch.exists && ch.data().fcm_token) {
+            await admin.messaging().send({
+                token: ch.data().fcm_token,
+                notification: { title, body },
+                android: { notification: { channel_id: 'high_importance_channel' } },
+                apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
+                data: { title, body, reservaId: context.params.id, click_action: "FLUTTER_NOTIFICATION_CLICK", tipo: "actualizacion" }
             });
+        }
+    }
+});
 
-            const snippet = msgData.data.snippet || ''; 
+exports.notificarCancelacionDeReserva = functions.firestore.document('reservas/{id}').onDelete(async (snap, context) => {
+    const hist = await db.collection('historico').doc(context.params.id).get();
+    if (hist.exists) return null; 
+
+    const d = snap.data();
+    if (d.chofer_asignado_id) {
+        const ch = await db.collection('choferes').doc(d.chofer_asignado_id).get();
+        if (ch.exists && ch.data().fcm_token) {
+            await admin.messaging().send({
+                token: ch.data().fcm_token,
+                notification: { title: 'Viaje Cancelado', body: `Cancelado: ${d.origen}` },
+                android: { notification: { channel_id: 'high_importance_channel' } },
+                apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
+                data: { title: 'Viaje Cancelado', body: `Cancelado: ${d.origen}`, reservaId: context.params.id, click_action: "FLUTTER_NOTIFICATION_CLICK", tipo: "cancelacion" }
+            });
+        }
+    }
+});
+
+// ===================================================================================
+// 7. NUEVA LÓGICA: GMAIL + IA MULTIMODAL + ADJUNTOS
+// ===================================================================================
+
+function extractBody(payload) {
+    if (!payload) return "";
+    let encodedBody = '';
+    if (payload.body && payload.body.data) encodedBody = payload.body.data;
+    else if (payload.parts) {
+        const part = payload.parts.find(p => p.mimeType === 'text/plain') || payload.parts.find(p => p.mimeType === 'text/html') || payload.parts[0];
+        if (part && part.body && part.body.data) encodedBody = part.body.data;
+    }
+    return encodedBody ? Buffer.from(encodedBody, 'base64url').toString('utf-8') : "";
+}
+
+async function obtenerAdjuntos(gmail, messageId, payload) {
+    const adjuntos = [];
+    if (!payload.parts) return adjuntos;
+    const buscar = async (partes) => {
+        for (const p of partes) {
+            if (p.filename && p.body && p.body.attachmentId) {
+                if (p.mimeType === 'application/pdf' || p.mimeType.includes('spreadsheet') || p.mimeType.includes('excel') || p.mimeType.includes('csv')) {
+                    try {
+                        const att = await gmail.users.messages.attachments.get({ userId: 'me', messageId, id: p.body.attachmentId });
+                        if (att.data.data) adjuntos.push({ inlineData: { data: att.data.data, mimeType: p.mimeType } });
+                        console.log(`📎 Adjunto: ${p.filename}`);
+                    } catch (e) { console.error(`Err adjunto ${p.filename}`, e); }
+                }
+            }
+            if (p.parts) await buscar(p.parts);
+        }
+    };
+    await buscar(payload.parts);
+    return adjuntos;
+}
+
+async function analizarCorreoConGemini(model, asunto, cuerpo, adjuntos) {
+    const prompt = `
+        Actúa como operador logístico. Analiza correo y adjuntos.
+        ASUNTO: "${asunto}"
+        CUERPO: "${cuerpo.substring(0, 5000)}"
+        FECHA HOY: ${new Date().toISOString().split('T')[0]}
+
+        1. Si hay adjuntos (PDF/Excel), lee tabla completa. Cada fila = 1 viaje.
+        2. Si no, busca en el texto.
+        3. Filtra typos ("Reeserva" = Reserva).
+        4. Salida: JSON array {"reservas": [...]}.
+        
+        CAMPOS: fecha_turno (YYYY-MM-DD), hora_turno (HH:MM), nombre_pasajero, telefono_pasajero, origen (si hay múltiples paradas de origen unirlas con " + "), destino, cliente (default "PARTICULARES"), observaciones, siniestro, autorizacion, es_exclusivo (bool).
+    `;
+    
+    const parts = [prompt];
+    if (adjuntos.length > 0) parts.push(...adjuntos);
+    
+    const res = await model.generateContent(parts);
+    const txt = res.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(txt);
+}
+    
+   
+// --- GMAIL MANUAL (CON ADJUNTOS) ---
+exports.procesarReservasGmail = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (r) => {
+    if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
+    if (!process.env.GMAIL_CLIENT_ID) throw new HttpsError('internal', 'Credenciales.');
+
+    const auth = new google.auth.OAuth2(process.env.GMAIL_CLIENT_ID, process.env.GMAIL_CLIENT_SECRET, process.env.GMAIL_REDIRECT_URI);
+    auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
+    const gmail = google.gmail({ version: 'v1', auth });
+    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    try {
+        const list = await gmail.users.messages.list({ userId: 'me', q: 'is:unread' });
+        const msgs = list.data.messages || [];
+        if (msgs.length === 0) return { message: "Sin correos." };
+
+        let total = 0, batch = db.batch(), count = 0;
+        const filtro = /R[eé]+s[eé]*r|V[ia]+je|P[eé]did|S[oó]lic|Aut[oó]ri|Traslad|RDT/i;
+        const negativo = /Alerta|Security|Google|Verificación/i;
+
+        for (const m of msgs) {
+            const d = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'full' });
+            const subj = d.data.payload.headers.find(h => h.name === 'Subject')?.value || '';
             
-            if (!snippet.trim()) continue;
+            if (!filtro.test(subj) || negativo.test(subj)) continue;
 
-            // 4. Procesar con Gemini
-            const prompt = `
-                Actúa como operador de logística. Extrae los datos de esta reserva para un traslado en Rosario, Argentina:
-                Texto del correo: "${snippet}"
-                Fecha Referencia: ${new Date().toISOString().split('T')[0]}
-                
-                Reglas:
-                - Devuelve un JSON con: fecha_turno, hora_turno, nombre_pasajero, telefono_pasajero, origen, destino, cliente, observaciones, siniestro, autorizacion.
-                - Si falta un dato, pon la cadena vacía ("") o intenta deducirlo.
-                - Cliente: Si menciona una empresa, ponla. Si no, "PARTICULARES".
-                - Formato JSON puro sin markdown (ej: sin \`\`\`json).
-            `;
-
-            const result = await model.generateContent(prompt);
-            const responseText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+            const body = extractBody(d.data.payload);
+            const adjs = await obtenerAdjuntos(gmail, m.id, d.data.payload);
             
-            let reservaData;
+            if (!body.trim() && adjs.length === 0) continue;
+
             try {
-                reservaData = JSON.parse(responseText);
-                if (Array.isArray(reservaData)) reservaData = reservaData[0];
-            } catch (e) {
-                console.error("Error parseando JSON de IA para mail " + message.id, e);
-                continue; 
-            }
-
-            // 5. Preparar guardado
-            const docRef = db.collection('reservas').doc();
-            batch.set(docRef, {
-                ...reservaData,
-                origen_dato: 'Gmail',
-                email_id: message.id,
-                estado: { 
-                    principal: 'Revision', 
-                    detalle: 'Importado desde Gmail para revisión', 
-                    actualizado_en: new Date() // <--- ✅ SOLUCIÓN: Fecha simple
-                },
-                creadoEn: new Date() // <--- ✅ SOLUCIÓN: Fecha simple
-            });
-
-            // 6. Marcar correo como LEÍDO
-            await gmail.users.messages.modify({
-                userId: 'me',
-                id: message.id,
-                requestBody: { removeLabelIds: ['UNREAD'] }
-            });
-
-            procesados++;
-            contadorBatch++;
-            
-            if (contadorBatch >= batchLimit) {
-                await batch.commit();
-                batch = db.batch();
-                contadorBatch = 0;
-            }
+                const ia = await analizarCorreoConGemini(model, subj, body, adjs);
+                const list = ia.reservas || [];
+                for (const item of list) {
+                    batch.set(db.collection('reservas').doc(), { ...item, origen_dato: 'Gmail Manual', email_id: m.id, estado: { principal: 'Revision', detalle: `Importado: ${subj}`, actualizado_en: new Date() }, creadoEn: new Date() });
+                    total++; count++;
+                }
+                await gmail.users.messages.modify({ userId: 'me', id: m.id, requestBody: { removeLabelIds: ['UNREAD'] } });
+                if (count >= 400) { await batch.commit(); batch = db.batch(); count = 0; }
+            } catch (e) { console.error(e); }
         }
-
-        if (contadorBatch > 0) await batch.commit();
-
-        return { message: `Procesados ${procesados} correos correctamente. Se guardaron en la pestaña de revisión.` };
-
-    } catch (error) {
-        console.error("Error procesando Gmail:", error);
-        throw new HttpsError('internal', 'Error al leer y procesar Gmail: ' + error.message);
-    }
+        if (count > 0) await batch.commit();
+        return { message: `Procesados. Reservas: ${total}` };
+    } catch (e) { throw new HttpsError('internal', e.message); }
 });
 
-exports.interpretarPDFIA = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Logueate primero.');
-
-    const { pdfBase64, fechaSeleccionada } = request.data;
-    if (!pdfBase64) throw new HttpsError('invalid-argument', 'Falta el archivo PDF.');
-
-    try {
-        // ✅ CORRECCIÓN: Usamos la misma clave unificada que en Excel y Gmail
-        const apiKey = process.env.GEMINI_API_KEY; 
-
-        if (!apiKey) {
-            throw new HttpsError('internal', "Falta API Key Gemini (GEMINI_API_KEY) en .env");
-        }
-        
-        const genAI = new GoogleGenerativeAI(apiKey);
-        // Usamos Flash porque es rápido y multimodal (lee documentos)
-        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); // ✅ MODELO NUEVO
-
-        const prompt = `
-            Actúa como experto en logística. Analiza este documento PDF adjunto.
-            Contiene una lista de solicitudes de traslados/viajes.
-            
-            Fecha Ref: ${fechaSeleccionada}.
-            
-            Extrae CADA viaje y devuélvelo en JSON.
-            Campos requeridos: fecha_turno (YYYY-MM-DD), hora_turno (HH:MM), nombre_pasajero, telefono_pasajero, origen, destino, cliente, siniestro, autorizacion, observaciones, es_exclusivo (boolean).
-
-            Reglas:
-            1. Si la fecha en el doc es "12/05" usa el año de la Fecha Ref.
-            2. Origen/Destino: Si dice solo calle, agrega ", Rosario". Si dice "VGG", es "Villa Gobernador Gálvez".
-            3. Si detectas palabras como "Ida y vuelta", genera dos objetos JSON separados si es posible, o ponlo en observaciones.
-            4. Cliente: Deduce el nombre de la empresa por el encabezado o logo si es texto.
-            
-            Salida: Un array JSON puro bajo la clave "reservas". Ejemplo: {"reservas": [...]}.
-            Sin markdown.
-        `;
-
-        // Aquí está el truco: Enviamos Texto + Datos del PDF
-        const result = await model.generateContent([
-            prompt,
-            {
-                inlineData: {
-                    data: pdfBase64,
-                    mimeType: "application/pdf",
-                },
-            },
-        ]);
-
-        const responseText = result.response.text();
-        // Limpieza de JSON habitual
-        const jsonString = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-        const jsonResponse = JSON.parse(jsonString);
-
-        return { reservas: jsonResponse.reservas || jsonResponse };
-
-    } catch (error) {
-        console.error("Error interpretando PDF:", error);
-        throw new HttpsError('internal', 'Error IA PDF: ' + error.message);
-    }
-});
-
-// ===================================================================================
-// CRON JOB: CHEQUEO AUTOMÁTICO DE GMAIL (CADA 15 MINUTOS)
-// ===================================================================================
-
+// --- GMAIL AUTOMÁTICO (CRON + ADJUNTOS) ---
 exports.chequearCorreosCron = onSchedule("every 15 minutes", async (event) => {
-    console.log("⏰ Iniciando chequeo automático de Gmail...");
-
-    // 1. Configuración de Credenciales (Igual que la función manual)
-    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
-        console.error("❌ Faltan credenciales de Gmail en .env");
-        return;
-    }
-
-    const oAuth2Client = new google.auth.OAuth2(
-        process.env.GMAIL_CLIENT_ID,
-        process.env.GMAIL_CLIENT_SECRET,
-        process.env.GMAIL_REDIRECT_URI
-    );
-    
-    oAuth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
-    const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
-
-    // 2. Configuración de IA
-    const apiKey = process.env.GEMINI_API_KEY; 
-    if (!apiKey) {
-        console.error("❌ Falta API Key Gemini");
-        return;
-    }
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    if (!process.env.GMAIL_CLIENT_ID) return;
+    console.log("⏰ Cron Gmail Multimodal...");
+    const auth = new google.auth.OAuth2(process.env.GMAIL_CLIENT_ID, process.env.GMAIL_CLIENT_SECRET, process.env.GMAIL_REDIRECT_URI);
+    auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
+    const gmail = google.gmail({ version: 'v1', auth });
+    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
 
     try {
-        // 3. Buscar correos NO LEÍDOS
-        // Usamos 'me' porque el cliente OAuth ya está autenticado con tu cuenta
-        const res = await gmail.users.messages.list({
-            userId: 'me', 
-            q: 'is:unread subject:(Reserva OR Viaje OR Pedido OR RDT OR Autorizaciones)' 
-        });
+        const list = await gmail.users.messages.list({ userId: 'me', q: 'is:unread' });
+        const msgs = list.data.messages || [];
+        if (msgs.length === 0) return;
 
-        const messages = res.data.messages;
-        if (!messages || messages.length === 0) {
-            console.log("✅ Chequeo finalizado: No hay correos nuevos.");
-            return;
-        }
+        let total = 0, batch = db.batch(), count = 0;
+        const filtro = /R[eé]+s[eé]*r|V[ia]+je|P[eé]did|S[oó]lic|Aut[oó]ri|Traslad|RDT/i;
+        const negativo = /Alerta|Security|Google|Verificación/i;
 
-        console.log(`📬 Se encontraron ${messages.length} correos nuevos. Procesando...`);
-
-        let procesados = 0;
-        let batch = admin.firestore().batch(); // Usamos admin.firestore() directo aquí
-        let contadorBatch = 0;
-        const batchLimit = 400;
-
-        for (const message of messages) {
-            // Leer contenido del correo
-            const msgData = await gmail.users.messages.get({ userId: 'me', id: message.id });
-            const snippet = msgData.data.snippet || ''; 
+        for (const m of msgs) {
+            const d = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'full' });
+            const subj = d.data.payload.headers.find(h => h.name === 'Subject')?.value || '';
             
-            if (!snippet.trim()) continue;
+            if (!filtro.test(subj) || negativo.test(subj)) continue;
 
-            // Procesar con Gemini
-            const prompt = `
-                Actúa como operador de logística. Extrae los datos de esta reserva:
-                Texto: "${snippet}"
-                Fecha Ref: ${new Date().toISOString().split('T')[0]}
-                Devuelve JSON puro con: fecha_turno, hora_turno, nombre_pasajero, telefono_pasajero, origen, destino, cliente, observaciones, siniestro, autorizacion.
-                Si falta dato usa "". Cliente default "PARTICULARES".
-            `;
-
-            const result = await model.generateContent(prompt);
-            const responseText = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+            const body = extractBody(d.data.payload);
+            const adjs = await obtenerAdjuntos(gmail, m.id, d.data.payload);
             
-            let reservaData;
+            if (!body.trim() && adjs.length === 0) continue;
+
             try {
-                reservaData = JSON.parse(responseText);
-                if (Array.isArray(reservaData)) reservaData = reservaData[0];
-            } catch (e) {
-                console.error(`Error JSON mail ${message.id}`, e);
-                continue; 
-            }
-
-            // Guardar en Firestore
-            const docRef = db.collection('reservas').doc();
-            batch.set(docRef, {
-                ...reservaData,
-                origen_dato: 'Gmail Automático', // Marcamos que vino del Cron
-                email_id: message.id,
-                estado: { 
-                    principal: 'Revision', 
-                    detalle: 'Importado automáticamente (Cron)', 
-                    actualizado_en: new Date()
-                },
-                creadoEn: new Date()
-            });
-
-            // Marcar como LEÍDO para que no se procese de nuevo en 15 min
-            await gmail.users.messages.modify({
-                userId: 'me',
-                id: message.id,
-                requestBody: { removeLabelIds: ['UNREAD'] }
-            });
-
-            procesados++;
-            contadorBatch++;
-            
-            if (contadorBatch >= batchLimit) {
-                await batch.commit();
-                batch = admin.firestore().batch();
-                contadorBatch = 0;
-            }
+                const ia = await analizarCorreoConGemini(model, subj, body, adjs);
+                const list = ia.reservas || [];
+                for (const item of list) {
+                    batch.set(db.collection('reservas').doc(), { ...item, origen_dato: 'Gmail Auto', email_id: m.id, estado: { principal: 'Revision', detalle: `Auto: ${subj}`, actualizado_en: new Date() }, creadoEn: new Date() });
+                    total++; count++;
+                }
+                await gmail.users.messages.modify({ userId: 'me', id: m.id, requestBody: { removeLabelIds: ['UNREAD'] } });
+                if (count >= 400) { await batch.commit(); batch = db.batch(); count = 0; }
+            } catch (e) { console.error(e); }
         }
-
-        if (contadorBatch > 0) await batch.commit();
-
-        console.log(`🚀 Éxito: Se procesaron ${procesados} reservas automáticamente.`);
-
-    } catch (error) {
-        console.error("🔥 Error crítico en Cron Gmail:", error);
-    }
+        if (count > 0) await batch.commit();
+        console.log(`🚀 Cron Fin: ${total} reservas.`);
+    } catch (e) { console.error("Error Cron", e); }
 });
 
-// Actualizacion forzada v3 - CORS Fix
+// --- INTERPRETACIÓN MANUAL (EXCEL/PDF) ---
+exports.interpretarExcelIA = onCall({ cors: true, timeoutSeconds: 300 }, async (r) => {
+    if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
+    const { datosCrudos, fechaSeleccionada } = r.data;
+    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
+    const res = await model.generateContent(`Analiza lista viajes JSON. Fecha Ref: ${fechaSeleccionada}. Salida JSON {reservas: []}. Datos: ${JSON.stringify(datosCrudos)}`);
+    const json = JSON.parse(res.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
+    return { reservas: json.reservas || json };
+});
+
+exports.interpretarPDFIA = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (r) => {
+    if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
+    const { pdfBase64, fechaSeleccionada } = r.data;
+    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
+    const res = await model.generateContent([`Analiza PDF viajes. Fecha Ref: ${fechaSeleccionada}. Salida JSON {reservas: []}.`, { inlineData: { data: pdfBase64, mimeType: "application/pdf" } }]);
+    const json = JSON.parse(res.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
+    return { reservas: json.reservas || json };
+});

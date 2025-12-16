@@ -498,17 +498,28 @@
                         </div>
                     </div>
                     <div class="form-row">
-                         <div class="form-group">
-                             <label for="origen">Origen</label>
-                             <input type="text" id="origen" name="origen" required>
+                         <div class="form-group" style="align-items: flex-start;">
+                              <label>Origen(es) <small>(Máx 4)</small></label>
+    
+                        <div id="origenes-container" style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="input-group-origen" style="display: flex; gap: 5px;">
+                                 <input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;">
+                                 <div style="width: 30px;"></div>
+                              </div>
                          </div>
+
+                         <button type="button" id="btn-add-origen" style="margin-top: 8px; background: transparent; border: 1px dashed #6c757d; color: #6c757d; padding: 5px; width: 100%; cursor: pointer;">
+                                 + Agregar parada de origen
+                         </button>
+                         </div>
+                         
                    </div>
-                   <div class="form-row">
-                       <div class="form-group">
-                           <label for="destino">Destino</label>
-                           <input type="text" id="destino" name="destino">
-                       </div>
-                   </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="destino">Destino</label>
+                            <input type="text" id="destino" name="destino">
+                        </div>
+                    </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="cantidad_pasajeros">Cantidad Pasajeros</label>

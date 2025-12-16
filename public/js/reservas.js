@@ -11,15 +11,16 @@ export function poblarSelectDeMoviles(caches) {
     const valorActual = movilSelect.value;
     movilSelect.innerHTML = '<option value="">No asignar móvil aún</option>';
 
-    caches.moviles.forEach(movil => {
-        const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
-        const choferInfo = choferAsignado ? ` - ${choferAsignado.nombre}` : ' - (Sin chofer)';
-        const option = document.createElement('option');
-        option.value = movil.id;
-        option.textContent = `Móvil ${movil.numero}${choferInfo}`;
-        movilSelect.appendChild(option);
-    });
-
+    if (caches.moviles) {
+        caches.moviles.forEach(movil => {
+            const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
+            const choferInfo = choferAsignado ? ` - ${choferAsignado.nombre}` : ' - (Sin chofer)';
+            const option = document.createElement('option');
+            option.value = movil.id;
+            option.textContent = `Móvil ${movil.numero}${choferInfo}`;
+            movilSelect.appendChild(option);
+        });
+    }
     movilSelect.value = valorActual;
 }
 
@@ -47,13 +48,20 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
     });
 
     reservas.sort((a, b) => {
+    // 1. Obtener fechas (YYYY-MM-DD)
         const fechaA = a.fecha_turno || '9999-12-31';
-        const horaA = (a.hora_pickup && a.hora_pickup.trim() !== '') ? a.hora_pickup : (a.hora_turno || '23:59');
-        const dateTimeA = new Date(`${fechaA}T${horaA}`);
         const fechaB = b.fecha_turno || '9999-12-31';
-        const horaB = (b.hora_pickup && b.hora_pickup.trim() !== '') ? b.hora_pickup : (b.hora_turno || '23:59');
-        const dateTimeB = new Date(`${fechaB}T${horaB}`);
-        return dateTimeA - dateTimeB; 
+
+        // 2. Determinar la hora efectiva (Pickup gana a Turno)
+        const horaA = (a.hora_pickup && a.hora_pickup.trim()) ? a.hora_pickup : (a.hora_turno || '23:59');
+        const horaB = (b.hora_pickup && b.hora_pickup.trim()) ? b.hora_pickup : (b.hora_turno || '23:59');
+
+        // 3. Crear cadenas comparables "YYYY-MM-DD HH:MM"
+        // La comparación de strings ISO es más segura que instanciar objetos Date
+        const timeA = `${fechaA} ${horaA}`;
+        const timeB = `${fechaB} ${horaB}`;
+
+        return timeA.localeCompare(timeB);
     });
     
     const ahora = new Date();
@@ -147,28 +155,48 @@ export async function buscarEnReservas(texto, caches) {
     }
 }
 
+// --- FUNCIÓN DE GUARDADO CORREGIDA Y LIMPIA ---
 export async function handleSaveReserva(e, caches) {
     e.preventDefault();
-    const f = e.target;
+    const f = e.target; 
     const submitBtn = f.querySelector('button[type="submit"]');
     
-    const generarRegreso = f.tiene_regreso.checked;
-    if (generarRegreso) {
-        f.tiene_regreso.checked = false;
+    // --- 1. RECOLECTAR MÚLTIPLES ORÍGENES ---
+    const inputsOrigen = document.querySelectorAll('.origen-input');
+    let origenesArray = [];
+    inputsOrigen.forEach(input => {
+        if (input.value && input.value.trim() !== "") {
+            origenesArray.push(input.value.trim());
+        }
+    });
+    // Los unimos con " + " para guardarlo como un solo texto
+    const origenFinal = origenesArray.join(' + ');
+
+    // Validar que haya al menos un origen
+    if (!origenFinal) {
+        alert("Debes ingresar al menos una dirección de origen.");
+        return;
     }
 
     let datosParaRegreso = null;
+    const generarRegreso = f.tiene_regreso ? f.tiene_regreso.checked : false;
 
     try {
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Guardando...';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Guardando...';
+        }
         
         const rId = f['reserva-id'].value;
         const movilIdParaAsignar = f.asignar_movil.value;
         const esX = f.viaje_exclusivo.checked;
         const cP = esX ? '4' : f.cantidad_pasajeros.value;
         
-        const coords = getModalMarkerCoords(); 
+        // Intentamos obtener coordenadas si la función existe
+        let coords = { origen: null, destino: null };
+        if (typeof getModalMarkerCoords === 'function') {
+            coords = getModalMarkerCoords(); 
+        }
 
         const d = {
             cliente: f.cliente.value,
@@ -180,7 +208,7 @@ export async function handleSaveReserva(e, caches) {
             fecha_turno: f.fecha_turno.value,
             hora_turno: f.hora_turno.value,
             hora_pickup: f.hora_pickup.value,
-            origen: f.origen.value,
+            origen: origenFinal,  // Variable calculada arriba
             destino: f.destino.value,
             origen_coords: coords.origen,
             destino_coords: coords.destino,
@@ -205,8 +233,11 @@ export async function handleSaveReserva(e, caches) {
 
         if (movilIdParaAsignar && reservaGuardadaId) {
             const reservaDoc = await db.collection('reservas').doc(reservaGuardadaId).get();
-            if (reservaDoc.exists && reservaDoc.data().movil_asignado_id !== movilIdParaAsignar) {
-                await asignarMovil(reservaGuardadaId, movilIdParaAsignar, caches);
+            if (reservaDoc.exists) {
+                const actualMovil = reservaDoc.data().movil_asignado_id;
+                if (actualMovil !== movilIdParaAsignar) {
+                    await asignarMovil(reservaGuardadaId, movilIdParaAsignar, caches);
+                }
             }
         }
 
@@ -236,10 +267,13 @@ export async function handleSaveReserva(e, caches) {
         document.getElementById('reserva-modal').style.display = 'none';
 
     } catch (error) {
+        console.error("Error saving:", error);
         alert("Error al guardar: " + error.message);
     } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Guardar Reserva';
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Guardar Reserva';
+        }
     }
 
     return datosParaRegreso;
@@ -266,7 +300,21 @@ export async function handleConfirmarDesdeModal(e, caches) {
         const movilIdParaAsignar = f.asignar_movil.value;
         const esX = f.viaje_exclusivo.checked;
         const cP = esX ? '4' : f.cantidad_pasajeros.value;
-        const coords = getModalMarkerCoords(); 
+        
+        let coords = { origen: null, destino: null };
+        if (typeof getModalMarkerCoords === 'function') {
+            coords = getModalMarkerCoords(); 
+        }
+
+        // Recuperar múltiples orígenes también para la confirmación
+        const inputsOrigen = document.querySelectorAll('.origen-input');
+        let origenesArray = [];
+        inputsOrigen.forEach(input => {
+            if (input.value && input.value.trim() !== "") {
+                origenesArray.push(input.value.trim());
+            }
+        });
+        const origenFinal = origenesArray.join(' + ');
 
         const d = {
             cliente: f.cliente.value,
@@ -278,7 +326,7 @@ export async function handleConfirmarDesdeModal(e, caches) {
             fecha_turno: f.fecha_turno.value,
             hora_turno: f.hora_turno.value,
             hora_pickup: f.hora_pickup.value,
-            origen: f.origen.value,
+            origen: origenFinal,
             destino: f.destino.value,
             origen_coords: coords.origen,
             destino_coords: coords.destino,
@@ -286,7 +334,6 @@ export async function handleConfirmarDesdeModal(e, caches) {
             zona: f.zona.value,
             observaciones: f.observaciones.value,
             es_exclusivo: esX,
-            // AQUÍ FORZAMOS EL CAMBIO DE ESTADO:
             estado: { 
                 principal: 'Pendiente', 
                 detalle: 'Confirmado por operador desde edición',
@@ -297,16 +344,12 @@ export async function handleConfirmarDesdeModal(e, caches) {
         if (rId) {
             await db.collection('reservas').doc(rId).update(d);
         } else {
-            // Raro caso de crear y confirmar a la vez, pero soportado
             d.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
             await db.collection('reservas').add(d);
         }
 
-        // Si asignaron móvil, procesarlo también
         if (movilIdParaAsignar && rId) {
-             if (movilIdParaAsignar) {
-                 await asignarMovil(rId, movilIdParaAsignar, caches);
-             }
+             await asignarMovil(rId, movilIdParaAsignar, caches);
         }
 
         document.getElementById('reserva-modal').style.display = 'none';
@@ -339,19 +382,51 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     form.fecha_turno.value = data.fecha_turno || '';
     form.hora_turno.value = data.hora_turno || '';
     form.hora_pickup.value = data.hora_pickup || '';
-    form.origen.value = data.origen || '';
     form.destino.value = data.destino || '';
     form.cantidad_pasajeros.value = data.cantidad_pasajeros || '1';
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
     form.asignar_movil.value = data.movil_asignado_id || '';
     
+    // --- LÓGICA DE MÚLTIPLES ORÍGENES AL EDITAR ---
+    const container = document.getElementById('origenes-container');
+    container.innerHTML = `
+        <div class="input-group-origen" style="display: flex; gap: 5px;">
+            <input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;">
+            <div style="width: 30px;"></div>
+        </div>
+    `;
+    
+    const partesOrigen = (data.origen || "").split(' + ');
+    
+    const primerInput = container.querySelector('.origen-input');
+    if (primerInput) {
+        primerInput.value = partesOrigen[0] || "";
+        if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(primerInput);
+    }
+
+    for (let i = 1; i < partesOrigen.length; i++) {
+        const div = document.createElement('div');
+        div.className = 'input-group-origen';
+        div.style.cssText = "display: flex; gap: 5px; align-items: center;";
+        div.innerHTML = `
+            <span style="font-size: 18px; color: #6c757d;">↳</span>
+            <input type="text" name="origen_dinamico" class="origen-input" value="${partesOrigen[i]}" style="flex: 1;">
+            <button type="button" class="btn-remove-origen" style="background: none; border: none; color: red; font-weight: bold; cursor: pointer; width: 30px;">✕</button>
+        `;
+        div.querySelector('.btn-remove-origen').addEventListener('click', () => div.remove());
+        container.appendChild(div);
+        
+        const inputNuevo = div.querySelector('input');
+        if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(inputNuevo);
+    }
+    // ----------------------------------------------
+    
     document.getElementById('reserva-id').value = reservaId;
     document.getElementById('modal-title').textContent = 'Editar Reserva';
     
-    // --- LÓGICA DEL BOTÓN DE CONFIRMACIÓN ---
+    // Lógica del botón de confirmación
     const btnConfirmar = document.getElementById('btn-confirmar-modal');
-    // Verificar si el estado es 'Revision' (puede ser string u objeto)
     const estadoActual = (typeof data.estado === 'object' && data.estado.principal) ? data.estado.principal : data.estado;
     
     if (btnConfirmar) {
@@ -361,7 +436,6 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
             btnConfirmar.style.display = 'none';
         }
     }
-    // ----------------------------------------
 
     document.getElementById('reserva-modal').style.display = 'block';
     if(initMapaModalCallback) {
@@ -492,7 +566,10 @@ export async function handleDniBlur(e) {
             f.nombre_pasajero.value = p.nombre_apellido || '';
             f.telefono_pasajero.value = p.telefono || '';
             if (p.domicilios && p.domicilios.length > 0) {
-                f.origen.value = p.domicilios[p.domicilios.length - 1];
+                // Seteamos solo el primer domicilio como sugerencia base
+                const ultimoDom = p.domicilios[p.domicilios.length - 1];
+                const inputOrigen = document.querySelector('.origen-input');
+                if (inputOrigen) inputOrigen.value = ultimoDom;
             }
         }
     } catch (error) {
@@ -749,7 +826,6 @@ export async function manejarImportacionExcel(event) {
             const worksheet = workbook.Sheets[firstSheetName];
             const todosLosDatos = XLSX.utils.sheet_to_json(worksheet);
             
-            // --- NUEVA LÓGICA DE LOTES (BATCHING) ---
             const btnImportar = document.getElementById('btn-importar-excel');
             if(btnImportar) {
                 btnImportar.disabled = true;
@@ -871,8 +947,6 @@ async function guardarReservasEnLote(reservas) {
             },
             creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
             cantidad_pasajeros: '1', 
-            
-           
             es_exclusivo: reserva.es_exclusivo || false
         };
         
@@ -899,8 +973,9 @@ async function guardarReservasEnLote(reservas) {
     const btnImportadas = document.querySelector('button[data-tab="importadas"]');
     if(btnImportadas) btnImportadas.click();
 }
+
 // ===================================================================================
-// FUNCIONES DE GESTIÓN MASIVA (REVISIÓN) - PEGAR AL FINAL DE RESERVAS.JS
+// FUNCIONES DE GESTIÓN MASIVA (REVISIÓN)
 // ===================================================================================
 
 export async function limpiarReservasDeRevision() {
@@ -1027,7 +1102,6 @@ export async function manejarImportacionPDF(event) {
                 if (confirm(`La IA detectó ${reservas.length} reservas en el PDF.\n\n¿Deseas importarlas a Revisión?`)) {
                     btn.textContent = "💾 Guardando...";
                     // Reutilizamos tu función de guardar lotes que ya creamos para el Excel
-                    // Nota: Asegúrate de que guardarReservasEnLote esté accesible o pásala aquí
                     await guardarReservasEnLote(reservas); 
                 }
             } else {
@@ -1051,6 +1125,3 @@ export async function manejarImportacionPDF(event) {
         btn.textContent = textoOriginal;
     };
 }
-
-// Nota: Asegúrate de que la función 'guardarReservasEnLote' (que creamos para Excel)
-// esté disponible en este ámbito o exportada/importada correctamente.

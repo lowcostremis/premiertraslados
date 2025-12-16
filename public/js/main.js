@@ -25,7 +25,6 @@ import {
     handleDniBlur,
     confirmarReservaImportada,
     handleConfirmarDesdeModal
-    // SE ELIMINÓ 'toggleTableSelection' DE AQUÍ PORQUE YA ESTÁ DEFINIDA ABAJO
 } from './reservas.js';
 
 
@@ -74,68 +73,78 @@ document.getElementById('login-btn').addEventListener('click', () => {
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
 // 1. Botón "Borrar TODAS"
-    document.getElementById('btn-limpiar-revision')?.addEventListener('click', async () => {
-        if (confirm("⚠️ ¡PELIGRO!\n\nEstás a punto de borrar TODAS las reservas de la lista de revisión.\nEsta acción no se puede deshacer.\n\n¿Estás seguro?")) {
-            const btn = document.getElementById('btn-limpiar-revision');
-            btn.disabled = true;
-            btn.textContent = "⏳ Borrando...";
-            
-            // Importamos dinámicamente o usamos si ya está importada en window.app (ver abajo)
-            const { limpiarReservasDeRevision } = await import('./reservas.js');
-            await limpiarReservasDeRevision();
-            
-            btn.disabled = false;
-            btn.textContent = "🔥 Borrar TODAS las de Revisión";
-        }
-    });
+document.getElementById('btn-limpiar-revision')?.addEventListener('click', async () => {
+    if (confirm("⚠️ ¡PELIGRO!\n\nEstás a punto de borrar TODAS las reservas de la lista de revisión.\nEsta acción no se puede deshacer.\n\n¿Estás seguro?")) {
+        const btn = document.getElementById('btn-limpiar-revision');
+        btn.disabled = true;
+        btn.textContent = "⏳ Borrando...";
+        
+        const { limpiarReservasDeRevision } = await import('./reservas.js');
+        await limpiarReservasDeRevision();
+        
+        btn.disabled = false;
+        btn.textContent = "🔥 Borrar TODAS las de Revisión";
+    }
+});
 
 // 2. Checkbox "Seleccionar Todo"
-    document.getElementById('check-all-revision')?.addEventListener('change', (e) => {
-        const checked = e.target.checked;
-        document.querySelectorAll('.check-reserva-revision').forEach(chk => {
-            chk.checked = checked;
-        });
+document.getElementById('check-all-revision')?.addEventListener('change', (e) => {
+    const checked = e.target.checked;
+    document.querySelectorAll('.check-reserva-revision').forEach(chk => {
+        chk.checked = checked;
+    });
+    actualizarPanelLote();
+});
+
+// 3. Listener delegado para los checkboxes individuales
+document.getElementById('tabla-importadas')?.addEventListener('change', (e) => {
+    if (e.target.classList.contains('check-reserva-revision')) {
         actualizarPanelLote();
-    });
-
-    // 3. Listener delegado para los checkboxes individuales (porque se crean dinámicamente)
-    document.getElementById('tabla-importadas')?.addEventListener('change', (e) => {
-        if (e.target.classList.contains('check-reserva-revision')) {
-            actualizarPanelLote();
-        }
-    });
-
-    function actualizarPanelLote() {
-        const checks = document.querySelectorAll('.check-reserva-revision:checked');
-        const count = checks.length;
-        const panel = document.getElementById('panel-acciones-lote');
-        document.getElementById('contador-check-revision').textContent = count;
-
-        if (count > 0) {
-            panel.style.display = 'flex';
-        } else {
-            panel.style.display = 'none';
-        }
     }
+});
 
-    // 4. Botones de Acción Lote
-    document.getElementById('btn-borrar-lote')?.addEventListener('click', async () => {
-        const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
-        if (confirm(`¿Borrar estas ${ids.length} reservas?`)) {
-            const { procesarLoteRevision } = await import('./reservas.js');
-            await procesarLoteRevision('borrar', ids);
-        }
-    });
+function actualizarPanelLote() {
+    const checks = document.querySelectorAll('.check-reserva-revision:checked');
+    const count = checks.length;
+    const panel = document.getElementById('panel-acciones-lote');
+    document.getElementById('contador-check-revision').textContent = count;
 
-    document.getElementById('btn-confirmar-lote')?.addEventListener('click', async () => {
-        const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
-        if (confirm(`¿Confirmar estas ${ids.length} reservas para que pasen a Pendientes?`)) {
-            const { procesarLoteRevision } = await import('./reservas.js');
-            await procesarLoteRevision('confirmar', ids);
-        }
-    });
-    
+    if (count > 0) {
+        panel.style.display = 'flex';
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+// 4. Botones de Acción Lote
+document.getElementById('btn-borrar-lote')?.addEventListener('click', async () => {
+    const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
+    if (confirm(`¿Borrar estas ${ids.length} reservas?`)) {
+        const { procesarLoteRevision } = await import('./reservas.js');
+        await procesarLoteRevision('borrar', ids);
+    }
+});
+
+document.getElementById('btn-confirmar-lote')?.addEventListener('click', async () => {
+    const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
+    if (confirm(`¿Confirmar estas ${ids.length} reservas para que pasen a Pendientes?`)) {
+        const { procesarLoteRevision } = await import('./reservas.js');
+        await procesarLoteRevision('confirmar', ids);
+    }
+});
+
 // 4. FUNCIONES PRINCIPALES Y DE UTILIDAD
+
+// --- FUNCIÓN FALTANTE QUE SE AGREGA AHORA ---
+function activarAutocomplete(inputElement) {
+    if (!window.google || !window.google.maps || !window.google.maps.places) return;
+    
+    new google.maps.places.Autocomplete(inputElement, {
+        fields: ["formatted_address", "geometry", "name"],
+        strictBounds: false,
+    });
+}
+// --------------------------------------------
 
 function loadAuxData() {
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
@@ -222,7 +231,6 @@ function updateTablePanelVisibility() {
     }
 }
 
-// ESTA ES LA DEFINICIÓN LOCAL QUE ENTRABA EN CONFLICTO CON LA IMPORTACIÓN
 function toggleTableSelection(reservaId, rowElement) {
     if (selectedTableIds.has(reservaId)) {
         selectedTableIds.delete(reservaId);
@@ -323,6 +331,7 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
 }
 
 // 5. INICIALIZACIÓN CENTRAL DE LA APLICACIÓN
+// 5. INICIALIZACIÓN CENTRAL DE LA APLICACIÓN
 function initApp() {
     console.log("Intentando inicializar la aplicación en:", new Date().toLocaleTimeString());
     
@@ -355,7 +364,60 @@ function initApp() {
         });
     }
 
-    // --- NUEVO LISTENER PARA IMPORTAR GMAIL ---
+    // --- LOGICA PARA MULTIPLES ORIGENES ---
+    function initMultiOrigenLogic() {
+        const container = document.getElementById('origenes-container');
+        const btnAdd = document.getElementById('btn-add-origen');
+        
+        if (!container || !btnAdd) return;
+
+        // 1. Activar autocomplete en el input inicial
+        const primerInput = container.querySelector('.origen-input');
+        if (primerInput) activarAutocomplete(primerInput);
+
+        const MAX_ORIGENES = 4;
+    
+        btnAdd.addEventListener('click', () => {
+            const inputsActuales = container.querySelectorAll('.origen-input').length;
+            
+            if (inputsActuales >= MAX_ORIGENES) {
+                alert("Máximo de 4 orígenes permitidos.");
+                return;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'input-group-origen';
+            div.style.cssText = "display: flex; gap: 5px; align-items: center;";
+            
+            div.innerHTML = `
+                <span style="font-size: 18px; color: #6c757d;">↳</span>
+                <input type="text" name="origen_dinamico" class="origen-input" placeholder="Parada adicional..." style="flex: 1;">
+                <button type="button" class="btn-remove-origen" style="background: none; border: none; color: red; font-weight: bold; cursor: pointer; width: 30px;">✕</button>
+            `;
+
+            container.appendChild(div);
+
+            // 2. IMPORTANTE: Activar Autocomplete en el NUEVO input
+            const nuevoInput = div.querySelector('input');
+            activarAutocomplete(nuevoInput);
+
+            div.querySelector('.btn-remove-origen').addEventListener('click', () => {
+                div.remove();
+            });
+        });
+    }
+
+    // Iniciar lógica de orígenes múltiples
+    initMultiOrigenLogic();
+
+    // --- CORRECCIÓN: ACTIVAR DESTINO AL INICIAR ---
+    const inputDestino = document.getElementById('destino');
+    if (inputDestino) {
+        activarAutocomplete(inputDestino);
+    }
+    // ----------------------------------------------
+
+    // --- IMPORTAR GMAIL ---
     document.getElementById('btn-importar-gmail')?.addEventListener('click', async () => {
         const btn = document.getElementById('btn-importar-gmail');
         const confirmacion = confirm("¿Deseas buscar nuevos viajes en la bandeja de entrada de Gmail (no leídos)?");
@@ -365,15 +427,11 @@ function initApp() {
             btn.disabled = true;
             btn.textContent = '⏳ Buscando en Gmail...';
             
-            // Importamos 'functions' de firebase-config.js y llamamos a la nueva función de Cloud Functions
-            
             const procesarReservasGmail = firebase.functions().httpsCallable('procesarReservasGmail');
-            
             const result = await procesarReservasGmail();
 
             alert(result.data.message || "Búsqueda finalizada. Revisa la pestaña 'Importadas'.");
             
-            // Cambia a la pestaña de "Importadas (Revisión)"
             const btnImportadas = document.querySelector('button[data-tab="importadas"]');
             if(btnImportadas) btnImportadas.click(); 
             
@@ -386,22 +444,19 @@ function initApp() {
         }
     });
 
-    // --- NUEVO CÓDIGO PARA PDF ---
+    // --- IMPORTAR PDF ---
     const btnImportarPDF = document.getElementById('btn-importar-pdf');
     const inputPDF = document.getElementById('input-pdf');
 
     if (btnImportarPDF && inputPDF) {
-        // 1. Al hacer clic en el botón naranja, abrimos el selector de archivos oculto
         btnImportarPDF.addEventListener('click', () => {
             inputPDF.click();
         });
 
-        // 2. Cuando el usuario selecciona un archivo...
         inputPDF.addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
                 console.log("PDF detectado, iniciando procesamiento...");
                 try {
-                    // Importamos la función dinámicamente desde reservas.js
                     const { manejarImportacionPDF } = await import('./reservas.js');
                     manejarImportacionPDF(e);
                 } catch (err) {
@@ -411,7 +466,6 @@ function initApp() {
             }
         });
     }
-
 
     document.getElementById('btn-nueva-reserva')?.addEventListener('click', () => {
         document.getElementById('reserva-form').reset();
@@ -463,7 +517,6 @@ function initApp() {
 
     document.getElementById('btn-assign-multi')?.addEventListener('click', async () => {
         const movilId = document.getElementById('multi-select-movil').value;
-        
         if (!movilId) {
             alert('Por favor, selecciona un móvil para asignar.');
             return;
@@ -497,6 +550,7 @@ function initApp() {
         }
     });
 
+    // --- DEFINICIÓN LIMPIA DE WINDOW.APP ---
     window.app = {
         editItem, deleteItem, openResetPasswordModal,
         openEditReservaModal: (reservaId) => openEditReservaModal(reservaId, caches, initMapaModal),
@@ -511,8 +565,9 @@ function initApp() {
         filtrarPorHoras,
         getSelectedReservasIds,
         confirmarReservaImportada,
-        toggleTableSelection, // Se usa la función local
-        handleConfirmarDesdeModal
+        toggleTableSelection, 
+        handleConfirmarDesdeModal,
+        activarAutocomplete: activarAutocomplete // Ahora sí existe la función
     };
     
     window.openTab = (event, tabName) => openTab(event, tabName, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
@@ -526,7 +581,6 @@ function initApp() {
         }
     });
     
-    // --- LISTENER PARA EL NUEVO BOTÓN DE CONFIRMAR ---
     document.getElementById('btn-confirmar-modal')?.addEventListener('click', (e) => {
         handleConfirmarDesdeModal(e, caches);
     });
@@ -559,5 +613,3 @@ function initApp() {
 
     openTab(null, 'Reservas');
 }
-
-
