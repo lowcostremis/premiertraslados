@@ -24,6 +24,43 @@ export function poblarSelectDeMoviles(caches) {
     movilSelect.value = valorActual;
 }
 
+// --- BARRA DE PROGRESO (UI) ---
+function actualizarProgreso(mensaje, porcentaje) {
+    let progressContainer = document.getElementById('import-progress-container');
+    
+    if (!progressContainer) {
+        const panelImportar = document.getElementById('panel-importar');
+        const targetContainer = panelImportar || document.querySelector('#reservas-importadas');
+        
+        if (targetContainer) {
+            progressContainer = document.createElement('div');
+            progressContainer.id = 'import-progress-container';
+            progressContainer.style.cssText = "margin: 15px 0; padding: 15px; background: #f0f8ff; border-radius: 8px; border: 1px solid #1877f2; box-shadow: 0 2px 5px rgba(0,0,0,0.1);";
+            progressContainer.innerHTML = `
+                <div style="margin-bottom: 8px; font-weight: bold; color: #1877f2; font-family: sans-serif;" id="import-status-text">Iniciando...</div>
+                <div style="width: 100%; background-color: #e9ecef; border-radius: 10px; height: 20px; overflow: hidden;">
+                    <div id="import-progress-bar" style="width: 0%; height: 100%; background-color: #1877f2; border-radius: 10px; transition: width 0.5s ease-in-out; background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent); background-size: 1rem 1rem;"></div>
+                </div>
+            `;
+            targetContainer.insertBefore(progressContainer, targetContainer.firstChild);
+        }
+    }
+    
+    if (progressContainer) {
+        document.getElementById('import-status-text').textContent = mensaje;
+        document.getElementById('import-progress-bar').style.width = `${porcentaje}%`;
+        progressContainer.style.display = 'block';
+    }
+}
+
+function ocultarProgreso() {
+    const p = document.getElementById('import-progress-container');
+    if (p) {
+        p.style.display = 'none';
+        document.getElementById('import-progress-bar').style.width = '0%';
+    }
+}
+
 
 // --- FUNCIONES EXPUESTAS (EXPORTADAS) ---
 
@@ -48,19 +85,12 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
     });
 
     reservas.sort((a, b) => {
-    // 1. Obtener fechas (YYYY-MM-DD)
         const fechaA = a.fecha_turno || '9999-12-31';
         const fechaB = b.fecha_turno || '9999-12-31';
-
-        // 2. Determinar la hora efectiva (Pickup gana a Turno)
         const horaA = (a.hora_pickup && a.hora_pickup.trim()) ? a.hora_pickup : (a.hora_turno || '23:59');
         const horaB = (b.hora_pickup && b.hora_pickup.trim()) ? b.hora_pickup : (b.hora_turno || '23:59');
-
-        // 3. Crear cadenas comparables "YYYY-MM-DD HH:MM"
-        // La comparación de strings ISO es más segura que instanciar objetos Date
         const timeA = `${fechaA} ${horaA}`;
         const timeB = `${fechaB} ${horaB}`;
-
         return timeA.localeCompare(timeB);
     });
     
@@ -81,28 +111,18 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
             }
             else if (estadoPrincipal === 'Asignado' || estadoPrincipal === 'En Origen' || estadoPrincipal === 'Viaje Iniciado') {
                    targetTableId = 'tabla-asignados';
-                   if (filtroChoferAsignadosId) {
-                        if (reserva.chofer_asignado_id !== filtroChoferAsignadosId) return;
-                    }
-
+                   if (filtroChoferAsignadosId && reserva.chofer_asignado_id !== filtroChoferAsignadosId) return;
             } else if (estadoPrincipal === 'Pendiente') {
-                if (fechaTurno && fechaTurno > limite24hs) {
-                    targetTableId = 'tabla-pendientes';
-                } else {
-                    targetTableId = 'tabla-en-curso';
-              }
+                targetTableId = (fechaTurno && fechaTurno > limite24hs) ? 'tabla-pendientes' : 'tabla-en-curso';
             } else {
-                    targetTableId = 'tabla-en-curso';
+                targetTableId = 'tabla-en-curso';
             }
 
             if (targetTableId === 'tabla-en-curso' && filtroHoras !== null) {
                 const horaReferencia = reserva.hora_pickup || reserva.hora_turno;
                 if (!reserva.fecha_turno || !horaReferencia) return;
                 const fechaHoraReserva = new Date(`${reserva.fecha_turno}T${horaReferencia}`);
-                const ahoraLocal = new Date();
-                const diferenciaMilisegundos = fechaHoraReserva.getTime() - ahoraLocal.getTime();
-                const horasDiferencia = diferenciaMilisegundos / (1000 * 60 * 60);
-                
+                const horasDiferencia = (fechaHoraReserva.getTime() - ahora.getTime()) / (1000 * 60 * 60);
                 if (horasDiferencia > filtroHoras) return;
             }
 
@@ -113,6 +133,120 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
             console.error("Error renderizando una reserva:", reserva.id, error);
         }
     });
+}
+
+// --- RENDERIZADO DE FILAS (CORREGIDO DESPLAZAMIENTO) ---
+function renderFilaReserva(tbody, reserva, caches) {
+    const cliente = caches.clientes[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
+    const row = tbody.insertRow();
+    row.dataset.id = reserva.id;
+
+    // Detectar en qué tabla estamos para ajustar columnas
+    const isRev = (tbody.closest('#reservas-importadas') !== null);
+    const isAsig = (tbody.closest('#reservas-asignados') !== null);
+
+    const e = (typeof reserva.estado === 'object') ? reserva.estado.principal : reserva.estado;
+    const det = (typeof reserva.estado === 'object') ? reserva.estado.detalle : '';
+    
+    // Colores de estado
+    if (reserva.es_exclusivo) row.style.backgroundColor = '#51ED8D';
+    else if (e === 'Negativo') row.style.backgroundColor = '#FFDE59';
+    else if (det.startsWith('Rechazado')) row.style.backgroundColor = '#f8d7da';
+    else if (e === 'Anulado') row.className = 'estado-anulado';
+    else if (cliente.color && cliente.color !== '#ffffff') {
+        row.style.backgroundColor = cliente.color;
+        const hex = cliente.color.replace('#','');
+        const r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
+        row.style.color = ((r*299 + g*587 + b*114)/1000 >= 128) ? 'black' : 'white';
+    }
+
+    // Selección
+    row.addEventListener('click', (ev) => {
+        if (!window.isTableMultiSelectMode) return;
+        if (!ev.target.closest('button') && !ev.target.closest('select') && !ev.target.closest('input') && !ev.target.closest('a')) {
+            window.app.toggleTableSelection(reserva.id, row);
+        }
+    });
+
+    const fT = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
+    const checkHTML = isRev ? `<td style="text-align:center;"><input type="checkbox" class="check-reserva-revision" value="${reserva.id}"></td>` : '';
+    
+    // HTML Estado + Móvil
+    let estHTML = `<strong>${e}</strong><br><small>${det}</small>`;
+    if (reserva.movil_asignado_id) {
+        const m = caches.moviles.find(mo => mo.id === reserva.movil_asignado_id);
+        if(m) estHTML += `<br><small>Móvil ${m.numero}</small>`;
+    }
+
+    // Menú de Acciones
+    let menuItems = `<a onclick="window.app.openEditReservaModal('${reserva.id}')">Editar</a>`;
+    if(isRev) {
+        menuItems += `<hr><a style="color:green" onclick="window.app.confirmarReservaImportada('${reserva.id}')">Confirmar</a><a style="color:red" onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Descartar</a>`;
+    } else if (isAsig) {
+        menuItems += `<a onclick="window.app.finalizarReserva('${reserva.id}')">Finalizar</a><a onclick="window.app.quitarAsignacion('${reserva.id}')">Quitar Móvil</a><a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
+    } else {
+        let opts = caches.moviles.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('');
+        menuItems += `<select onchange="window.app.asignarMovil('${reserva.id}',this.value)"><option value="">Asignar...</option>${opts}</select>`;
+        menuItems += `<a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
+    }
+
+    // --- CONSTRUCCIÓN DEL HTML DE LA FILA ---
+    // AQUI ESTABA EL ERROR: Si es revisión, NO agregamos las celdas de edición (Pickup y Zona)
+    // para que coincida con el encabezado.
+    
+    let filaHTML = `
+        ${checkHTML}
+        <td>${reserva.autorizacion || ''}</td>
+        <td>${reserva.siniestro || ''}</td>
+        <td>${fT}</td>
+        <td>${reserva.hora_turno || ''}</td>
+    `;
+
+    // Solo agregar columna Pickup editable si NO es revisión
+    if (!isRev) {
+        filaHTML += `<td class="editable-cell pickup-cell"></td>`;
+    }
+
+    filaHTML += `
+        <td>${reserva.nombre_pasajero || ''}</td>
+        <td>${reserva.origen || ''}</td>
+        <td>${reserva.destino || ''}</td>
+        <td>${reserva.cantidad_pasajeros || 1}</td>
+    `;
+
+    // Solo agregar columna Zona editable si NO es revisión
+    if (!isRev) {
+        filaHTML += `<td class="editable-cell zona-cell"></td>`;
+    }
+
+    filaHTML += `
+        <td style="font-weight:bold; color:#1877f2;">${reserva.distancia || '--'}</td>
+        <td>${cliente.nombre}</td>
+        <td>${estHTML}</td>
+        <td class="acciones"><div class="acciones-dropdown"><button class="icono-tres-puntos" onclick="window.app.toggleMenu(event)">⋮</button><div class="menu-contenido">${menuItems}</div></div></td>
+    `;
+
+    row.innerHTML = filaHTML;
+
+    // Lógica para celdas editables (Solo si existen)
+    if (!isRev && e !== 'Finalizado') {
+        const pC = row.querySelector('.pickup-cell');
+        const zC = row.querySelector('.zona-cell');
+        
+        if (pC) pC.innerHTML = `<input type="time" value="${reserva.hora_pickup || ''}" onchange="window.app.updateHoraPickup(event,'${reserva.id}')">`;
+        
+        if (zC) {
+            let zS = `<select onchange="window.app.updateZona(event,'${reserva.id}')"><option value="">..</option>`;
+            caches.zonas.forEach(z => zS += `<option value="${z.descripcion}" ${reserva.zona === z.descripcion ? 'selected' : ''}>${z.descripcion}</option>`);
+            zC.innerHTML = zS + `</select>`;
+        }
+    } else {
+        // En modo lectura o revisión, si la celda existe en HTML (caso raro), poner texto plano
+        const pC = row.querySelector('.pickup-cell');
+        const zC = row.querySelector('.zona-cell');
+        if(pC) pC.textContent = reserva.hora_pickup || '';
+        if(zC) zC.textContent = reserva.zona || '';
+    }
 }
 
 export async function buscarEnReservas(texto, caches) {
@@ -126,7 +260,6 @@ export async function buscarEnReservas(texto, caches) {
         subNav.style.display = 'flex';
         const tabBtnActiva = document.querySelector('#Reservas .sub-tab-btn.active');
         const tabActiva = tabBtnActiva ? tabBtnActiva.dataset.tab : 'en-curso';
-        
         containersOriginales.forEach(c => c.style.display = 'none');
         const targetDiv = document.getElementById(`reservas-${tabActiva}`);
         if(targetDiv) targetDiv.style.display = 'block';
@@ -145,7 +278,6 @@ export async function buscarEnReservas(texto, caches) {
             resultadosTbody.innerHTML = '<tr><td colspan="13">No se encontraron reservas.</td></tr>';
             return;
         }
-
         hits.forEach(reserva => {
             renderFilaReserva(resultadosTbody, {id: reserva.objectID, ...reserva}, caches);
         });
@@ -155,13 +287,12 @@ export async function buscarEnReservas(texto, caches) {
     }
 }
 
-// --- FUNCIÓN DE GUARDADO CORREGIDA Y LIMPIA ---
+// --- FUNCIÓN DE GUARDADO (CON DISTANCIA) ---
 export async function handleSaveReserva(e, caches) {
     e.preventDefault();
     const f = e.target; 
     const submitBtn = f.querySelector('button[type="submit"]');
     
-    // --- 1. RECOLECTAR MÚLTIPLES ORÍGENES ---
     const inputsOrigen = document.querySelectorAll('.origen-input');
     let origenesArray = [];
     inputsOrigen.forEach(input => {
@@ -169,14 +300,15 @@ export async function handleSaveReserva(e, caches) {
             origenesArray.push(input.value.trim());
         }
     });
-    // Los unimos con " + " para guardarlo como un solo texto
     const origenFinal = origenesArray.join(' + ');
 
-    // Validar que haya al menos un origen
     if (!origenFinal) {
         alert("Debes ingresar al menos una dirección de origen.");
         return;
     }
+
+    const distanciaInput = document.getElementById('distancia_total_input');
+    const distanciaTotal = distanciaInput ? distanciaInput.value : '';
 
     let datosParaRegreso = null;
     const generarRegreso = f.tiene_regreso ? f.tiene_regreso.checked : false;
@@ -192,7 +324,6 @@ export async function handleSaveReserva(e, caches) {
         const esX = f.viaje_exclusivo.checked;
         const cP = esX ? '4' : f.cantidad_pasajeros.value;
         
-        // Intentamos obtener coordenadas si la función existe
         let coords = { origen: null, destino: null };
         if (typeof getModalMarkerCoords === 'function') {
             coords = getModalMarkerCoords(); 
@@ -208,14 +339,15 @@ export async function handleSaveReserva(e, caches) {
             fecha_turno: f.fecha_turno.value,
             hora_turno: f.hora_turno.value,
             hora_pickup: f.hora_pickup.value,
-            origen: origenFinal,  // Variable calculada arriba
+            origen: origenFinal,  
             destino: f.destino.value,
             origen_coords: coords.origen,
             destino_coords: coords.destino,
             cantidad_pasajeros: cP,
             zona: f.zona.value,
             observaciones: f.observaciones.value,
-            es_exclusivo: esX
+            es_exclusivo: esX,
+            distancia: distanciaTotal
         };
 
         if (!rId) {
@@ -232,21 +364,15 @@ export async function handleSaveReserva(e, caches) {
         }
 
         if (movilIdParaAsignar && reservaGuardadaId) {
-            const reservaDoc = await db.collection('reservas').doc(reservaGuardadaId).get();
-            if (reservaDoc.exists) {
-                const actualMovil = reservaDoc.data().movil_asignado_id;
-                if (actualMovil !== movilIdParaAsignar) {
-                    await asignarMovil(reservaGuardadaId, movilIdParaAsignar, caches);
-                }
-            }
+            await asignarMovil(reservaGuardadaId, movilIdParaAsignar, caches);
         }
 
-        if (d.dni_pasajero && d.origen) {
+        if (d.dni_pasajero && origenesArray.length > 0) {
             const pRef = db.collection('pasajeros').doc(d.dni_pasajero);
             const pData = {
                 nombre_apellido: d.nombre_pasajero,
                 telefono: d.telefono_pasajero,
-                domicilios: firebase.firestore.FieldValue.arrayUnion(d.origen)
+                domicilios: firebase.firestore.FieldValue.arrayUnion(origenesArray[0])
             };
             await pRef.set(pData, { merge: true });
         }
@@ -279,48 +405,35 @@ export async function handleSaveReserva(e, caches) {
     return datosParaRegreso;
 }
 
-// --- NUEVA FUNCIÓN: CONFIRMAR DIRECTAMENTE DESDE EL MODAL ---
 export async function handleConfirmarDesdeModal(e, caches) {
     e.preventDefault();
     const f = document.getElementById('reserva-form');
     
-    // Validar formulario manualmente porque es un botón type="button"
     if (!f.checkValidity()) {
         f.reportValidity();
         return;
     }
 
     const btn = document.getElementById('btn-confirmar-modal');
-    
     try {
-        btn.disabled = true;
-        btn.textContent = 'Procesando...';
+        btn.disabled = true; btn.textContent = 'Procesando...';
         
         const rId = f['reserva-id'].value;
-        const movilIdParaAsignar = f.asignar_movil.value;
+        const movilId = f.asignar_movil.value;
         const esX = f.viaje_exclusivo.checked;
         const cP = esX ? '4' : f.cantidad_pasajeros.value;
         
-        let coords = { origen: null, destino: null };
-        if (typeof getModalMarkerCoords === 'function') {
-            coords = getModalMarkerCoords(); 
-        }
-
-        // Recuperar múltiples orígenes también para la confirmación
         const inputsOrigen = document.querySelectorAll('.origen-input');
-        let origenesArray = [];
-        inputsOrigen.forEach(input => {
-            if (input.value && input.value.trim() !== "") {
-                origenesArray.push(input.value.trim());
-            }
-        });
-        const origenFinal = origenesArray.join(' + ');
+        let origenes = []; inputsOrigen.forEach(i => { if(i.value.trim()) origenes.push(i.value.trim()); });
+        const origenFinal = origenes.join(' + ');
+        
+        const distanciaTotal = document.getElementById('distancia_total_input').value;
 
         const d = {
             cliente: f.cliente.value,
             siniestro: f.siniestro.value,
             autorizacion: f.autorizacion.value,
-            dni_pasajero: f.dni_pasajero.value.trim(),
+            dni_pasajero: f.dni_pasajero.value,
             nombre_pasajero: f.nombre_pasajero.value,
             telefono_pasajero: f.telefono_pasajero.value,
             fecha_turno: f.fecha_turno.value,
@@ -328,38 +441,21 @@ export async function handleConfirmarDesdeModal(e, caches) {
             hora_pickup: f.hora_pickup.value,
             origen: origenFinal,
             destino: f.destino.value,
-            origen_coords: coords.origen,
-            destino_coords: coords.destino,
             cantidad_pasajeros: cP,
             zona: f.zona.value,
             observaciones: f.observaciones.value,
             es_exclusivo: esX,
-            estado: { 
-                principal: 'Pendiente', 
-                detalle: 'Confirmado por operador desde edición',
-                actualizado_en: firebase.firestore.FieldValue.serverTimestamp() 
-            }
+            distancia: distanciaTotal,
+            estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() }
         };
 
-        if (rId) {
-            await db.collection('reservas').doc(rId).update(d);
-        } else {
-            d.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
-            await db.collection('reservas').add(d);
-        }
-
-        if (movilIdParaAsignar && rId) {
-             await asignarMovil(rId, movilIdParaAsignar, caches);
-        }
-
+        if (rId) await db.collection('reservas').doc(rId).update(d);
+        else { d.creadoEn = firebase.firestore.FieldValue.serverTimestamp(); await db.collection('reservas').add(d); }
+        
+        if (movilId && rId) await asignarMovil(rId, movilId, caches);
         document.getElementById('reserva-modal').style.display = 'none';
-
-    } catch (error) {
-        alert("Error al confirmar: " + error.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '✅ Confirmar e Importar';
-    }
+    } catch(err) { alert(err.message); }
+    finally { btn.disabled = false; btn.textContent = '✅ Confirmar e Importar'; }
 }
 
 export async function openEditReservaModal(reservaId, caches, initMapaModalCallback) {
@@ -388,17 +484,13 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     form.observaciones.value = data.observaciones || '';
     form.asignar_movil.value = data.movil_asignado_id || '';
     
-    // --- LÓGICA DE MÚLTIPLES ORÍGENES AL EDITAR ---
+    const distInput = document.getElementById('distancia_total_input');
+    if (distInput) distInput.value = data.distancia || '';
+
     const container = document.getElementById('origenes-container');
-    container.innerHTML = `
-        <div class="input-group-origen" style="display: flex; gap: 5px;">
-            <input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;">
-            <div style="width: 30px;"></div>
-        </div>
-    `;
+    container.innerHTML = `<div class="input-group-origen" style="display: flex; gap: 5px;"><input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;"><div style="width: 30px;"></div></div>`;
     
     const partesOrigen = (data.origen || "").split(' + ');
-    
     const primerInput = container.querySelector('.origen-input');
     if (primerInput) {
         primerInput.value = partesOrigen[0] || "";
@@ -409,719 +501,296 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
         const div = document.createElement('div');
         div.className = 'input-group-origen';
         div.style.cssText = "display: flex; gap: 5px; align-items: center;";
-        div.innerHTML = `
-            <span style="font-size: 18px; color: #6c757d;">↳</span>
-            <input type="text" name="origen_dinamico" class="origen-input" value="${partesOrigen[i]}" style="flex: 1;">
-            <button type="button" class="btn-remove-origen" style="background: none; border: none; color: red; font-weight: bold; cursor: pointer; width: 30px;">✕</button>
-        `;
-        div.querySelector('.btn-remove-origen').addEventListener('click', () => div.remove());
+        div.innerHTML = `<span style="font-size:18px;color:#6c757d;">↳</span><input type="text" class="origen-input" value="${partesOrigen[i]}" style="flex:1;"><button type="button" class="btn-remove-origen" style="color:red;border:none;background:none;font-weight:bold;cursor:pointer;">✕</button>`;
+        div.querySelector('.btn-remove-origen').addEventListener('click', () => { div.remove(); if(window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta(); });
         container.appendChild(div);
-        
         const inputNuevo = div.querySelector('input');
         if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(inputNuevo);
     }
-    // ----------------------------------------------
     
     document.getElementById('reserva-id').value = reservaId;
     document.getElementById('modal-title').textContent = 'Editar Reserva';
     
-    // Lógica del botón de confirmación
     const btnConfirmar = document.getElementById('btn-confirmar-modal');
     const estadoActual = (typeof data.estado === 'object' && data.estado.principal) ? data.estado.principal : data.estado;
-    
-    if (btnConfirmar) {
-        if (estadoActual === 'Revision') {
-            btnConfirmar.style.display = 'block';
-        } else {
-            btnConfirmar.style.display = 'none';
-        }
-    }
+    if (btnConfirmar) btnConfirmar.style.display = (estadoActual === 'Revision') ? 'block' : 'none';
 
     document.getElementById('reserva-modal').style.display = 'block';
-    if(initMapaModalCallback) {
-        setTimeout(() => initMapaModalCallback(data.origen_coords, data.destino_coords), 100);
-    }
+    
+    if(initMapaModalCallback) setTimeout(() => initMapaModalCallback(data.origen_coords, data.destino_coords), 100);
 }
 
+// ... (Helpers) ...
 export async function confirmarReservaImportada(reservaId) {
-    try {
-        await db.collection('reservas').doc(reservaId).update({
-            estado: { 
-                principal: 'Pendiente', 
-                detalle: 'Confirmado por operador',
-                actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
-            }
-        });
-    } catch (error) {
-        console.error("Error al confirmar:", error);
-        alert("Error: " + error.message);
-    }
+    try { await db.collection('reservas').doc(reservaId).update({ estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() } }); }
+    catch (e) { alert("Error: " + e.message); }
 }
-
-export async function asignarMovil(reservaId, movilId, caches) {
+export async function asignarMovil(id, movilId, caches) {
     if (!movilId) return;
     try {
-        const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movilId);
-        if (!choferAsignado) {
-            alert("Error: Este móvil no tiene un chofer vinculado actualmente.");
-            return;
-        }
-
-        const batch = db.batch();
-        const reservaRef = db.collection('reservas').doc(reservaId);
-        const choferRef = db.collection('choferes').doc(choferAsignado.id);
-
-        batch.update(reservaRef, {
-            movil_asignado_id: movilId,
-            chofer_asignado_id: choferAsignado.id,
-            estado: { principal: 'Asignado', detalle: 'Enviada al chofer', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() }
-        });
-        batch.update(choferRef, { viajes_activos: firebase.firestore.FieldValue.arrayUnion(reservaId) });
-        await batch.commit();
-        hideMapContextMenu();
-        window.app.hideTableMenus();
-    } catch (err) {
-        console.error("Error al asignar móvil:", err);
-        alert("Error al asignar el móvil: " + err.message);
+        const chofer = caches.choferes.find(c => c.movil_actual_id === movilId);
+        if (!chofer) { alert("Error: Móvil sin chofer."); return; }
+        const b = db.batch();
+        b.update(db.collection('reservas').doc(id), { movil_asignado_id: movilId, chofer_asignado_id: chofer.id, estado: { principal: 'Asignado', detalle: 'Enviada', actualizado_en: new Date() } });
+        b.update(db.collection('choferes').doc(chofer.id), { viajes_activos: firebase.firestore.FieldValue.arrayUnion(id) });
+        await b.commit();
+        hideMapContextMenu(); if(window.app) window.app.hideTableMenus();
+    } catch(e) { alert(e.message); }
+}
+export async function changeReservaState(id, st, caches) { if(['Anulado','Negativo'].includes(st) && confirm("¿Seguro?")) await moverReservaAHistorico(id, st, caches); }
+export async function finalizarReserva(id, caches) { if(confirm("¿Finalizar?")) await moverReservaAHistorico(id, 'Finalizado', caches); }
+export async function quitarAsignacion(id) { 
+    if(!confirm("¿Quitar asignación?")) return;
+    const doc = await db.collection('reservas').doc(id).get();
+    const chId = doc.data().chofer_asignado_id;
+    const b = db.batch();
+    b.update(db.collection('reservas').doc(id), { chofer_asignado_id: firebase.firestore.FieldValue.delete(), movil_asignado_id: firebase.firestore.FieldValue.delete(), estado: { principal: 'En Curso', detalle: 'Desasignado', actualizado_en: new Date() } });
+    if(chId) b.update(db.collection('choferes').doc(chId), { viajes_activos: firebase.firestore.FieldValue.arrayRemove(id) });
+    await b.commit();
+    hideMapContextMenu(); if(window.app) window.app.hideTableMenus();
+}
+export async function updateHoraPickup(e, id) { await db.collection('reservas').doc(id).update({ hora_pickup: e.target.value }); }
+export async function updateZona(e, id) { await db.collection('reservas').doc(id).update({ zona: e.target.value }); }
+export async function handleDniBlur(e) { 
+    const dni = e.target.value; if(!dni) return;
+    const d = await db.collection('pasajeros').doc(dni).get();
+    if(d.exists) { 
+        const p = d.data(); 
+        const f = document.getElementById('reserva-form');
+        f.nombre_pasajero.value = p.nombre_apellido || '';
+        f.telefono_pasajero.value = p.telefono || '';
+        if(p.domicilios?.length) document.querySelector('.origen-input').value = p.domicilios[p.domicilios.length-1];
     }
 }
-
-export async function changeReservaState(reservaId, newState, caches) {
-    if (['Anulado', 'Negativo'].includes(newState)) {
-        if (confirm(`¿Estás seguro de que quieres marcar esta reserva como "${newState}"?`)) {
-            await moverReservaAHistorico(reservaId, newState, caches);
-            hideMapContextMenu();
-            window.app.hideTableMenus();
-        }
-    }
+export async function asignarMultiplesReservas(ids, mId, caches) {
+    if(!mId || !ids.length) return alert("Seleccione móvil y reservas");
+    const ch = caches.choferes.find(c => c.movil_actual_id === mId);
+    if(!ch) return alert("Móvil sin chofer");
+    const b = db.batch();
+    ids.forEach(id => b.update(db.collection('reservas').doc(id), { movil_asignado_id: mId, chofer_asignado_id: ch.id, estado: { principal: 'Asignado', detalle: 'Enviada', actualizado_en: new Date() } }));
+    b.update(db.collection('choferes').doc(ch.id), { viajes_activos: firebase.firestore.FieldValue.arrayUnion(...ids) });
+    await b.commit();
+    return true;
 }
 
-export async function finalizarReserva(reservaId, caches) {
-    if (confirm("¿Marcar esta reserva como finalizada?")) {
-        await moverReservaAHistorico(reservaId, 'Finalizado', caches);
-        hideMapContextMenu();
-        window.app.hideTableMenus();
-    }
-}
-
-export async function quitarAsignacion(reservaId) {
-       if (confirm("¿Quitar la asignación de este móvil y devolver la reserva a 'En Curso'?")) {
-      const reservaRef = db.collection('reservas').doc(reservaId);
-      try {
-          const doc = await reservaRef.get();
-          if(!doc.exists) return;
-          
-          const choferId = doc.data().chofer_asignado_id;
-          
-          const batch = db.batch();
-          batch.update(reservaRef, {
-              estado: { principal: 'En Curso', detalle: 'Móvil des-asignado', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() },
-              chofer_asignado_id: firebase.firestore.FieldValue.delete(),
-              movil_asignado_id: firebase.firestore.FieldValue.delete()
-          });
-
-          if (choferId) {
-              const choferRef = db.collection('choferes').doc(choferId);
-              batch.update(choferRef, { viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId) });
-          }
-
-          await batch.commit();
-          hideMapContextMenu();
-          window.app.hideTableMenus();
-      } catch (error) {
-          console.error("Error al quitar asignación:", error);
-          alert("Hubo un error al actualizar la reserva.");
-      }
-  }
-}
-
-export async function updateHoraPickup(event, reservaId, horaTurno) {
-    const nuevaHora = event.target.value;
-    if (horaTurno && nuevaHora) {
-        const horaTurnoDT = new Date(`1970-01-01T${horaTurno}`);
-        const nuevaHoraDT = new Date(`1970-01-01T${nuevaHora}`);
-        if (nuevaHoraDT.getTime() > horaTurnoDT.getTime() - (30 * 60 * 1000)) {
-            alert("La Hora de Pickup debe ser al menos 30 minutos antes de la Hora del Turno.");
-            const doc = await db.collection('reservas').doc(reservaId).get();
-            event.target.value = doc.data().hora_pickup || '';
-            return;
-        }
-    }
-    try { await db.collection('reservas').doc(reservaId).update({ hora_pickup: nuevaHora }); } catch (error) { console.error("Error al actualizar Hora Pickup:", error); }
-}
-
-export async function updateZona(event, reservaId) {
-    const nuevaZona = event.target.value;
-    try { await db.collection('reservas').doc(reservaId).update({ zona: nuevaZona }); } catch (error) { console.error("Error al actualizar Zona:", error); }
-}
-
-export async function handleDniBlur(e) {
-    const dni = e.target.value.trim();
-    if (!dni) return;
-    try {
-        const doc = await db.collection('pasajeros').doc(dni).get();
-        if (doc.exists) {
-            const p = doc.data();
-            const f = document.getElementById('reserva-form');
-            f.nombre_pasajero.value = p.nombre_apellido || '';
-            f.telefono_pasajero.value = p.telefono || '';
-            if (p.domicilios && p.domicilios.length > 0) {
-                // Seteamos solo el primer domicilio como sugerencia base
-                const ultimoDom = p.domicilios[p.domicilios.length - 1];
-                const inputOrigen = document.querySelector('.origen-input');
-                if (inputOrigen) inputOrigen.value = ultimoDom;
-            }
-        }
-    } catch (error) {
-        console.error("Error al buscar DNI:", error);
-    }
-}
-
-export async function asignarMultiplesReservas(reservaIds, movilId, caches) {
-    if (!movilId || reservaIds.length === 0) {
-        alert("Seleccione un móvil y al menos una reserva.");
-        return false;
-    }
-
-    const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movilId);
-    if (!choferAsignado) {
-        alert("Error: El móvil seleccionado no tiene un chofer vinculado.");
-        return false;
-    }
-
-    try {
-        const batch = db.batch();
-
-        reservaIds.forEach(reservaId => {
-            const reservaRef = db.collection('reservas').doc(reservaId);
-            batch.update(reservaRef, {
-                movil_asignado_id: movilId,
-                chofer_asignado_id: choferAsignado.id,
-                estado: { principal: 'Asignado', detalle: 'Enviada al chofer', actualizado_en: firebase.firestore.FieldValue.serverTimestamp() }
-            });
-        });
-
-        const choferRef = db.collection('choferes').doc(choferAsignado.id);
-        batch.update(choferRef, { 
-            viajes_activos: firebase.firestore.FieldValue.arrayUnion(...reservaIds) 
-        });
-
-        await batch.commit();
-        alert(`${reservaIds.length} viajes asignados correctamente al móvil ${choferAsignado.nombre}.`);
-        return true;
-
-    } catch (error) {
-        console.error("Error en asignación múltiple:", error);
-        alert("Error al asignar los viajes: " + error.message);
-        return false;
-    }
-}
-
-function renderFilaReserva(tbody, reserva, caches) {
-    const cliente = caches.clientes[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
-    const row = tbody.insertRow();
-    row.dataset.id = reserva.id;
-
-    row.addEventListener('click', (e) => {
-        if (!window.isTableMultiSelectMode) return;
-        if (e.target.closest('button') || 
-            e.target.closest('select') || 
-            e.target.closest('input') || 
-            e.target.closest('a')) {
-            return;
-        }
-        window.app.toggleTableSelection(reserva.id, row);
+async function moverReservaAHistorico(id, st, caches) {
+    const ref = db.collection('reservas').doc(id);
+    const hist = db.collection('historico').doc(id);
+    await db.runTransaction(async t => {
+        const d = (await t.get(ref)).data();
+        d.estado = { principal: st, detalle: 'Archivado', actualizado_en: new Date() };
+        d.archivadoEn = new Date();
+        if(d.chofer_asignado_id) t.update(db.collection('choferes').doc(d.chofer_asignado_id), { viajes_activos: firebase.firestore.FieldValue.arrayRemove(id) });
+        t.set(hist, d); t.delete(ref);
     });
-    
-    const estadoPrincipal = (typeof reserva.estado === 'object' && reserva.estado.principal) ? reserva.estado.principal : reserva.estado;
-    const estadoDetalle = (typeof reserva.estado === 'object' && reserva.estado.detalle) ? reserva.estado.detalle : '---';
-
-    if (reserva.es_exclusivo) {
-        row.style.backgroundColor = '#51ED8D'; row.style.color = '#333';
-    } else if (estadoPrincipal === 'Negativo' || estadoDetalle === 'Traslado negativo') {
-        row.style.backgroundColor = '#FFDE59'; row.style.color = '#333';
-    } else if (estadoDetalle.startsWith('Rechazado por')) {
-        row.style.backgroundColor = '#f8d7da'; row.style.color = '#721c24';
-    } else if (estadoPrincipal === 'Anulado') {
-        row.className = 'estado-anulado';
-    } else if (cliente && cliente.color) {
-        row.style.backgroundColor = cliente.color;
-        const color = cliente.color;
-        if (color && color.startsWith('#')) {
-            const r = parseInt(color.substr(1, 2), 16), g = parseInt(color.substr(3, 2), 16), b = parseInt(color.substr(5, 2), 16);
-            row.style.color = (((r * 299) + (g * 587) + (b * 114)) / 1000 >= 128) ? '#333' : '#f0f0f0';
-        }
-    }
-    
-    let movilAsignadoTexto = '';
-    if (reserva.movil_asignado_id) {
-        const movilAsignado = caches.moviles.find(m => m.id === reserva.movil_asignado_id);
-        const choferAsignado = caches.choferes.find(c => c.id === reserva.chofer_asignado_id);
-        const textoMovil = movilAsignado ? `Móvil ${movilAsignado.numero}` : 'Móvil no encontrado';
-        const textoChofer = choferAsignado ? ` (${choferAsignado.nombre})` : '';
-        movilAsignadoTexto = textoMovil + textoChofer;
-    }
-    
-    let estadoCombinadoHTML = `<strong>${estadoPrincipal || 'Pendiente'}</strong>`;
-    if (estadoDetalle !== '---' && estadoDetalle !== `Estado cambiado a ${estadoPrincipal}`) {
-        estadoCombinadoHTML += `<br><small style="color: #777;">${estadoDetalle}</small>`;
-    }
-    if (movilAsignadoTexto) {
-         estadoCombinadoHTML += `<br><small style="color: #555;">${movilAsignadoTexto}</small>`;
-    }
-    
-    const fechaFormateada = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
-    const containerId = tbody.closest('.reservas-container')?.id || '';
-    const isRevision = containerId === 'reservas-importadas';
-    const isAsignable = ['reservas-en-curso', 'reservas-pendientes', 'resultados-busqueda-reservas'].includes(containerId);
-    const isAsignado = containerId === 'reservas-asignados';
-    
-    let menuItems = `<a href="#" onclick="window.app.openEditReservaModal('${reserva.id || reserva.objectID}')">Editar</a>`;
-    
-    if (isRevision) {
-        menuItems += `<hr>`;
-        menuItems += `<a href="#" style="color: green; font-weight: bold;" onclick="window.app.confirmarReservaImportada('${reserva.id}')">✅ CONFIRMAR VIAJE</a>`;
-        menuItems += `<a href="#" style="color: red;" onclick="window.app.changeReservaState('${reserva.id}', 'Anulado')">❌ Descartar</a>`;
-    }
-    else if (isAsignable) {
-        let movilesOptions = caches.moviles.map(movil => {
-            const choferDelMovil = caches.choferes.find(c => c.movil_actual_id === movil.id);
-            const nombreChofer = choferDelMovil ? ` (${choferDelMovil.nombre})` : ' (Sin chofer)';
-            return `<option value="${movil.id}">N° ${movil.numero}${nombreChofer}</option>`;
-        }).join('');
-        menuItems += `<select onchange="window.app.asignarMovil('${reserva.id}', this.value)"><option value="">Asignar Móvil...</option>${movilesOptions}</select>`;
-        menuItems += `<a href="#" onclick="window.app.changeReservaState('${reserva.id}', 'Negativo')">Marcar Negativo</a>`;
-        menuItems += `<a href="#" onclick="window.app.changeReservaState('${reserva.id}', 'Anulado')">Anular</a>`;
-    } else if (isAsignado) {
-        menuItems += `<a href="#" onclick="window.app.finalizarReserva('${reserva.id}')">Finalizar</a>`;
-        menuItems += `<a href="#" onclick="window.app.changeReservaState('${reserva.id}', 'Negativo')">Marcar Negativo</a>`;
-        menuItems += `<a href="#" onclick="window.app.changeReservaState('${reserva.id}', 'Anulado')">Anular Viaje</a>`;
-        menuItems += `<a href="#" onclick="window.app.quitarAsignacion('${reserva.id}')">Quitar Móvil</a>`;
-    }
-    const accionesHTML = `
-        <td class="acciones">
-            <div class="acciones-dropdown">
-                <button class="icono-tres-puntos" onclick="window.app.toggleMenu(event)">⋮</button>
-                <div class="menu-contenido">${menuItems}</div>
-            </div>
-        </td>`;
-
-        let checkboxHTML = '';
-        if (isRevision) {
-             checkboxHTML = `<td style="text-align: center;"><input type="checkbox" class="check-reserva-revision" value="${reserva.id}"></td>`;
-       }
-
-    row.innerHTML = `
-        ${checkboxHTML}
-        <td>${reserva.autorizacion || ''}</td>
-        <td>${reserva.siniestro || ''}</td>
-        <td>${fechaFormateada}</td>
-        <td>${reserva.hora_turno || ''}</td>
-        <td class="editable-cell pickup-cell"></td>
-        <td>${reserva.nombre_pasajero || ''}</td>
-        <td>${reserva.origen || ''}</td>
-        <td>${reserva.destino || ''}</td>
-        <td>${reserva.cantidad_pasajeros || 1}</td>
-        <td class="editable-cell zona-cell"></td>
-        <td>${cliente ? cliente.nombre : 'Default'}</td>
-        <td>${estadoCombinadoHTML}</td>
-        ${accionesHTML}
-    `;
-
-    const pickupCell = row.querySelector('.pickup-cell');
-    const zonaCell = row.querySelector('.zona-cell');
-    
-    if (isAsignable) {
-        pickupCell.innerHTML = `<input type="time" value="${reserva.hora_pickup || ''}" onchange="window.app.updateHoraPickup(event, '${reserva.id}', '${reserva.hora_turno}')">`;
-        let zonaSelectHTML = `<select onchange="window.app.updateZona(event, '${reserva.id}')"><option value="">Seleccionar...</option>`;
-        caches.zonas.forEach(zona => {
-            const zonaDesc = zona.descripcion || '';
-            zonaSelectHTML += `<option value="${zonaDesc}" ${reserva.zona === zonaDesc ? 'selected' : ''}>${zonaDesc}</option>`;
-        });
-        zonaSelectHTML += `</select>`;
-        zonaCell.innerHTML = zonaSelectHTML;
-    } else {
-        pickupCell.textContent = reserva.hora_pickup || '';
-        zonaCell.textContent = reserva.zona || '';
-    }
 }
-  
-async function moverReservaAHistorico(reservaId, estadoFinal, caches) {
-   const reservaRef = db.collection('reservas').doc(reservaId);
-    const historicoRef = db.collection('historico').doc(reservaId);
 
-    try {
-        await db.runTransaction(async (transaction) => {
-            const reservaDoc = await transaction.get(reservaRef);
-
-            if (!reservaDoc.exists) {
-                const historicoDoc = await transaction.get(historicoRef);
-                if (historicoDoc.exists) {
-                    return; 
-                } else {
-                    throw "No se encontró la reserva para archivar.";
-                }
-            }
-
-            const reservaData = reservaDoc.data();
-            reservaData.estado = {
-                principal: estadoFinal,
-                detalle: `Viaje marcado como ${estadoFinal}`,
-                actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
-            };
-            reservaData.archivadoEn = firebase.firestore.FieldValue.serverTimestamp();
-            
-            if (caches.clientes[reservaData.cliente]) {
-                reservaData.clienteNombre = caches.clientes[reservaData.cliente].nombre;
-            }
-            if (reservaData.chofer_asignado_id) {
-                const chofer = caches.choferes.find(c => c.id === reservaData.chofer_asignado_id);
-                if (chofer) reservaData.choferNombre = chofer.nombre;
-            }
-
-            if (reservaData.chofer_asignado_id) {
-                const choferRef = db.collection('choferes').doc(reservaData.chofer_asignado_id);
-                const choferDoc = await transaction.get(choferRef);
-
-                if (choferDoc.exists) {
-                    transaction.update(choferRef, {
-                        viajes_activos: firebase.firestore.FieldValue.arrayRemove(reservaId)
-                    });
-                }
-            }
-
-            transaction.set(historicoRef, reservaData); 
-            transaction.delete(reservaRef);
-        });
-        
-    } catch (error) {
-        console.error("Error al mover reserva a histórico:", error);
-        alert("Error al archivar la reserva: " + error.message);
-    }
-    
-  }
-
-// ===================================================================================
-// IMPORTACIÓN DE EXCEL CON IA (VERSIÓN BATCH - POR LOTES)
-// ===================================================================================
+// --- IMPORTACIÓN EXCEL (Lógica por Lotes con Barra de Progreso) ---
 export async function manejarImportacionExcel(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    const fechaSeleccionada = prompt("Ingrese la fecha de estos viajes (Formato: YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-    
-    if (!fechaSeleccionada) {
-        alert("Importación cancelada: Se requiere una fecha.");
-        event.target.value = '';
-        return;
-    }
+    // Resetear input para permitir subir el mismo archivo si falla
+    const inputElement = event.target;
 
     const reader = new FileReader();
-    
     reader.onload = async (e) => {
         try {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            const todosLosDatos = XLSX.utils.sheet_to_json(worksheet);
-            
-            const btnImportar = document.getElementById('btn-importar-excel');
-            if(btnImportar) {
-                btnImportar.disabled = true;
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            if (jsonData.length === 0) { alert("El Excel está vacío."); return; }
+
+            let fechaSeleccionada = document.getElementById('fecha-reserva')?.value;
+            if (!fechaSeleccionada) {
+                 fechaSeleccionada = prompt("Fecha para estas reservas (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
             }
+            if (!fechaSeleccionada) return;
 
-            const TAMANO_LOTE = 40; 
-            const totalLotes = Math.ceil(todosLosDatos.length / TAMANO_LOTE);
-            let reservasAcumuladas = [];
-            let erroresAcumulados = 0;
+            // --- LÓGICA DE LOTES ---
+            const BATCH_SIZE = 15;
+            let todasLasReservas = [];
+            const totalBatches = Math.ceil(jsonData.length / BATCH_SIZE);
 
-            console.log(`Iniciando importación por lotes. Total filas: ${todosLosDatos.length}. Total lotes: ${totalLotes}`);
+            // Mostrar Barra Inicial
+            actualizarProgreso(`Iniciando análisis de ${jsonData.length} filas...`, 5);
 
-            for (let i = 0; i < todosLosDatos.length; i += TAMANO_LOTE) {
-                const loteActual = Math.floor(i / TAMANO_LOTE) + 1;
-                const datosLote = todosLosDatos.slice(i, i + TAMANO_LOTE);
+            for (let i = 0; i < jsonData.length; i += BATCH_SIZE) {
+                const lote = jsonData.slice(i, i + BATCH_SIZE);
+                const currentBatch = Math.floor(i/BATCH_SIZE) + 1;
+                const porcentaje = Math.round((currentBatch / totalBatches) * 80); // Hasta el 80% es análisis IA
                 
-                if(btnImportar) {
-                    btnImportar.textContent = `⏳ Analizando lote ${loteActual}/${totalLotes}...`;
-                }
-
+                actualizarProgreso(`IA Analizando Lote ${currentBatch} de ${totalBatches}...`, 5 + porcentaje);
+                
                 try {
-                    const interpretarExcel = firebase.functions().httpsCallable('interpretarExcelIA');
-                    const result = await interpretarExcel({ datosCrudos: datosLote, fechaSeleccionada });
+                    const result = await firebase.functions().httpsCallable('interpretarExcelIA')({ 
+                        datosCrudos: lote, 
+                        fechaSeleccionada 
+                    });
                     
-                    if (result.data && result.data.reservas) {
-                        reservasAcumuladas = [...reservasAcumuladas, ...result.data.reservas];
+                    if (result.data.reservas) {
+                        todasLasReservas = [...todasLasReservas, ...result.data.reservas];
                     }
-                } catch (errLote) {
-                    console.error(`Error en lote ${loteActual}:`, errLote);
-                    erroresAcumulados++;
+                } catch (batchError) {
+                    console.error(`Error en lote ${currentBatch}:`, batchError);
+                    // Seguimos con el siguiente lote aunque este falle
                 }
             }
 
-            const reservasProcesadas = reservasAcumuladas.map(r => ({
-                ...r,
-                fecha_turno: fechaSeleccionada
-            }));
-
-            if (reservasProcesadas.length > 0) {
-                 let mensaje = `La IA procesó ${reservasProcesadas.length} reservas correctamente.`;
-                 if (erroresAcumulados > 0) mensaje += `\n(Hubo error en ${erroresAcumulados} lotes).`;
-                 mensaje += `\n\nSe guardarán en "Importadas (Revisión)" para que las verifiques.`;
-
-                 if (confirm(mensaje)) {
-                    if(btnImportar) btnImportar.textContent = "💾 Guardando...";
-                    await guardarReservasEnLote(reservasProcesadas);
-                 }
+            actualizarProgreso(`Guardando ${todasLasReservas.length} reservas en base de datos...`, 90);
+            
+            if (todasLasReservas.length > 0) {
+                 await guardarReservasEnLote(todasLasReservas);
             } else {
-                alert("No se pudieron procesar reservas. Revisa la consola o el formato del archivo.");
+                alert("No se pudieron interpretar reservas.");
+                ocultarProgreso();
             }
 
         } catch (error) {
-            console.error("Error importando:", error);
-            alert("Hubo un error crítico al procesar: " + error.message);
+            console.error("❌ Error importando:", error);
+            alert("Error crítico en la importación: " + error.message);
+            ocultarProgreso();
         } finally {
-            const btnImportar = document.getElementById('btn-importar-excel');
-            if(btnImportar) {
-                btnImportar.textContent = "📂 Importar Excel";
-                btnImportar.disabled = false;
-            }
-            event.target.value = ''; 
+            inputElement.value = ''; // Limpiar input
         }
     };
-
     reader.readAsArrayBuffer(file);
 }
 
-async function guardarReservasEnLote(reservas) {
-    const db = firebase.firestore();
-    const batchLimit = 400; // Límite de Firestore batch es 500
+// --- IMPORTACIÓN PDF ---
+export async function manejarImportacionPDF(event) {
+    const file = event.target.files[0]; if(!file) return;
+    if(file.size > 5*1024*1024) return alert("PDF muy grande (>5MB)");
     
-    const clientesCache = window.appCaches ? window.appCaches.clientes : {};
-    const clientesNuevosEnEsteLote = {}; 
+    const fecha = prompt("Fecha (YYYY-MM-DD):", new Date().toISOString().split('T')[0]); 
+    if(!fecha) { event.target.value=''; return; }
     
-    let operaciones = [];
-
-    for (const reserva of reservas) {
-        const docRef = db.collection('reservas').doc();
-        
-        let clienteIdFinal = null;
-        const nombreClienteIA = (reserva.cliente || 'PARTICULARES').trim().toUpperCase();
-
-        for (const [id, datos] of Object.entries(clientesCache)) {
-            if (datos.nombre.toUpperCase().trim() === nombreClienteIA) {
-                clienteIdFinal = id;
-                break;
+    actualizarProgreso("Subiendo documento a la IA...", 20);
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const b64 = e.target.result.split(',')[1];
+            
+            actualizarProgreso("Inteligencia Artificial analizando PDF...", 50);
+            
+            const res = await firebase.functions().httpsCallable('interpretarPDFIA')({ pdfBase64: b64, fechaSeleccionada: fecha });
+            const list = res.data.reservas;
+            
+            if(list?.length) {
+                actualizarProgreso(`Guardando ${list.length} reservas...`, 80);
+                await guardarReservasEnLote(list);
+            } else {
+                alert("No se encontraron reservas claras en el PDF.");
+                ocultarProgreso();
             }
+        } catch(err) { 
+            alert("Error: " + err.message); 
+            ocultarProgreso();
         }
+        finally { event.target.value=''; }
+    };
+    reader.readAsDataURL(file);
+}
 
-        if (!clienteIdFinal && clientesNuevosEnEsteLote[nombreClienteIA]) {
-            clienteIdFinal = clientesNuevosEnEsteLote[nombreClienteIA];
-        }
+// --- HELPERS DE LOTES (BLINDADO CONTRA ERRORES) ---
+async function guardarReservasEnLote(list) {
+    const batchLimit = 400;
+    // Protección: Si window.appCaches no existe o clientes es null, usar objeto vacío
+    const clientsCache = (window.appCaches && window.appCaches.clientes) ? window.appCaches.clientes : {};
+    
+    let batch = db.batch(), count = 0;
+    
+    for (let i = 0; i < list.length; i++) {
+        const r = list[i];
+        
+        // Estandarización de claves (Por si la IA falla un poco)
+        const clienteNombre = r.cliente || r.empresa || "PARTICULARES";
+        const origen = r.origen || r.calle_origen || r.origen_calle || "Origen desconocido";
+        const destino = r.destino || r.calle_destino || r.destino_calle || "Destino desconocido";
+        
+        // Búsqueda de cliente SEGURA (sin error toUpperCase)
+        let cId = null;
+        try {
+            cId = Object.keys(clientsCache).find(k => {
+                const nombreCache = clientsCache[k].nombre || "";
+                return String(nombreCache).toUpperCase() === String(clienteNombre).toUpperCase();
+            });
+        } catch (e) { console.warn("Error buscando cliente en cache (ignorado):", e); }
 
-        if (!clienteIdFinal) {
+        if (!cId) {
+            // Si no existe, creamos uno nuevo en Firestore
             try {
-                const nombreParaGuardar = (reserva.cliente || 'Nuevo Cliente').trim();
-                const nuevoClienteRef = await db.collection('clientes').add({
-                    nombre: nombreParaGuardar,
-                    creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
-                    origen_dato: 'Importación Automática Excel',
-                    telefono: '', 
-                    cuit: ''
-                });
-                clienteIdFinal = nuevoClienteRef.id;
-                clientesNuevosEnEsteLote[nombreClienteIA] = clienteIdFinal;
-            } catch (error) {
-                console.error(`Error creando cliente ${nombreClienteIA}:`, error);
-                clienteIdFinal = 'Default';
+                // Usamos un ID temporal si es lote masivo para no saturar lecturas/escrituras de configuración
+                // O creamos el documento real:
+                const nc = await db.collection('clientes').add({ nombre: String(clienteNombre), creadoEn: new Date() });
+                cId = nc.id; 
+                clientsCache[cId] = { nombre: String(clienteNombre) }; // Actualizar cache local
+            } catch (err) {
+                console.error("Error creando cliente:", err);
+                cId = "PARTICULARES_FALLBACK"; 
             }
         }
 
         const nuevaReserva = {
-            ...reserva,
-            cliente: clienteIdFinal,
-            estado: { 
-                principal: 'Revision', 
-                detalle: 'Esperando confirmación de operador', 
-                actualizado_en: firebase.firestore.FieldValue.serverTimestamp() 
-            },
-            creadoEn: firebase.firestore.FieldValue.serverTimestamp(),
-            cantidad_pasajeros: '1', 
-            es_exclusivo: reserva.es_exclusivo || false
+            ...r,
+            cliente: cId,
+            origen: origen,
+            destino: destino,
+            nombre_pasajero: r.nombre_pasajero || r.pasajero || "Pasajero",
+            telefono_pasajero: r.telefono_pasajero || r.telefono || "",
+            estado: { principal: 'Revision', detalle: 'Importado IA', actualizado_en: new Date() },
+            creadoEn: new Date(),
+            cantidad_pasajeros: String(r.cantidad_pasajeros || '1'),
+            es_exclusivo: false
         };
-        
-        operaciones.push({ ref: docRef, data: nuevaReserva });
-    }
 
-    let batch = db.batch();
-    let counter = 0;
-    let totalGuardados = 0;
-
-    for (let i = 0; i < operaciones.length; i++) {
-        batch.set(operaciones[i].ref, operaciones[i].data);
-        counter++;
+        batch.set(db.collection('reservas').doc(), nuevaReserva);
         
-        if (counter >= batchLimit || i === operaciones.length - 1) {
-            await batch.commit();
-            totalGuardados += counter;
-            batch = db.batch();
-            counter = 0;
+        if (++count >= batchLimit || i === list.length - 1) { 
+            await batch.commit(); 
+            batch = db.batch(); 
+            count = 0; 
         }
     }
-
-    alert(`¡Éxito! Se cargaron ${totalGuardados} reservas en la pestaña "Importadas".`);
-    const btnImportadas = document.querySelector('button[data-tab="importadas"]');
-    if(btnImportadas) btnImportadas.click();
+    
+    actualizarProgreso("¡Importación Finalizada!", 100);
+    setTimeout(ocultarProgreso, 3000);
+    alert(`Importación completada: ${list.length} reservas.`);
+    
+    // Cambiar a la pestaña de importadas si existe
+    const tabBtn = document.querySelector('button[data-tab="importadas"]');
+    if(tabBtn) tabBtn.click();
 }
 
-// ===================================================================================
-// FUNCIONES DE GESTIÓN MASIVA (REVISIÓN)
-// ===================================================================================
-
 export async function limpiarReservasDeRevision() {
-    const batchSize = 500;
-    console.warn("INICIANDO LIMPIEZA MASIVA...");
+    if(!confirm("¿Borrar TODAS las reservas en revisión? Esta acción no se puede deshacer.")) return;
+    const q = db.collection('reservas').where('estado.principal','==','Revision').limit(400);
     
-    // Consulta: Solo estado 'Revision'
-    const query = db.collection('reservas')
-                    .where('estado.principal', '==', 'Revision')
-                    .limit(batchSize);
-
-    try {
-        let totalEliminado = 0;
-        let eliminadosEnBatch = 0;
-        
-        do {
-            const snapshot = await query.get();
-            eliminadosEnBatch = snapshot.size;
-
-            if (eliminadosEnBatch === 0) break;
-
-            const batch = db.batch();
-            snapshot.docs.forEach(doc => {
-                batch.delete(doc.ref);
-            });
-
-            await batch.commit();
-            totalEliminado += eliminadosEnBatch;
-            console.log(`🧹 Lote de ${eliminadosEnBatch} eliminado.`);
-
-        } while (eliminadosEnBatch === batchSize); 
-
-        console.log(`✅ Limpieza completada. Total: ${totalEliminado}`);
-
-    } catch (error) {
-        console.error("Error limpieza:", error);
-        throw error; 
+    let borrados = 0;
+    while(true) {
+        const s = await q.get(); if(s.empty) break;
+        const b = db.batch(); 
+        s.forEach(d => { b.delete(d.ref); borrados++; }); 
+        await b.commit();
     }
+    alert(`Limpieza completada. Se borraron ${borrados} reservas.`);
 }
 
 export async function procesarLoteRevision(accion, ids) {
-    if (!ids || ids.length === 0) return;
-    
-    const batch = db.batch();
-    
+    if(ids.length === 0) return alert("No hay reservas seleccionadas.");
+    const b = db.batch();
     ids.forEach(id => {
         const ref = db.collection('reservas').doc(id);
-        if (accion === 'borrar') {
-            batch.delete(ref);
-        } else if (accion === 'confirmar') {
-            batch.update(ref, {
-                estado: { 
-                    principal: 'Pendiente', 
-                    detalle: 'Confirmado masivamente', 
-                    actualizado_en: firebase.firestore.FieldValue.serverTimestamp()
-                }
-            });
-        }
+        if(accion==='borrar') b.delete(ref);
+        else b.update(ref, { estado: { principal: 'Pendiente', detalle: 'Masivo', actualizado_en: new Date() } });
     });
-
-    try {
-        await batch.commit();
-        // Limpiamos la selección visualmente
-        document.querySelectorAll('.check-reserva-revision:checked').forEach(c => c.checked = false);
-        document.getElementById('panel-acciones-lote').style.display = 'none';
-        
-        if (accion === 'borrar') alert(`🗑️ Se han eliminado ${ids.length} reservas.`);
-        if (accion === 'confirmar') alert(`✅ Se han confirmado ${ids.length} reservas.`);
-        
-    } catch (error) {
-        console.error("Error lote:", error);
-        throw new Error("Error al procesar lote: " + error.message);
-    }
-}
-
-// ===================================================================================
-// IMPORTACIÓN DE PDF CON IA
-// ===================================================================================
-
-export async function manejarImportacionPDF(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    // Validar tamaño (Cloud Functions tiene límite de 10MB en el body, PDFs > 5MB pueden fallar)
-    if (file.size > 5 * 1024 * 1024) {
-        alert("El archivo es demasiado grande. Por favor, sube un PDF de menos de 5MB.");
-        event.target.value = '';
-        return;
-    }
-
-    const fechaSeleccionada = prompt("Fecha de referencia para estos viajes (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-    if (!fechaSeleccionada) {
-        event.target.value = '';
-        return;
-    }
-
-    const btn = document.getElementById('btn-importar-pdf');
-    const textoOriginal = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "⏳ Subiendo y Analizando...";
-
-    const reader = new FileReader();
-
-    // Leemos el archivo como URL de datos (Base64)
-    reader.readAsDataURL(file);
-
-    reader.onload = async (e) => {
-        try {
-            // El resultado viene como "data:application/pdf;base64,JVBERi0xLjQK..."
-            // Necesitamos quitar la primera parte y dejar solo lo que está después de la coma.
-            const base64Data = e.target.result.split(',')[1];
-
-            const interpretarPDF = firebase.functions().httpsCallable('interpretarPDFIA');
-            
-            // Enviamos el chorro de letras (el PDF codificado) a la nube
-            const result = await interpretarPDF({ 
-                pdfBase64: base64Data, 
-                fechaSeleccionada 
-            });
-
-            const reservas = result.data.reservas;
-
-            if (reservas && reservas.length > 0) {
-                if (confirm(`La IA detectó ${reservas.length} reservas en el PDF.\n\n¿Deseas importarlas a Revisión?`)) {
-                    btn.textContent = "💾 Guardando...";
-                    // Reutilizamos tu función de guardar lotes que ya creamos para el Excel
-                    await guardarReservasEnLote(reservas); 
-                }
-            } else {
-                alert("La IA analizó el PDF pero no encontró datos con formato de reserva.");
-            }
-
-        } catch (error) {
-            console.error("Error PDF:", error);
-            alert("Error al procesar el PDF: " + error.message);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = textoOriginal;
-            event.target.value = '';
-        }
-    };
+    await b.commit();
     
-    reader.onerror = (error) => {
-        console.error("Error leyendo archivo:", error);
-        alert("Error al leer el archivo local.");
-        btn.disabled = false;
-        btn.textContent = textoOriginal;
-    };
+    // Limpiar checks
+    document.querySelectorAll('.check-reserva-revision:checked').forEach(c => c.checked=false);
+    document.getElementById('panel-acciones-lote').style.display = 'none';
 }

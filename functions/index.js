@@ -1,3 +1,5 @@
+// functions/index.js
+
 // ===================================================================================
 // 1. IMPORTACIONES Y CONFIGURACIÓN
 // ===================================================================================
@@ -36,7 +38,7 @@ function getAlgoliaIndices() {
 }
 
 // ===================================================================================
-// 2. FUNCIONES DE GESTIÓN DE CHOFERES (ORIGINALES)
+// 2. FUNCIONES DE GESTIÓN DE CHOFERES
 // ===================================================================================
 exports.crearChoferConAcceso = onCall(async (request) => {
     const { dni, nombre, email, password, domicilio, telefono, movil_actual_id } = request.data;
@@ -72,9 +74,8 @@ exports.borrarChofer = onCall(async (request) => {
 });
 
 // ===================================================================================
-// 3. TRIGGERS DE FIRESTORE (GEOCODIFICACIÓN Y ALGOLIA) (ORIGINALES)
+// 3. TRIGGERS DE FIRESTORE (GEOCODIFICACIÓN Y ALGOLIA)
 // ===================================================================================
-// BUSCA ESTA SECCIÓN EN TU index.js (Líneas 63 aprox) Y REEMPLÁZALA:
 
 exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event) => {
     if (!event.data.after.exists) return null;
@@ -83,16 +84,12 @@ exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event)
     const before = event.data.before.exists ? event.data.before.data() : null;
     
     const updateCoords = async (field, coordsField) => {
-        // Verificamos si el campo cambió o es nuevo
         if (after[field] && (!before || after[field] !== before[field])) {
             try {
-                // --- CAMBIO CLAVE AQUÍ ---
-                // Si hay múltiples direcciones (separadas por " + "), tomamos solo la primera para el mapa
                 let direccionLimpia = after[field];
                 if (direccionLimpia.includes(" + ")) {
                     direccionLimpia = direccionLimpia.split(" + ")[0];
                 }
-                // -------------------------
 
                 const res = await client.geocode({ 
                     params: { 
@@ -110,7 +107,7 @@ exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event)
     };
     
     await updateCoords('origen', 'origen_coords');
-    await updateCoords('destino', 'destino_coords'); // El destino también podría tener múltiples paradas si quisieras a futuro
+    await updateCoords('destino', 'destino_coords');
     return null;
 });
 
@@ -153,7 +150,7 @@ exports.agregarNombreClienteAReserva = onDocumentWritten("reservas/{id}", async 
 });
 
 // ===================================================================================
-// 4. ADMIN USUARIOS Y EXPORTACIÓN (ORIGINALES)
+// 4. ADMIN USUARIOS Y EXPORTACIÓN
 // ===================================================================================
 exports.crearUsuario = onCall(async (r) => {
     const { email, password, nombre } = r.data;
@@ -182,7 +179,7 @@ exports.exportarHistorico = onCall(async (r) => {
 });
 
 // ===================================================================================
-// 5. APP CHOFERES (ORIGINALES)
+// 5. APP CHOFERES
 // ===================================================================================
 exports.finalizarViajeDesdeApp = onCall(async (r) => {
     if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
@@ -223,7 +220,7 @@ exports.gestionarRechazoDesdeApp = onCall(async (r) => {
 });
 
 // ===================================================================================
-// 6. TRIGGERS NOTIFICACIONES (ORIGINALES)
+// 6. TRIGGERS NOTIFICACIONES
 // ===================================================================================
 exports.gestionarNotificacionesDeReservas = functions.firestore.document("reservas/{id}").onUpdate(async (change, context) => {
     const before = change.before.data();
@@ -272,7 +269,7 @@ exports.notificarCancelacionDeReserva = functions.firestore.document('reservas/{
 });
 
 // ===================================================================================
-// 7. NUEVA LÓGICA: GMAIL + IA MULTIMODAL + ADJUNTOS
+// 7. INTELIGENCIA ARTIFICIAL (MOTOR CENTRAL ESTANDARIZADO)
 // ===================================================================================
 
 function extractBody(payload) {
@@ -307,31 +304,63 @@ async function obtenerAdjuntos(gmail, messageId, payload) {
     return adjuntos;
 }
 
-async function analizarCorreoConGemini(model, asunto, cuerpo, adjuntos) {
-    const prompt = `
-        Actúa como operador logístico. Analiza correo y adjuntos.
-        ASUNTO: "${asunto}"
-        CUERPO: "${cuerpo.substring(0, 5000)}"
-        FECHA HOY: ${new Date().toISOString().split('T')[0]}
+function parsearRespuestaGemini(textoCrudo) {
+    console.log("🤖 Texto crudo de Gemini:", textoCrudo.substring(0, 500)); 
+    try {
+        let limpio = textoCrudo.replace(/```json/g, '').replace(/```/g, '').trim();
+        return JSON.parse(limpio);
+    } catch (e) {
+        console.error("❌ Falló JSON.parse incluso en modo nativo. Texto:", textoCrudo);
+        throw new Error("Formato inválido de IA");
+    }
+}
 
-        1. Si hay adjuntos (PDF/Excel), lee tabla completa. Cada fila = 1 viaje.
-        2. Si no, busca en el texto.
-        3. Filtra typos ("Reeserva" = Reserva).
-        4. Salida: JSON array {"reservas": [...]}.
+// PROMPT MAESTRO: Estandariza todo (Gmail, Excel, PDF)
+async function analizarCorreoConGemini(asunto, cuerpo, adjuntos) {
+    const prompt = `
+        Actúa como operador logístico experto. Extrae datos de viajes y devuélvelos en JSON estricto.
         
-        CAMPOS: fecha_turno (YYYY-MM-DD), hora_turno (HH:MM), nombre_pasajero, telefono_pasajero, origen (si hay múltiples paradas de origen unirlas con " + "), destino, cliente (default "PARTICULARES"), observaciones, siniestro, autorizacion, es_exclusivo (bool).
+        INPUT: 
+        - Contexto/Asunto: "${asunto}"
+        - Contenido: "${cuerpo.substring(0, 8000)}"
+        - Fecha de Hoy: ${new Date().toISOString().split('T')[0]}
+
+        REGLAS OBLIGATORIAS DE SALIDA:
+        1. Devuelve SOLAMENTE un objeto JSON con la estructura: { "reservas": [ ... ] }
+        2. Mapea los datos a estas claves EXACTAS (no uses nombres de columnas originales):
+           - "fecha_turno": Formato YYYY-MM-DD. Si no hay año, usa el actual.
+           - "hora_turno": Formato HH:MM (24hs).
+           - "hora_pickup": Formato HH:MM (24hs). Si no existe, usa la hora_turno.
+           - "nombre_pasajero": Nombre completo del pasajero.
+           - "telefono_pasajero": Solo números (ej: 341...).
+           - "origen": Dirección de partida completa (Calle, Número, Localidad). Si hay múltiples, únelos con " + ".
+           - "destino": Dirección de destino completa.
+           - "cliente": Nombre de la empresa, obra social o "PARTICULARES".
+           - "observaciones": Notas relevantes, acompañantes, tipo de vehículo solicitado.
+           - "siniestro": Número de siniestro (si aplica).
+           - "autorizacion": Número de autorización (si aplica).
+           - "cantidad_pasajeros": Número entero (default 1).
+           - "es_exclusivo": true/false (default false).
+        
+        3. Limpieza:
+           - Si el teléfono tiene guiones, quítalos.
+           - Si la localidad no está explícita pero es obvia (ej: Rosario), agrégala.
+           - Ignora filas totalmente vacías o encabezados de tabla.
     `;
     
+    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ 
+        model: "gemini-2.0-flash",
+        generationConfig: { responseMimeType: "application/json" }
+    });
+
     const parts = [prompt];
-    if (adjuntos.length > 0) parts.push(...adjuntos);
+    if (adjuntos && adjuntos.length > 0) parts.push(...adjuntos);
     
     const res = await model.generateContent(parts);
-    const txt = res.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(txt);
+    return parsearRespuestaGemini(res.response.text());
 }
     
-   
-// --- GMAIL MANUAL (CON ADJUNTOS) ---
+// --- GMAIL MANUAL ---
 exports.procesarReservasGmail = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (r) => {
     if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
     if (!process.env.GMAIL_CLIENT_ID) throw new HttpsError('internal', 'Credenciales.');
@@ -339,7 +368,6 @@ exports.procesarReservasGmail = onCall({ cors: true, timeoutSeconds: 300, memory
     const auth = new google.auth.OAuth2(process.env.GMAIL_CLIENT_ID, process.env.GMAIL_CLIENT_SECRET, process.env.GMAIL_REDIRECT_URI);
     auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
     const gmail = google.gmail({ version: 'v1', auth });
-    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
 
     try {
         const list = await gmail.users.messages.list({ userId: 'me', q: 'is:unread' });
@@ -362,7 +390,7 @@ exports.procesarReservasGmail = onCall({ cors: true, timeoutSeconds: 300, memory
             if (!body.trim() && adjs.length === 0) continue;
 
             try {
-                const ia = await analizarCorreoConGemini(model, subj, body, adjs);
+                const ia = await analizarCorreoConGemini(subj, body, adjs);
                 const list = ia.reservas || [];
                 for (const item of list) {
                     batch.set(db.collection('reservas').doc(), { ...item, origen_dato: 'Gmail Manual', email_id: m.id, estado: { principal: 'Revision', detalle: `Importado: ${subj}`, actualizado_en: new Date() }, creadoEn: new Date() });
@@ -370,21 +398,20 @@ exports.procesarReservasGmail = onCall({ cors: true, timeoutSeconds: 300, memory
                 }
                 await gmail.users.messages.modify({ userId: 'me', id: m.id, requestBody: { removeLabelIds: ['UNREAD'] } });
                 if (count >= 400) { await batch.commit(); batch = db.batch(); count = 0; }
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error(`Error procesando email ${m.id}:`, e); }
         }
         if (count > 0) await batch.commit();
         return { message: `Procesados. Reservas: ${total}` };
     } catch (e) { throw new HttpsError('internal', e.message); }
 });
 
-// --- GMAIL AUTOMÁTICO (CRON + ADJUNTOS) ---
+// --- GMAIL AUTOMÁTICO ---
 exports.chequearCorreosCron = onSchedule("every 15 minutes", async (event) => {
     if (!process.env.GMAIL_CLIENT_ID) return;
     console.log("⏰ Cron Gmail Multimodal...");
     const auth = new google.auth.OAuth2(process.env.GMAIL_CLIENT_ID, process.env.GMAIL_CLIENT_SECRET, process.env.GMAIL_REDIRECT_URI);
     auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
     const gmail = google.gmail({ version: 'v1', auth });
-    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
 
     try {
         const list = await gmail.users.messages.list({ userId: 'me', q: 'is:unread' });
@@ -407,7 +434,7 @@ exports.chequearCorreosCron = onSchedule("every 15 minutes", async (event) => {
             if (!body.trim() && adjs.length === 0) continue;
 
             try {
-                const ia = await analizarCorreoConGemini(model, subj, body, adjs);
+                const ia = await analizarCorreoConGemini(subj, body, adjs);
                 const list = ia.reservas || [];
                 for (const item of list) {
                     batch.set(db.collection('reservas').doc(), { ...item, origen_dato: 'Gmail Auto', email_id: m.id, estado: { principal: 'Revision', detalle: `Auto: ${subj}`, actualizado_en: new Date() }, creadoEn: new Date() });
@@ -415,28 +442,64 @@ exports.chequearCorreosCron = onSchedule("every 15 minutes", async (event) => {
                 }
                 await gmail.users.messages.modify({ userId: 'me', id: m.id, requestBody: { removeLabelIds: ['UNREAD'] } });
                 if (count >= 400) { await batch.commit(); batch = db.batch(); count = 0; }
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error(`Error en cron email ${m.id}`, e); }
         }
         if (count > 0) await batch.commit();
         console.log(`🚀 Cron Fin: ${total} reservas.`);
     } catch (e) { console.error("Error Cron", e); }
 });
 
-// --- INTERPRETACIÓN MANUAL (EXCEL/PDF) ---
+// --- INTERPRETACIÓN EXCEL (ESTANDARIZADA) ---
 exports.interpretarExcelIA = onCall({ cors: true, timeoutSeconds: 300 }, async (r) => {
     if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
     const { datosCrudos, fechaSeleccionada } = r.data;
-    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
-    const res = await model.generateContent(`Analiza lista viajes JSON. Fecha Ref: ${fechaSeleccionada}. Salida JSON {reservas: []}. Datos: ${JSON.stringify(datosCrudos)}`);
-    const json = JSON.parse(res.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
-    return { reservas: json.reservas || json };
+    
+    // Reutilizamos la lógica del Prompt Maestro para que mapee las columnas del Excel 
+    // a nuestras claves estándar (nombre_pasajero, origen, etc.)
+    try {
+        const jsonStr = JSON.stringify(datosCrudos);
+        const ia = await analizarCorreoConGemini(
+            "IMPORTACION EXCEL", 
+            `Estos son los datos crudos del Excel. La fecha de referencia es ${fechaSeleccionada}. Procesa y mapea: ${jsonStr}`, 
+            []
+        );
+        
+        // Aseguramos que la fecha esté presente si el Excel no la traía
+        if(ia.reservas) {
+            ia.reservas.forEach(res => {
+                if(!res.fecha_turno) res.fecha_turno = fechaSeleccionada;
+            });
+        }
+        return { reservas: ia.reservas || ia };
+    } catch (e) {
+        console.error("Error interpretando Excel:", e);
+        throw new HttpsError('internal', 'La IA no pudo leer el Excel.');
+    }
 });
 
+// --- INTERPRETACIÓN PDF (ESTANDARIZADA) ---
 exports.interpretarPDFIA = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (r) => {
     if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
     const { pdfBase64, fechaSeleccionada } = r.data;
-    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ model: "gemini-2.0-flash" });
-    const res = await model.generateContent([`Analiza PDF viajes. Fecha Ref: ${fechaSeleccionada}. Salida JSON {reservas: []}.`, { inlineData: { data: pdfBase64, mimeType: "application/pdf" } }]);
-    const json = JSON.parse(res.response.text().replace(/```json/g, '').replace(/```/g, '').trim());
-    return { reservas: json.reservas || json };
+    
+    try {
+        // Creamos un objeto de adjunto compatible con la función analizarCorreoConGemini
+        const adjuntoPDF = { inlineData: { data: pdfBase64, mimeType: "application/pdf" } };
+        
+        const ia = await analizarCorreoConGemini(
+            "IMPORTACION PDF", 
+            `Extrae los viajes de este PDF. La fecha de referencia es ${fechaSeleccionada}.`, 
+            [adjuntoPDF]
+        );
+        
+        if(ia.reservas) {
+            ia.reservas.forEach(res => {
+                if(!res.fecha_turno) res.fecha_turno = fechaSeleccionada;
+            });
+        }
+        return { reservas: ia.reservas || ia };
+    } catch (e) {
+        console.error("Error interpretando PDF:", e);
+        throw new HttpsError('internal', 'La IA no pudo leer el PDF.');
+    }
 });

@@ -5,8 +5,22 @@ import { openTab, showReservasTab, openAdminTab } from './tabs.js';
 import { initHistorial, cargarHistorial, poblarFiltroClientes } from './historial.js';
 import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
-import { initMapa, initMapInstance, initMapaModal, cargarMarcadoresDeReservas, filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer, escucharUbicacionChoferes } from './mapa.js';
-import { toggleMultiSelectMode, getSelectedReservasIds } from './mapa.js';
+
+// 1. IMPORTAMOS LAS NUEVAS FUNCIONES DE MAPA (RUTAS Y AUTOCOMPLETE)
+import { 
+    initMapa, 
+    initMapInstance, 
+    initMapaModal, 
+    cargarMarcadoresDeReservas, 
+    filtrarMapa, 
+    filtrarMapaPorHoras, 
+    filtrarMapaPorChofer, 
+    escucharUbicacionChoferes,
+    toggleMultiSelectMode, 
+    getSelectedReservasIds,
+    activarAutocomplete,    // <--- IMPORTANTE
+    calcularYMostrarRuta    // <--- IMPORTANTE
+} from './mapa.js';
 
 import { 
     asignarMultiplesReservas,
@@ -42,7 +56,6 @@ let appInitialized = false;
 let filtroChoferAsignadosId = null;
 let filtroHoras = null;
 
-// Variables para selección múltiple en tabla
 window.isTableMultiSelectMode = false;
 let selectedTableIds = new Set();
 
@@ -72,51 +85,36 @@ document.getElementById('login-btn').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
-// 1. Botón "Borrar TODAS"
+// --- EVENTOS DE REVISIÓN MASIVA ---
 document.getElementById('btn-limpiar-revision')?.addEventListener('click', async () => {
     if (confirm("⚠️ ¡PELIGRO!\n\nEstás a punto de borrar TODAS las reservas de la lista de revisión.\nEsta acción no se puede deshacer.\n\n¿Estás seguro?")) {
         const btn = document.getElementById('btn-limpiar-revision');
         btn.disabled = true;
         btn.textContent = "⏳ Borrando...";
-        
         const { limpiarReservasDeRevision } = await import('./reservas.js');
         await limpiarReservasDeRevision();
-        
         btn.disabled = false;
         btn.textContent = "🔥 Borrar TODAS las de Revisión";
     }
 });
 
-// 2. Checkbox "Seleccionar Todo"
 document.getElementById('check-all-revision')?.addEventListener('change', (e) => {
     const checked = e.target.checked;
-    document.querySelectorAll('.check-reserva-revision').forEach(chk => {
-        chk.checked = checked;
-    });
+    document.querySelectorAll('.check-reserva-revision').forEach(chk => chk.checked = checked);
     actualizarPanelLote();
 });
 
-// 3. Listener delegado para los checkboxes individuales
 document.getElementById('tabla-importadas')?.addEventListener('change', (e) => {
-    if (e.target.classList.contains('check-reserva-revision')) {
-        actualizarPanelLote();
-    }
+    if (e.target.classList.contains('check-reserva-revision')) actualizarPanelLote();
 });
 
 function actualizarPanelLote() {
     const checks = document.querySelectorAll('.check-reserva-revision:checked');
-    const count = checks.length;
     const panel = document.getElementById('panel-acciones-lote');
-    document.getElementById('contador-check-revision').textContent = count;
-
-    if (count > 0) {
-        panel.style.display = 'flex';
-    } else {
-        panel.style.display = 'none';
-    }
+    document.getElementById('contador-check-revision').textContent = checks.length;
+    panel.style.display = checks.length > 0 ? 'flex' : 'none';
 }
 
-// 4. Botones de Acción Lote
 document.getElementById('btn-borrar-lote')?.addEventListener('click', async () => {
     const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
     if (confirm(`¿Borrar estas ${ids.length} reservas?`)) {
@@ -127,37 +125,25 @@ document.getElementById('btn-borrar-lote')?.addEventListener('click', async () =
 
 document.getElementById('btn-confirmar-lote')?.addEventListener('click', async () => {
     const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
-    if (confirm(`¿Confirmar estas ${ids.length} reservas para que pasen a Pendientes?`)) {
+    if (confirm(`¿Confirmar estas ${ids.length} reservas?`)) {
         const { procesarLoteRevision } = await import('./reservas.js');
         await procesarLoteRevision('confirmar', ids);
     }
 });
 
-// 4. FUNCIONES PRINCIPALES Y DE UTILIDAD
 
-// --- FUNCIÓN FALTANTE QUE SE AGREGA AHORA ---
-function activarAutocomplete(inputElement) {
-    if (!window.google || !window.google.maps || !window.google.maps.places) return;
-    
-    new google.maps.places.Autocomplete(inputElement, {
-        fields: ["formatted_address", "geometry", "name"],
-        strictBounds: false,
-    });
-}
-// --------------------------------------------
+// 4. FUNCIONES PRINCIPALES
 
 function loadAuxData() {
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
         caches.clientes = {};
         if (clienteSelect) clienteSelect.innerHTML = '<option value="Default">Default</option>';
-
         snapshot.forEach(doc => {
             const data = doc.data();
             caches.clientes[doc.id] = data;
             if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
         });
-
         poblarFiltroClientes(caches.clientes);
     });
 
@@ -186,17 +172,13 @@ function loadAuxData() {
 }
 
 function hideTableMenus() {
-    document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
-        menu.classList.remove('visible');
-    });
+    document.querySelectorAll('.menu-contenido.visible').forEach(menu => menu.classList.remove('visible'));
 }
 
 function toggleMenu(event) {
     event.stopPropagation();
     document.querySelectorAll('.menu-contenido.visible').forEach(menu => {
-        if (menu !== event.currentTarget.nextElementSibling) {
-            menu.classList.remove('visible');
-        }
+        if (menu !== event.currentTarget.nextElementSibling) menu.classList.remove('visible');
     });
     event.currentTarget.nextElementSibling.classList.toggle('visible');
 }
@@ -211,7 +193,6 @@ function updateTablePanelVisibility() {
     if (selectedTableIds.size > 0) {
         panel.style.display = 'block';
         if(contador) contador.textContent = selectedTableIds.size;
-        
         lista.innerHTML = `<li style="padding:10px">Has seleccionado ${selectedTableIds.size} viajes de la lista.</li>`;
 
         if (selectMovil.options.length <= 1 && caches.moviles) {
@@ -223,9 +204,7 @@ function updateTablePanelVisibility() {
              });
              selectMovil.innerHTML = opts;
         }
-
         btnAsignar.disabled = false;
-        
     } else {
         panel.style.display = 'none';
     }
@@ -241,7 +220,6 @@ function toggleTableSelection(reservaId, rowElement) {
     }
     updateTablePanelVisibility();
 }
-
 
 function actualizarFiltrosDeMoviles() {
     const selectReservas = document.getElementById('filtro-chofer-asignados');
@@ -279,7 +257,6 @@ function actualizarFiltrosDeMoviles() {
             const infoChofer = choferAsignado ? `(Asignado a ${choferAsignado.nombre})` : '(Libre)';
             optionsHTMLAdmin += `<option value="${movil.id}">N° ${movil.numero} ${infoChofer}</option>`;
         });
-        
         const valorSeleccionado = selectAdmin.value;
         selectAdmin.innerHTML = optionsHTMLAdmin;
         selectAdmin.value = valorSeleccionado;
@@ -288,181 +265,147 @@ function actualizarFiltrosDeMoviles() {
 
 function filtrarReservasAsignadasPorChofer(choferId) {
     filtroChoferAsignadosId = choferId || null;
-    if (lastReservasSnapshot) {
-        renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
-    }
+    if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
 }
 
 function filtrarPorHoras(horas) {
     filtroHoras = horas;
     document.querySelectorAll('.time-filters .map-filter-btn').forEach(btn => btn.classList.remove('active'));
     let btnActivo;
-    if (horas === null) {
-        btnActivo = document.querySelector('.time-filters button:nth-child(1)');
-    } else {
-        btnActivo = document.querySelector(`.time-filters .map-filter-btn[onclick="window.app.filtrarPorHoras(${horas})"]`);
-    }
+    if (horas === null) btnActivo = document.querySelector('.time-filters button:nth-child(1)');
+    else btnActivo = document.querySelector(`.time-filters .map-filter-btn[onclick="window.app.filtrarPorHoras(${horas})"]`);
     if (btnActivo) btnActivo.classList.add('active');
-    if (lastReservasSnapshot) {
-        renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
-    }
+    if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
 }
 
 function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     const form = document.getElementById('reserva-form');
     form.reset();
-
     form.cliente.value = datos.cliente || 'Default';
-    form.siniestro.value = datos.siniestro || '';
-    form.autorizacion.value = datos.autorizacion || '';
     form.dni_pasajero.value = datos.dni_pasajero || '';
     form.nombre_pasajero.value = datos.nombre_pasajero || '';
     form.telefono_pasajero.value = datos.telefono_pasajero || '';
-    form.origen.value = datos.origen || '';
-    form.destino.value = datos.destino || '';
+    
+    // Configurar orígenes (simple para regreso)
+    const container = document.getElementById('origenes-container');
+    const inputOrigen = container.querySelector('.origen-input');
+    if(inputOrigen) {
+        inputOrigen.value = datos.origen || '';
+        activarAutocomplete(inputOrigen); // Activar autocomplete y ruta
+    }
+    
+    const inputDestino = document.getElementById('destino');
+    if(inputDestino) {
+        inputDestino.value = datos.destino || '';
+        activarAutocomplete(inputDestino);
+    }
 
     document.getElementById('reserva-id').value = '';
     document.getElementById('modal-title').textContent = 'Nueva Reserva (Regreso)';
     document.getElementById('reserva-modal').style.display = 'block';
 
     if(initMapaModalCallback) {
-        setTimeout(() => initMapaModalCallback(null, null), 100);
+        // Inicializar mapa y calcular ruta
+        setTimeout(() => {
+            initMapaModalCallback(null, null);
+            calcularYMostrarRuta(); 
+        }, 100);
     }
 }
 
-// 5. INICIALIZACIÓN CENTRAL DE LA APLICACIÓN
-// 5. INICIALIZACIÓN CENTRAL DE LA APLICACIÓN
+
+// 5. INICIALIZACIÓN CENTRAL
 function initApp() {
-    console.log("Intentando inicializar la aplicación en:", new Date().toLocaleTimeString());
-    
-    if (appInitialized) {
-        console.warn("ADVERTENCIA: La aplicación ya estaba inicializada.");
-        return;
-    }
+    if (appInitialized) return;
     appInitialized = true;
-    console.log("Aplicación Inicializada y Módulos Conectados");
     
     const btnImportar = document.getElementById('btn-importar-excel');
     const inputExcel = document.getElementById('input-excel');
 
     if (btnImportar && inputExcel) {
-        btnImportar.addEventListener('click', () => {
-            inputExcel.click();
-        });
-
+        btnImportar.addEventListener('click', () => inputExcel.click());
         inputExcel.addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
-                console.log("Archivo detectado, iniciando importación...");
                 try {
                     const { manejarImportacionExcel } = await import('./reservas.js');
                     manejarImportacionExcel(e);
-                } catch (err) {
-                    console.error("Error al importar el módulo:", err);
-                    alert("Error al cargar el módulo de importación.");
-                }
+                } catch (err) { alert("Error al cargar módulo importación."); }
             }
         });
     }
 
-    // --- LOGICA PARA MULTIPLES ORIGENES ---
+    // --- LÓGICA MULTI-ORIGEN CONECTADA AL MAPA ---
     function initMultiOrigenLogic() {
         const container = document.getElementById('origenes-container');
         const btnAdd = document.getElementById('btn-add-origen');
         
         if (!container || !btnAdd) return;
 
-        // 1. Activar autocomplete en el input inicial
+        // 1. Activar en el input inicial
         const primerInput = container.querySelector('.origen-input');
-        if (primerInput) activarAutocomplete(primerInput);
+        if (primerInput) {
+            activarAutocomplete(primerInput);
+            primerInput.addEventListener('change', calcularYMostrarRuta);
+        }
 
         const MAX_ORIGENES = 4;
-    
         btnAdd.addEventListener('click', () => {
             const inputsActuales = container.querySelectorAll('.origen-input').length;
-            
-            if (inputsActuales >= MAX_ORIGENES) {
-                alert("Máximo de 4 orígenes permitidos.");
-                return;
-            }
+            if (inputsActuales >= MAX_ORIGENES) return alert("Máximo de 4 orígenes.");
 
             const div = document.createElement('div');
             div.className = 'input-group-origen';
             div.style.cssText = "display: flex; gap: 5px; align-items: center;";
-            
             div.innerHTML = `
                 <span style="font-size: 18px; color: #6c757d;">↳</span>
                 <input type="text" name="origen_dinamico" class="origen-input" placeholder="Parada adicional..." style="flex: 1;">
                 <button type="button" class="btn-remove-origen" style="background: none; border: none; color: red; font-weight: bold; cursor: pointer; width: 30px;">✕</button>
             `;
-
             container.appendChild(div);
 
-            // 2. IMPORTANTE: Activar Autocomplete en el NUEVO input
+            // 2. Activar Autocomplete y Ruta en el NUEVO input
             const nuevoInput = div.querySelector('input');
             activarAutocomplete(nuevoInput);
+            nuevoInput.addEventListener('change', calcularYMostrarRuta);
 
             div.querySelector('.btn-remove-origen').addEventListener('click', () => {
                 div.remove();
+                calcularYMostrarRuta(); // Recalcular al borrar
             });
         });
     }
 
-    // Iniciar lógica de orígenes múltiples
     initMultiOrigenLogic();
 
-    // --- CORRECCIÓN: ACTIVAR DESTINO AL INICIAR ---
+    // Activar Destino
     const inputDestino = document.getElementById('destino');
     if (inputDestino) {
         activarAutocomplete(inputDestino);
+        inputDestino.addEventListener('change', calcularYMostrarRuta);
     }
-    // ----------------------------------------------
 
-    // --- IMPORTAR GMAIL ---
+    // Imports Gmail/PDF
     document.getElementById('btn-importar-gmail')?.addEventListener('click', async () => {
+        if (!confirm("¿Buscar viajes en Gmail?")) return;
         const btn = document.getElementById('btn-importar-gmail');
-        const confirmacion = confirm("¿Deseas buscar nuevos viajes en la bandeja de entrada de Gmail (no leídos)?");
-        if (!confirmacion) return;
-
         try {
-            btn.disabled = true;
-            btn.textContent = '⏳ Buscando en Gmail...';
-            
-            const procesarReservasGmail = firebase.functions().httpsCallable('procesarReservasGmail');
-            const result = await procesarReservasGmail();
-
-            alert(result.data.message || "Búsqueda finalizada. Revisa la pestaña 'Importadas'.");
-            
-            const btnImportadas = document.querySelector('button[data-tab="importadas"]');
-            if(btnImportadas) btnImportadas.click(); 
-            
-        } catch (error) {
-            console.error("Error al importar desde Gmail:", error);
-            alert("Error al buscar en Gmail. Revisa la consola.");
-        } finally {
-            btn.textContent = '✉️ Importar Gmail';
-            btn.disabled = false;
-        }
+            btn.disabled = true; btn.textContent = '⏳ Buscando...';
+            const procesar = firebase.functions().httpsCallable('procesarReservasGmail');
+            const res = await procesar();
+            alert(res.data.message);
+            document.querySelector('button[data-tab="importadas"]')?.click();
+        } catch (e) { alert("Error Gmail: " + e.message); } 
+        finally { btn.textContent = '✉️ Importar Gmail'; btn.disabled = false; }
     });
 
-    // --- IMPORTAR PDF ---
     const btnImportarPDF = document.getElementById('btn-importar-pdf');
     const inputPDF = document.getElementById('input-pdf');
-
     if (btnImportarPDF && inputPDF) {
-        btnImportarPDF.addEventListener('click', () => {
-            inputPDF.click();
-        });
-
+        btnImportarPDF.addEventListener('click', () => inputPDF.click());
         inputPDF.addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
-                console.log("PDF detectado, iniciando procesamiento...");
-                try {
-                    const { manejarImportacionPDF } = await import('./reservas.js');
-                    manejarImportacionPDF(e);
-                } catch (err) {
-                    console.error("Error al importar módulo PDF:", err);
-                    alert("Error al cargar la función de PDF.");
-                }
+                const { manejarImportacionPDF } = await import('./reservas.js');
+                manejarImportacionPDF(e);
             }
         });
     }
@@ -472,142 +415,98 @@ function initApp() {
         poblarSelectDeMoviles(caches);
         document.getElementById('modal-title').textContent = 'Nueva Reserva';
         document.getElementById('reserva-id').value = '';
+        
+        // Resetear orígenes a 1 solo
+        const container = document.getElementById('origenes-container');
+        container.innerHTML = `<div class="input-group-origen" style="display: flex; gap: 5px;"><input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;"><div style="width: 30px;"></div></div>`;
+        const inp = container.querySelector('.origen-input');
+        activarAutocomplete(inp);
+        inp.addEventListener('change', calcularYMostrarRuta);
+
         document.getElementById('reserva-modal').style.display = 'block';
-        initMapaModal(null, null);
+        initMapaModal(null, null); // Inicia el mapa modal limpio
     });
     
     document.getElementById('btn-toggle-select-table')?.addEventListener('click', function() {
         window.isTableMultiSelectMode = !window.isTableMultiSelectMode;
-        const btn = this;
-        
         if (window.isTableMultiSelectMode) {
-            btn.textContent = 'Cancelar Selección';
-            btn.classList.add('active');
+            this.textContent = 'Cancelar Selección';
+            this.classList.add('active');
             window.app.hideTableMenus(); 
         } else {
-            btn.textContent = 'Activar Selección Múltiple';
-            btn.classList.remove('active');
+            this.textContent = 'Activar Selección Múltiple';
+            this.classList.remove('active');
             selectedTableIds.clear();
             document.querySelectorAll('.selected-row').forEach(r => r.classList.remove('selected-row'));
             document.getElementById('multi-select-panel').style.display = 'none';
         }
     });
 
-    const closeModal = (modalId) => {
-        const modal = document.getElementById(modalId);
-        if(modal) modal.style.display = 'none';
-    };
+    const closeModal = (id) => { const m = document.getElementById(id); if(m) m.style.display = 'none'; };
     document.querySelector('.close-btn')?.addEventListener('click', () => closeModal('reserva-modal'));
     document.querySelector('.close-edit-btn')?.addEventListener('click', () => closeModal('edit-modal'));
-    document.querySelector('.close-reset-password-btn')?.addEventListener('click', () => closeModal('reset-password-modal'));
     
-    document.getElementById('busqueda-reservas')?.addEventListener('input', (e) => {
-        buscarEnReservas(e.target.value, caches);
-    });
-
+    document.getElementById('busqueda-reservas')?.addEventListener('input', (e) => buscarEnReservas(e.target.value, caches));
     document.getElementById('btn-multi-select')?.addEventListener('click', toggleMultiSelectMode);
     
     document.getElementById('btn-cancel-multi')?.addEventListener('click', () => {
-        if (window.isTableMultiSelectMode) {
-            document.getElementById('btn-toggle-select-table').click();
-        } else {
-            toggleMultiSelectMode(); 
-        }
+        if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
+        else toggleMultiSelectMode(); 
     });
 
     document.getElementById('btn-assign-multi')?.addEventListener('click', async () => {
         const movilId = document.getElementById('multi-select-movil').value;
-        if (!movilId) {
-            alert('Por favor, selecciona un móvil para asignar.');
-            return;
-        }
-
-        let reservaIds = [];
-        let origenDeLaAccion = '';
-
-        if (window.isTableMultiSelectMode) {
-            reservaIds = Array.from(selectedTableIds);
-            origenDeLaAccion = 'tabla';
-        } else {
-            reservaIds = window.app.getSelectedReservasIds(); 
-            origenDeLaAccion = 'mapa';
-        }
-
-        if (reservaIds.length === 0) {
-            alert("No hay viajes seleccionados.");
-            return;
-        }
-
-        const exito = await asignarMultiplesReservas(reservaIds, movilId, caches);
-        
-        if (exito) {
-            if (origenDeLaAccion === 'tabla') {
-                document.getElementById('btn-toggle-select-table').click(); 
-            } else {
-                toggleMultiSelectMode(); 
-            }
+        if (!movilId) return alert('Selecciona un móvil.');
+        let ids = window.isTableMultiSelectMode ? Array.from(selectedTableIds) : window.app.getSelectedReservasIds();
+        if (ids.length === 0) return alert("Sin selección.");
+        if (await asignarMultiplesReservas(ids, movilId, caches)) {
+            if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
+            else toggleMultiSelectMode();
             document.getElementById('multi-select-movil').value = "";
         }
     });
 
-    // --- DEFINICIÓN LIMPIA DE WINDOW.APP ---
+    // --- WINDOW.APP DEFINITIVO ---
     window.app = {
         editItem, deleteItem, openResetPasswordModal,
-        openEditReservaModal: (reservaId) => openEditReservaModal(reservaId, caches, initMapaModal),
-        asignarMovil: (reservaId, movilId) => asignarMovil(reservaId, movilId, caches),
-        changeReservaState: (reservaId, newState) => changeReservaState(reservaId, newState, caches),
-        finalizarReserva: (reservaId) => finalizarReserva(reservaId, caches),
+        openEditReservaModal: (id) => openEditReservaModal(id, caches, initMapaModal),
+        asignarMovil: (id, mId) => asignarMovil(id, mId, caches),
+        changeReservaState: (id, st) => changeReservaState(id, st, caches),
+        finalizarReserva: (id) => finalizarReserva(id, caches),
         quitarAsignacion, updateHoraPickup, updateZona,
-        toggleMenu,
-        hideTableMenus,
+        toggleMenu, hideTableMenus,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
-        filtrarReservasAsignadasPorChofer,
-        filtrarPorHoras,
-        getSelectedReservasIds,
-        confirmarReservaImportada,
-        toggleTableSelection, 
-        handleConfirmarDesdeModal,
-        activarAutocomplete: activarAutocomplete // Ahora sí existe la función
+        filtrarReservasAsignadasPorChofer, filtrarPorHoras,
+        getSelectedReservasIds, confirmarReservaImportada,
+        toggleTableSelection, handleConfirmarDesdeModal,
+        // NUEVAS EXPORTACIONES:
+        activarAutocomplete: activarAutocomplete,
+        calcularYMostrarRuta: calcularYMostrarRuta
+        
     };
     
-    window.openTab = (event, tabName) => openTab(event, tabName, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
+    window.openTab = (e, n) => openTab(e, n, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
     window.showReservasTab = showReservasTab;
     window.openAdminTab = openAdminTab;
     
     document.getElementById('reserva-form').addEventListener('submit', async (e) => {
-        const datosParaRegreso = await handleSaveReserva(e, caches);
-        if (datosParaRegreso) {
-            openNuevaReservaConDatos(datosParaRegreso, initMapaModal);
-        }
+        const datosRegreso = await handleSaveReserva(e, caches);
+        if (datosRegreso) openNuevaReservaConDatos(datosRegreso, initMapaModal);
     });
     
-    document.getElementById('btn-confirmar-modal')?.addEventListener('click', (e) => {
-        handleConfirmarDesdeModal(e, caches);
-    });
-    
+    document.getElementById('btn-confirmar-modal')?.addEventListener('click', (e) => handleConfirmarDesdeModal(e, caches));
     document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
 
-    // --- CARGA DE DATOS Y MÓDULOS ---
+    // Cargar datos iniciales
     loadAuxData();
     initHistorial(caches);
     initPasajeros();
     initAdmin(caches);
     initMapa(caches, () => lastReservasSnapshot);
 
-    // --- LISTENER PRINCIPAL DE RESERVAS ---
     listenToReservas(snapshot => {
-        console.log("Listener de 'reservas' activado con", snapshot.size, "documentos.");
         lastReservasSnapshot = snapshot;
         renderAllReservas(snapshot, caches, filtroChoferAsignadosId, filtroHoras);
-        
-        const searchResultsContainer = document.getElementById('resultados-busqueda-reservas');
-        if (searchResultsContainer && searchResultsContainer.style.display === 'block') {
-            const searchInput = document.getElementById('busqueda-reservas');
-            if (searchInput.value) {
-                buscarEnReservas(searchInput.value, caches);
-            }
-        }
-       
         cargarMarcadoresDeReservas();
     });
 

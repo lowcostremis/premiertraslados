@@ -107,6 +107,7 @@
                                  <th>Pasajero</th>
                                  <th>Origen</th>
                                  <th>Destino</th>
+                                 <th>Distancia</th>
                                  <th>Cliente</th>
                                   <th>Estado</th> 
                                  <th>Acciones</th>
@@ -133,6 +134,7 @@
                                     <th>Destino</th>
                                     <th>Cant.</th>
                                     <th>Zona</th>
+                                    <th>Distancia</th>
                                     <th>Cliente</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -159,6 +161,7 @@
                                     <th>Destino</th>
                                     <th>Cant.</th>
                                     <th>Zona</th>
+                                    <th>Distancia</th>
                                     <th>Cliente</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -189,6 +192,7 @@
                                     <th>Destino</th>
                                     <th>Cant.</th>
                                     <th>Zona</th>
+                                    <th>Distancia</th>
                                     <th>Cliente</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -214,6 +218,7 @@
                                     <th>Destino</th>
                                     <th>Cant.</th>
                                     <th>Zona</th>
+                                    <th>Distancia</th>
                                     <th>Cliente</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -257,8 +262,7 @@
                     <ul id="map-context-menu-items" style="list-style:none; margin:0; padding:5px;"></ul>
                 </div>
             </div>
-            
-            
+
             <div id="Administracion" class="tab-content" style="display: none;">
                 <nav class="sub-nav">
                     <button class="sub-tab-btn active" onclick="openAdminTab(event, 'admin-clientes')">Clientes</button>
@@ -501,18 +505,17 @@
                          <div class="form-group" style="align-items: flex-start;">
                               <label>Origen(es) <small>(Máx 4)</small></label>
     
-                        <div id="origenes-container" style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
-                            <div class="input-group-origen" style="display: flex; gap: 5px;">
-                                 <input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;">
-                                 <div style="width: 30px;"></div>
-                              </div>
-                         </div>
+                            <div id="origenes-container" style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
+                                <div class="input-group-origen" style="display: flex; gap: 5px;">
+                                     <input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;">
+                                     <div style="width: 30px;"></div>
+                                  </div>
+                             </div>
 
-                         <button type="button" id="btn-add-origen" style="margin-top: 8px; background: transparent; border: 1px dashed #6c757d; color: #6c757d; padding: 5px; width: 100%; cursor: pointer;">
-                                 + Agregar parada de origen
-                         </button>
+                             <button type="button" id="btn-add-origen" style="margin-top: 8px; background: transparent; border: 1px dashed #6c757d; color: #6c757d; padding: 5px; width: 100%; cursor: pointer;">
+                                     + Agregar parada de origen
+                             </button>
                          </div>
-                         
                    </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -520,6 +523,18 @@
                             <input type="text" id="destino" name="destino">
                         </div>
                     </div>
+                   
+                    <div class="form-row" style="background: #e9ecef; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                        <div class="form-group">
+                            <label for="distancia_total_input" style="color: #1877f2; font-weight: bold;">Distancia Total (Km)</label>
+                            <input type="text" id="distancia_total_input" name="distancia_total" readonly style="font-weight: bold; color: #333;" placeholder="0.0 km">
+                        </div>
+                        <div class="form-group">
+                             <label>Tiempo Estimado</label>
+                             <input type="text" id="tiempo_total_input" readonly placeholder="0 min">
+                        </div>
+                    </div>
+
                     <div class="form-row">
                         <div class="form-group">
                             <label for="cantidad_pasajeros">Cantidad Pasajeros</label>
@@ -602,8 +617,13 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4.23.3/dist/algoliasearch-lite.umd.js"></script>
-    <script async src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA5c2-7JR_bPXYu2FPg-ZVMsq-7NZrSSBk&libraries=places" defer></script>
-    
+    <script>
+    (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.googleapis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+      key: "AIzaSyD33ys3G9-hHG0aw34EQByXecK3c7oEbFo", // Tu clave API actual
+      v: "weekly"
+      // No hace falta listar libraries aquí, las llamaremos en el JS
+    });
+</script>
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
