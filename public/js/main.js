@@ -199,7 +199,21 @@ function updateTablePanelVisibility() {
     if (selectedTableIds.size > 0) {
         panel.style.display = 'block';
         if(contador) contador.textContent = selectedTableIds.size;
-        lista.innerHTML = `<li style="padding:10px">Has seleccionado ${selectedTableIds.size} viajes de la lista.</li>`;
+        
+        // --- CORRECCIÓN: Guardamos los IDs en el HTML para que el botón de anular los encuentre ---
+        lista.innerHTML = '';
+        selectedTableIds.forEach(id => {
+            const li = document.createElement('li');
+            li.dataset.id = id; // Guardamos el ID invisible
+            li.style.display = 'none'; // No hace falta mostrar la lista de IDs, solo el mensaje
+            lista.appendChild(li);
+        });
+
+        const mensaje = document.createElement('li');
+        mensaje.style.padding = '10px';
+        mensaje.textContent = `Has seleccionado ${selectedTableIds.size} viajes de la lista.`;
+        lista.appendChild(mensaje);
+        // ---------------------------------------------------------------------------------------
 
         if (selectMovil.options.length <= 1 && caches.moviles) {
              let opts = '<option value="">Seleccionar móvil...</option>';
@@ -225,6 +239,13 @@ function toggleTableSelection(reservaId, rowElement) {
         rowElement.classList.add('selected-row');
     }
     updateTablePanelVisibility();
+}
+
+function limpiarSeleccion() {
+    selectedTableIds.clear();
+    document.querySelectorAll('.selected-row').forEach(r => r.classList.remove('selected-row'));
+    document.getElementById('multi-select-panel').style.display = 'none';
+    if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
 }
 
 function actualizarFiltrosDeMoviles() {
@@ -473,7 +494,7 @@ function initApp() {
     });
 
     // --- WINDOW.APP DEFINITIVO ---
-    window.app = {
+        window.app = { 
         editItem, deleteItem, openResetPasswordModal,
         openEditReservaModal: (id) => openEditReservaModal(id, caches, initMapaModal),
         asignarMovil: (id, mId) => asignarMovil(id, mId, caches),
@@ -483,12 +504,16 @@ function initApp() {
         toggleMenu, hideTableMenus,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer, filtrarPorHoras,
-        getSelectedReservasIds, confirmarReservaImportada,
+        getSelectedReservasIds: () => {
+            if (window.isTableMultiSelectMode) return Array.from(selectedTableIds);
+            if (typeof getSelectedReservasIds === 'function') return getSelectedReservasIds();
+            return [];
+        },
         toggleTableSelection, handleConfirmarDesdeModal,
-        // NUEVAS EXPORTACIONES:
-        activarAutocomplete: activarAutocomplete,
-        calcularYMostrarRuta: calcularYMostrarRuta
-        
+        activarAutocomplete,
+        calcularYMostrarRuta,
+        limpiarSeleccion,
+        confirmarReservaImportada
     };
     
     window.openTab = (e, n) => openTab(e, n, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });

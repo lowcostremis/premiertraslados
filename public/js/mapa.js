@@ -179,12 +179,26 @@ function handleMarkerSelection(reserva) {
 
 function actualizarPanelMultiSelect() {
     const panelList = document.getElementById('multi-select-list');
-    const contador = document.getElementById('contador-seleccion'), btnAsignar = document.getElementById('btn-assign-multi'), btnAnular = document.getElementById('btn-anular-multi');
-    if (panelList) { panelList.innerHTML = ''; selectedReservas.forEach(r => { const li = document.createElement('li'); li.textContent = `Pas: ${r.nombre_pasajero}`; panelList.appendChild(li); }); }
+    const contador = document.getElementById('contador-seleccion');
+    const btnAsignar = document.getElementById('btn-assign-multi');
+    const btnAnular = document.getElementById('btn-anular-multi');
+
+    if (panelList) {
+        panelList.innerHTML = ''; 
+        selectedReservas.forEach(r => { 
+            const li = document.createElement('li'); 
+            li.dataset.id = r.id; // Correcto: ahora el ID viaja en el HTML
+            li.textContent = `Pas: ${r.nombre_pasajero}`; 
+            panelList.appendChild(li); 
+        }); 
+    }
+
     if (contador) contador.textContent = selectedReservas.size;
     const haySeleccion = selectedReservas.size > 0;
-    if (btnAsignar) btnAsignar.disabled = !haySeleccion; if (btnAnular) btnAnular.disabled = !haySeleccion;
+    if (btnAsignar) btnAsignar.disabled = !haySeleccion;
+    if (btnAnular) btnAnular.disabled = !haySeleccion;
 }
+
 
 function crearIconoDePin(color, texto) {
     const svgIcon = `<svg width="42" height="56" viewBox="0 0 42 56" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 0C11.64 0 4 7.64 4 18c0 14 17 38 17 38s17-24 17-38C38 7.64 30.36 0 21 0Z" fill="${color}"/><circle cx="21" cy="18" r="15" fill="white"/><text x="21" y="24" font-family="Arial" font-size="15px" font-weight="bold" fill="#333" text-anchor="middle">${texto}</text></svg>`;
