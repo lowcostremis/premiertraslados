@@ -375,44 +375,58 @@ export async function handleSaveReserva(e, caches) {
 }
 
 export async function handleConfirmarDesdeModal(e, caches) {
-    e.preventDefault();
+   e.preventDefault();
     const f = document.getElementById('reserva-form');
     if (!f.checkValidity()) { f.reportValidity(); return; }
+    
     const btn = document.getElementById('btn-confirmar-modal');
+    const operador = window.currentUserEmail || 'Operador';
+    const ahora = new Date().toLocaleString('es-AR');
+    const rId = f['reserva-id'].value;
+
     try {
         btn.disabled = true; btn.textContent = 'Procesando...';
-        const rId = f['reserva-id'].value;
-        const movilId = f.asignar_movil.value;
         const inputsOrigen = document.querySelectorAll('.origen-input');
         let origenes = []; inputsOrigen.forEach(i => { if(i.value.trim()) origenes.push(i.value.trim()); });
-        const d = {
-            cliente: f.cliente.value,
-            siniestro: f.siniestro.value,
-            autorizacion: f.autorizacion.value,
-            dni_pasajero: f.dni_pasajero.value,
-            nombre_pasajero: f.nombre_pasajero.value,
-            telefono_pasajero: f.telefono_pasajero.value,
-            fecha_turno: f.fecha_turno.value,
-            hora_turno: f.hora_turno.value,
-            hora_pickup: f.hora_pickup.value,
-            origen: origenes.join(' + '),
-            destino: f.destino.value,
-            cantidad_pasajeros: f.viaje_exclusivo.checked ? '4' : f.cantidad_pasajeros.value,
-            zona: f.zona.value,
-            observaciones: f.observaciones.value,
-            es_exclusivo: f.viaje_exclusivo.checked,
-            distancia: document.getElementById('distancia_total_input').value,
-            estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() },
-            espera_total: f.espera_total.value,
-            espera_sin_cargo: f.espera_sin_cargo.value,
-            duracion_estimada_minutos: f.duracion_estimada_minutos.value,
-        };
-        if (rId) await db.collection('reservas').doc(rId).update(d);
-        else { d.creadoEn = new Date(); await db.collection('reservas').add(d); }
-        if (movilId && rId) await asignarMovil(rId, movilId, caches);
+        
+        const ref = db.collection('reservas').doc(rId);
+        await db.runTransaction(async (t) => {
+            const doc = await t.get(ref);
+            const logActual = doc.exists ? (doc.data().log || '') : '';
+            
+            const d = {
+                cliente: f.cliente.value,
+                siniestro: f.siniestro.value,
+                autorizacion: f.autorizacion.value,
+                dni_pasajero: f.dni_pasajero.value,
+                nombre_pasajero: f.nombre_pasajero.value,
+                telefono_pasajero: f.telefono_pasajero.value,
+                fecha_turno: f.fecha_turno.value,
+                hora_turno: f.hora_turno.value,
+                hora_pickup: f.hora_pickup.value,
+                origen: origenes.join(' + '),
+                destino: f.destino.value,
+                cantidad_pasajeros: f.viaje_exclusivo.checked ? '4' : f.cantidad_pasajeros.value,
+                zona: f.zona.value,
+                observaciones: f.observaciones.value,
+                es_exclusivo: f.viaje_exclusivo.checked,
+                distancia: document.getElementById('distancia_total_input').value,
+                espera_total: f.espera_total.value || 0,
+                espera_sin_cargo: f.espera_sin_cargo.value || 0,
+                duracion_estimada_minutos: f.duracion_estimada_minutos.value || 0,
+                estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() },
+                log: logActual + `\n✅ Confirmado (Modal) por: ${operador} (${ahora})`
+            };
+            t.update(ref, d);
+        });
+
         document.getElementById('reserva-modal').style.display = 'none';
-    } catch(err) { alert(err.message); }
-    finally { btn.disabled = false; btn.textContent = '✅ Confirmar e Importar'; }
+    } catch(err) { 
+        console.error(err);
+        alert(err.message); 
+    } finally { 
+        btn.disabled = false; btn.textContent = '✅ Confirmar e Importar'; 
+    }
 }
 
 export async function openEditReservaModal(reservaId, caches, initMapaModalCallback) {
@@ -479,8 +493,23 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
 }
 
 export async function confirmarReservaImportada(reservaId) {
-    try { await db.collection('reservas').doc(reservaId).update({ estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() } }); }
-    catch (e) { alert("Error: " + e.message); }
+    const operador = window.currentUserEmail || 'Operador';
+    const ahora = new Date().toLocaleString('es-AR');
+    const ref = db.collection('reservas').doc(reservaId);
+    try {
+        await db.runTransaction(async (t) => {
+            const doc = await t.get(ref);
+            if (!doc.exists) return;
+            const logActual = doc.data().log || '';
+            t.update(ref, {
+                estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() },
+                log: logActual + `\n✅ Confirmado por: ${operador} (${ahora})`
+            });
+        });
+    } catch (e) { 
+        console.error("Error confirmando:", e);
+        alert("Error: " + e.message); 
+    }
 }
 
 export async function asignarMovil(id, movilId, caches) {
