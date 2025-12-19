@@ -64,6 +64,7 @@ let selectedTableIds = new Set();
 auth.onAuthStateChanged(user => {
     const authSection = document.getElementById('auth-section');
     const appContent = document.getElementById('app-content');
+    
     if (user) {
         authSection.style.display = 'none';
         appContent.style.display = 'block';

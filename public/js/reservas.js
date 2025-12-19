@@ -287,12 +287,20 @@ export async function buscarEnReservas(texto, caches) {
     }
 }
 
-// --- FUNCIÓN DE GUARDADO (CON DISTANCIA) ---
+
+// --- FUNCIÓN DE GUARDADO (COMPLETA Y CORREGIDA) ---
 export async function handleSaveReserva(e, caches) {
     e.preventDefault();
     const f = e.target; 
-    const submitBtn = f.querySelector('button[type="submit"]');
+    const submitBtn = f.querySelector('button[type="submit"]');    
     
+    const estadoActual = document.getElementById('reserva-estado-principal')?.value || '';
+    if (estadoActual !== 'Revision' && !f.fecha_turno.value) {
+        alert("Atención Javi: La fecha es obligatoria para confirmar la reserva.");
+        return; 
+    }
+
+    // --- Lógica de Orígenes ---
     const inputsOrigen = document.querySelectorAll('.origen-input');
     let origenesArray = [];
     inputsOrigen.forEach(input => {
@@ -300,8 +308,8 @@ export async function handleSaveReserva(e, caches) {
             origenesArray.push(input.value.trim());
         }
     });
-    const origenFinal = origenesArray.join(' + ');
 
+    const origenFinal = origenesArray.join(' + ');
     if (!origenFinal) {
         alert("Debes ingresar al menos una dirección de origen.");
         return;
@@ -324,10 +332,13 @@ export async function handleSaveReserva(e, caches) {
         const esX = f.viaje_exclusivo.checked;
         const cP = esX ? '4' : f.cantidad_pasajeros.value;
         
+        // Obtener coordenadas limpias desde mapa.js
         let coords = { origen: null, destino: null };
-        if (typeof getModalMarkerCoords === 'function') {
-            coords = getModalMarkerCoords(); 
-        }
+        if (window.app && typeof window.app.getModalMarkerCoords === 'function') {
+        coords = window.app.getModalMarkerCoords(); // Usa window.app para evitar errores de referencia
+        } else if (typeof getModalMarkerCoords === 'function') {
+        coords = getModalMarkerCoords();
+        }   
 
         const d = {
             cliente: f.cliente.value,
@@ -336,9 +347,9 @@ export async function handleSaveReserva(e, caches) {
             dni_pasajero: f.dni_pasajero.value.trim(),
             nombre_pasajero: f.nombre_pasajero.value,
             telefono_pasajero: f.telefono_pasajero.value,
-            fecha_turno: f.fecha_turno.value,
-            hora_turno: f.hora_turno.value,
-            hora_pickup: f.hora_pickup.value,
+            fecha_turno: f.fecha_turno.value || "", // Permite vacío si es Revision
+            hora_turno: f.hora_turno.value || "",   // Opcional siempre
+            hora_pickup: f.hora_pickup.value || "", // Opcional siempre
             origen: origenFinal,  
             destino: f.destino.value,
             origen_coords: coords.origen,
@@ -363,10 +374,12 @@ export async function handleSaveReserva(e, caches) {
             reservaGuardadaId = nuevaReservaRef.id;
         }
 
+        // Asignación automática de móvil si se seleccionó en el modal
         if (movilIdParaAsignar && reservaGuardadaId) {
             await asignarMovil(reservaGuardadaId, movilIdParaAsignar, caches);
         }
 
+        // Guardar/Actualizar pasajero
         if (d.dni_pasajero && origenesArray.length > 0) {
             const pRef = db.collection('pasajeros').doc(d.dni_pasajero);
             const pData = {
@@ -377,6 +390,7 @@ export async function handleSaveReserva(e, caches) {
             await pRef.set(pData, { merge: true });
         }
         
+        // Preparar datos si se solicita viaje de regreso
         if (generarRegreso) {
             datosParaRegreso = {
                 cliente: d.cliente,
@@ -404,7 +418,6 @@ export async function handleSaveReserva(e, caches) {
 
     return datosParaRegreso;
 }
-
 export async function handleConfirmarDesdeModal(e, caches) {
     e.preventDefault();
     const f = document.getElementById('reserva-form');
@@ -461,11 +474,20 @@ export async function handleConfirmarDesdeModal(e, caches) {
 export async function openEditReservaModal(reservaId, caches, initMapaModalCallback) {
     const doc = await db.collection('reservas').doc(reservaId).get();
     if (!doc.exists) { alert("Error: No se encontró la reserva."); return; }
-    const data = doc.data();
+    
+    const data = doc.data(); // Definida una sola vez aquí
     const form = document.getElementById('reserva-form');
     form.reset();
     
     poblarSelectDeMoviles(caches);
+
+    // --- NUEVO: ASIGNAR EL ESTADO AL CAMPO OCULTO ---
+    // Esto es lo que permite que luego el guardado sepa si exigir fecha o no
+    const inputEstado = document.getElementById('reserva-estado-principal');
+    if (inputEstado) {
+        inputEstado.value = data.estado?.principal || data.estado || '';
+    }
+    // -----------------------------------------------
 
     form.viaje_exclusivo.checked = data.es_exclusivo || false;
     form.cantidad_pasajeros.disabled = data.es_exclusivo || false;

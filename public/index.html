@@ -451,8 +451,9 @@
             <span class="close-btn">&times;</span>
             <h2 id="modal-title">Nueva Reserva</h2>
             <div class="form-map-container">
-                <form id="reserva-form">
-                    <input type="hidden" id="reserva-id">
+                <form id="reserva-form">                
+                    <input type="hidden" id="reserva-id" name="reserva-id">
+                    <input type="hidden" id="reserva-estado-principal" name="reserva-estado-principal">
                     
                     <div class="form-row">
                         <div class="form-group">
@@ -494,7 +495,7 @@
                         </div>
                         <div class="form-group">
                             <label for="hora_turno">Hora Turno</label>
-                            <input type="time" id="hora_turno" name="hora_turno" required>
+                            <input type="time" id="hora_turno" name="hora_turno">
                         </div>
                         <div class="form-group">
                             <label for="hora_pickup">Hora Pickup</label>
