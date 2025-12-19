@@ -108,6 +108,7 @@
                                  <th>Origen</th>
                                  <th>Destino</th>
                                  <th>Distancia</th>
+                                 <th>Hora Fin Est.</th> 
                                  <th>Cliente</th>
                                   <th>Estado</th> 
                                  <th>Acciones</th>
@@ -135,6 +136,7 @@
                                     <th>Cant.</th>
                                     <th>Zona</th>
                                     <th>Distancia</th>
+                                    <th>Hora Fin Est.</th>
                                     <th>Cliente</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -162,6 +164,7 @@
                                     <th>Cant.</th>
                                     <th>Zona</th>
                                     <th>Distancia</th>
+                                    <th>Hora Fin Est.</th>
                                     <th>Cliente</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -193,6 +196,7 @@
                                     <th>Cant.</th>
                                     <th>Zona</th>
                                     <th>Distancia</th>
+                                    <th>Hora Fin Est.</th>
                                     <th>Cliente</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -219,6 +223,7 @@
                                     <th>Cant.</th>
                                     <th>Zona</th>
                                     <th>Distancia</th>
+                                    <th>Hora Fin Est.</th>
                                     <th>Cliente</th>
                                     <th>Estado</th>
                                     <th>Acciones</th>
@@ -527,15 +532,27 @@
                     </div>
                    
                     <div class="form-row" style="background: #e9ecef; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
-                        <div class="form-group">
-                            <label for="distancia_total_input" style="color: #1877f2; font-weight: bold;">Distancia Total (Km)</label>
-                            <input type="text" id="distancia_total_input" name="distancia_total" readonly style="font-weight: bold; color: #333;" placeholder="0.0 km">
-                        </div>
-                        <div class="form-group">
-                             <label>Tiempo Estimado</label>
-                             <input type="text" id="tiempo_total_input" readonly placeholder="0 min">
-                        </div>
+                         <div class="form-group">
+                             <label for="distancia_total_input" style="color: #1877f2; font-weight: bold;">Distancia Total (Km)</label>
+                             <input type="text" id="distancia_total_input" name="distancia_total" readonly style="font-weight: bold; color: #333;" placeholder="0.0 km">
+                         </div>
+                         <div class="form-group">
+                              <label>Tiempo Estimado</label>
+                              <input type="text" id="tiempo_total_input" readonly placeholder="0 min">
+                              <input type="hidden" id="duracion_estimada_minutos" name="duracion_estimada_minutos">
+                         </div>
                     </div>
+
+                    <div class="form-row">
+                          <div class="form-group">
+                                <label for="espera_total">Horas de Espera Totales</label>
+                                <input type="number" id="espera_total" name="espera_total" step="0.5" min="0" placeholder="Ej: 1.5">
+                         </div>
+                         <div class="form-group">
+                                <label for="espera_sin_cargo">Horas Espera 'Sin Cargo'</label>
+                                <input type="number" id="espera_sin_cargo" name="espera_sin_cargo" step="0.5" min="0" placeholder="Ej: 0.5">
+                         </div>
+                    </div>          
 
                     <div class="form-row">
                         <div class="form-group">

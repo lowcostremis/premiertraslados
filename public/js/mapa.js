@@ -101,7 +101,9 @@ function procesarResultadosRuta(response) {
     crearMarcadorManual(legs[0].start_location, "A", "Origen", "#1877f2");
     legs.forEach((leg, i) => { dist += leg.distance.value; time += leg.duration.value; crearMarcadorManual(leg.end_location, String.fromCharCode(66 + i), i === legs.length - 1 ? "Destino" : "Parada", "#1877f2"); });
     const inputDist = document.getElementById('distancia_total_input'), inputTime = document.getElementById('tiempo_total_input');
+    const inputMinutosOculto = document.getElementById('duracion_estimada_minutos');
     if (inputDist) inputDist.value = (dist / 1000).toFixed(1) + ' km'; if (inputTime) inputTime.value = Math.round(time / 60) + ' min';
+    if (inputMinutosOculto) inputMinutosOculto.value = Math.round(time / 60);
 }
 
 function crearMarcadorManual(posicion, etiqueta, titulo, color) { const marker = new google.maps.Marker({ position: posicion, map: mapaModal, icon: crearIconoDePin(color, etiqueta), title: titulo }); marcadoresRuta.push(marker); }

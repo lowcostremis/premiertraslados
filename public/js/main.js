@@ -312,6 +312,10 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     form.dni_pasajero.value = datos.dni_pasajero || '';
     form.nombre_pasajero.value = datos.nombre_pasajero || '';
     form.telefono_pasajero.value = datos.telefono_pasajero || '';
+    form.espera_total.value = '';
+    form.espera_sin_cargo.value = '';
+    const duracionOculta = document.getElementById('duracion_estimada_minutos');
+    if (duracionOculta) duracionOculta.value = '';
     
     // Configurar orígenes (simple para regreso)
     const container = document.getElementById('origenes-container');

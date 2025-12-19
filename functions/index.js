@@ -169,11 +169,14 @@ exports.exportarHistorico = onCall(async (r) => {
     let q = db.collection('historico').where('archivadoEn', '>=', inicio).where('archivadoEn', '<=', fin);
     if (clienteId) q = q.where('cliente', '==', clienteId);
     const s = await q.get();
-    let csv = "\uFEFFFecha Turno;Hora Turno;Hora PickUp;Pasajero;Cliente;Chofer;Origen;Destino;Estado;Siniestro;Autorizacion\n";
+    let csv = "\uFEFFFecha Turno;Hora Turno;Hora PickUp;Pasajero;Cliente;Chofer;Origen;Destino;Estado;Siniestro;Autorizacion;Espera Total;Espera Sin Cargo\n";
+    
     s.forEach(d => {
         const v = d.data();
         const esc = (f) => `"${(f||'').toString().replace(/"/g, '""')}"`;
-        csv += `${v.fecha_turno||'N/A'};${v.hora_turno||'N/A'};${v.hora_pickup||'N/A'};${esc(v.nombre_pasajero)};${esc(v.clienteNombre)};${esc(v.choferNombre)};${esc(v.origen)};${esc(v.destino)};${(typeof v.estado==='object'?v.estado.principal:v.estado)||'N/A'};${v.siniestro||'N/A'};${v.autorizacion||'N/A'}\n`;
+        
+        // NUEVO: Agregamos los valores al final de la fila
+        csv += `${v.fecha_turno||'N/A'};${v.hora_turno||'N/A'};${v.hora_pickup||'N/A'};${esc(v.nombre_pasajero)};${esc(v.clienteNombre)};${esc(v.choferNombre)};${esc(v.origen)};${esc(v.destino)};${(typeof v.estado==='object'?v.estado.principal:v.estado)||'N/A'};${v.siniestro||'N/A'};${v.autorizacion||'N/A'};${v.espera_total||0};${v.espera_sin_cargo||0}\n`;
     });
     return { csvData: csv };
 });
@@ -341,6 +344,9 @@ async function analizarCorreoConGemini(asunto, cuerpo, adjuntos) {
            - "autorizacion": Número de autorización (si aplica).
            - "cantidad_pasajeros": Número entero (default 1).
            - "es_exclusivo": true/false (default false).
+           "- 'espera_total': Número (horas de espera si figuran en el documento)."
+           "- 'espera_sin_cargo': Número (horas sin cargo si figuran)."
+           "- 'duracion_estimada_minutos': Número entero (si el documento indica duración del viaje)."
         
         3. Limpieza:
            - Si el teléfono tiene guiones, quítalos.

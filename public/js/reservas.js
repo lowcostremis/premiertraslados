@@ -138,44 +138,44 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
         }
     });
 }
-
 function renderFilaReserva(tbody, reserva, caches) {
     const cliente = caches.clientes[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
     const row = tbody.insertRow();
     row.dataset.id = reserva.id;
 
-    const isRev = (tbody.closest('#reservas-importadas') !== null);
-    const isAsig = (tbody.closest('#reservas-asignados') !== null);
-
+    const isRev = (reserva.estado?.principal === 'Revision');
+    const isAsig = ['Asignado', 'En Origen', 'Viaje Iniciado'].includes(reserva.estado?.principal);
     const e = (typeof reserva.estado === 'object') ? reserva.estado.principal : reserva.estado;
     const det = (typeof reserva.estado === 'object') ? reserva.estado.detalle : '';
     
-    if (reserva.es_exclusivo) row.style.backgroundColor = '#51ED8D';
-    else if (e === 'Negativo') row.style.backgroundColor = '#FFDE59';
-    else if (det.startsWith('Rechazado')) row.style.backgroundColor = '#f8d7da';
-    else if (e === 'Anulado') row.className = 'estado-anulado';
-    else if (cliente.color && cliente.color !== '#ffffff') {
-        row.style.backgroundColor = cliente.color;
-        const hex = cliente.color.replace('#','');
-        const r = parseInt(hex.substr(0,2),16), g = parseInt(hex.substr(2,2),16), b = parseInt(hex.substr(4,2),16);
-        row.style.color = ((r*299 + g*587 + b*114)/1000 >= 128) ? 'black' : 'white';
+    // --- LÓGICA DE CÁLCULO HORA FIN ESTIMADA ---
+   let horaFinEst = "Calculando..";
+    const horaBase = reserva.hora_pickup || reserva.hora_turno; 
+    const duracionMins = parseInt(reserva.duracion_estimada_minutos);
+
+    if (horaBase && !isNaN(duracionMins) && duracionMins > 0) {
+        const [hrs, mins] = horaBase.split(':').map(Number);
+        const fechaCalc = new Date();
+        fechaCalc.setHours(hrs, mins, 0);
+        const fechaFin = new Date(fechaCalc.getTime() + duracionMins * 60000);
+        
+        const hrsFin = fechaFin.getHours().toString().padStart(2, '0');
+        const minsFin = fechaFin.getMinutes().toString().padStart(2, '0');
+        horaFinEst = `${hrsFin}:${minsFin}`;
     }
 
+    if (reserva.es_exclusivo) row.style.backgroundColor = '#51ED8D';
+    
+    const fT = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
+    const checkHTML = isRev ? `<td style="text-align:center;"><input type="checkbox" class="check-reserva-revision" value="${reserva.id}"></td>` : '';
+
+    // Click para selección múltiple
     row.addEventListener('click', (ev) => {
         if (!window.isTableMultiSelectMode) return;
         if (!ev.target.closest('button') && !ev.target.closest('select') && !ev.target.closest('input') && !ev.target.closest('a')) {
             window.app.toggleTableSelection(reserva.id, row);
         }
     });
-
-    const fT = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
-    const checkHTML = isRev ? `<td style="text-align:center;"><input type="checkbox" class="check-reserva-revision" value="${reserva.id}"></td>` : '';
-    
-    let estHTML = `<strong>${e}</strong> <span onclick="alert(this.dataset.log)" data-log="${reserva.log || 'Sin registros'}" style="cursor:pointer; color:#1877f2; font-size:14px; font-weight:bold;">ⓘ</span><br><small>${det}</small>`;
-    if (reserva.movil_asignado_id) {
-        const m = caches.moviles.find(mo => mo.id === reserva.movil_asignado_id);
-        if(m) estHTML += `<br><small>Móvil ${m.numero}</small>`;
-    }
 
     let menuItems = `<a onclick="window.app.openEditReservaModal('${reserva.id}')">Editar</a>`;
     if(isRev) {
@@ -188,37 +188,34 @@ function renderFilaReserva(tbody, reserva, caches) {
         menuItems += `<a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
     }
 
-    let filaHTML = `
-        ${checkHTML}
+    let estHTML = `<strong>${e}</strong> <span onclick="alert(this.dataset.log)" data-log="${reserva.log || 'Sin registros'}" style="cursor:pointer; color:#1877f2; font-size:14px; font-weight:bold;">ⓘ</span><br><small>${det}</small>`;
+    if (reserva.movil_asignado_id) {
+        const m = caches.moviles.find(mo => mo.id === reserva.movil_asignado_id);
+        if(m) estHTML += `<br><small>Móvil ${m.numero}</small>`;
+    }
+
+    row.innerHTML = `
+       ${checkHTML}
         <td>${reserva.autorizacion || ''}</td>
         <td>${reserva.siniestro || ''}</td>
         <td>${fT}</td>
         <td>${reserva.hora_turno || ''}</td>
-    `;
-
-    if (!isRev) {
-        filaHTML += `<td class="editable-cell pickup-cell"></td>`;
-    }
-
-    filaHTML += `
+        <td class="editable-cell pickup-cell">${reserva.hora_pickup || ''}</td>
         <td>${reserva.nombre_pasajero || ''}</td>
         <td>${reserva.origen || ''}</td>
         <td>${reserva.destino || ''}</td>
         <td>${reserva.cantidad_pasajeros || 1}</td>
-    `;
-
-    if (!isRev) {
-        filaHTML += `<td class="editable-cell zona-cell"></td>`;
-    }
-
-    filaHTML += `
+        <td class="editable-cell zona-cell">${reserva.zona || ''}</td>
         <td style="font-weight:bold; color:#1877f2;">${reserva.distancia || '--'}</td>
-        <td>${cliente.nombre}</td>
+        <td style="font-weight:bold; color:#28a745;">${horaFinEst}</td> <td>${cliente.nombre}</td>
         <td>${estHTML}</td>
-        <td class="acciones"><div class="acciones-dropdown"><button class="icono-tres-puntos" onclick="window.app.toggleMenu(event)">⋮</button><div class="menu-contenido">${menuItems}</div></div></td>
+        <td class="acciones">
+            <div class="acciones-dropdown">
+                <button class="icono-tres-puntos" onclick="window.app.toggleMenu(event)">⋮</button>
+                <div class="menu-contenido">${menuItems}</div>
+            </div>
+        </td>
     `;
-
-    row.innerHTML = filaHTML;
 
     if (!isRev && e !== 'Finalizado') {
         const pC = row.querySelector('.pickup-cell');
@@ -229,11 +226,6 @@ function renderFilaReserva(tbody, reserva, caches) {
             caches.zonas.forEach(z => zS += `<option value="${z.descripcion}" ${reserva.zona === z.descripcion ? 'selected' : ''}>${z.descripcion}</option>`);
             zC.innerHTML = zS + `</select>`;
         }
-    } else {
-        const pC = row.querySelector('.pickup-cell');
-        const zC = row.querySelector('.zona-cell');
-        if(pC) pC.textContent = reserva.hora_pickup || '';
-        if(zC) zC.textContent = reserva.zona || '';
     }
 }
 
@@ -323,7 +315,10 @@ export async function handleSaveReserva(e, caches) {
         zona: f.zona.value,
         observaciones: f.observaciones.value,
         es_exclusivo: esX,
-        distancia: distanciaTotal
+        distancia: distanciaTotal,
+        espera_total: f.espera_total.value || 0, 
+        espera_sin_cargo: f.espera_sin_cargo.value || 0, 
+        duracion_estimada_minutos: f.duracion_estimada_minutos.value || 0,
     };
 
     try {
@@ -407,7 +402,10 @@ export async function handleConfirmarDesdeModal(e, caches) {
             observaciones: f.observaciones.value,
             es_exclusivo: f.viaje_exclusivo.checked,
             distancia: document.getElementById('distancia_total_input').value,
-            estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() }
+            estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() },
+            espera_total: f.espera_total.value,
+            espera_sin_cargo: f.espera_sin_cargo.value,
+            duracion_estimada_minutos: f.duracion_estimada_minutos.value,
         };
         if (rId) await db.collection('reservas').doc(rId).update(d);
         else { d.creadoEn = new Date(); await db.collection('reservas').add(d); }
@@ -443,6 +441,10 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
     form.asignar_movil.value = data.movil_asignado_id || '';
+    form.espera_total.value = data.espera_total || '';
+    form.espera_sin_cargo.value = data.espera_sin_cargo || '';
+    const duracionOculta = document.getElementById('duracion_estimada_minutos');
+    if (duracionOculta) duracionOculta.value = data.duracion_estimada_minutos || '';
     
     const distInput = document.getElementById('distancia_total_input');
     if (distInput) distInput.value = data.distancia || '';
