@@ -64,13 +64,20 @@ let selectedTableIds = new Set();
 auth.onAuthStateChanged(user => {
     const authSection = document.getElementById('auth-section');
     const appContent = document.getElementById('app-content');
-    
+
     if (user) {
+        // Guardamos el email globalmente para los LOGS de auditoría
+        window.currentUserEmail = user.email; 
+
         authSection.style.display = 'none';
         appContent.style.display = 'block';
-        document.getElementById('user-email-display').textContent = user.email;
+        
+        const userDisplay = document.getElementById('user-email-display');
+        if (userDisplay) userDisplay.textContent = user.email;
+        
         initApp(); 
     } else {
+        window.currentUserEmail = null;
         authSection.style.display = 'flex';
         appContent.style.display = 'none';
         appInitialized = false; 
@@ -83,8 +90,6 @@ document.getElementById('login-btn').addEventListener('click', () => {
     auth.signInWithEmailAndPassword(email, password)
         .catch(error => alert("Error de autenticación: " + error.message));
 });
-
-document.getElementById('logout-btn').addEventListener('click', () => auth.signOut());
 
 // --- EVENTOS DE REVISIÓN MASIVA ---
 document.getElementById('btn-limpiar-revision')?.addEventListener('click', async () => {
