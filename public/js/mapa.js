@@ -91,7 +91,25 @@ export async function calcularYMostrarRuta() {
         waypoints: puntosValidos.slice(1, -1).map(p => ({ location: p.location, stopover: true })),
         travelMode: 'DRIVING'
     };
-    directionsService.route(request, (response, status) => { if (status === "OK") { directionsRenderer.setDirections(response); procesarResultadosRuta(response); } });
+    directionsService.route(request, (response, status) => {
+    if (status === 'OK') {
+        directionsRenderer.setDirections(response);
+
+        // --- PEGÁ ESTO AQUÍ ---
+        const leg = response.routes[0].legs[0];
+        const duracionEnMinutos = Math.ceil(leg.duration.value / 60);
+        const distanciaKm = (leg.distance.value / 1000).toFixed(2);
+
+        // Actualizamos los campos del formulario para que se guarden en Firebase
+        document.getElementById('duracion_estimada_minutos').value = duracionEnMinutos;
+        document.getElementById('distancia_total_input').value = distanciaKm + " km";
+        document.getElementById('tiempo_total_input').value = duracionEnMinutos + " min";
+        // -----------------------
+
+    } else {
+        console.error("Error al calcular ruta: " + status);
+    }
+});
 }
 
 function geocodificar(address) { return new Promise((resolve) => { if(!geocoder) return resolve(null); geocoder.geocode({ 'address': address + ", Santa Fe, Argentina" }, (res, status) => { if (status === 'OK') resolve(res); else resolve(null); }); }); }

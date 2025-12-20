@@ -18,8 +18,8 @@ import {
     escucharUbicacionChoferes,
     toggleMultiSelectMode, 
     getSelectedReservasIds,
-    activarAutocomplete,    // <--- IMPORTANTE
-    calcularYMostrarRuta    // <--- IMPORTANTE
+    activarAutocomplete,    
+    calcularYMostrarRuta    
 } from './mapa.js';
 
 import { 
@@ -38,7 +38,8 @@ import {
     updateZona,
     handleDniBlur,
     confirmarReservaImportada,
-    handleConfirmarDesdeModal
+    handleConfirmarDesdeModal,
+    generarInformeProductividad
 } from './reservas.js';
 
 
@@ -66,7 +67,7 @@ auth.onAuthStateChanged(user => {
     const appContent = document.getElementById('app-content');
 
     if (user) {
-        // Guardamos el email globalmente para los LOGS de auditoría
+        
         window.currentUserEmail = user.email; 
 
         authSection.style.display = 'none';
@@ -82,6 +83,17 @@ auth.onAuthStateChanged(user => {
         appContent.style.display = 'none';
         appInitialized = false; 
     }
+});
+
+document.getElementById('btn-informe-chofer')?.addEventListener('click', () => {
+    const desde = document.getElementById('fecha-desde-historial').value;
+    const hasta = document.getElementById('fecha-hasta-historial').value;
+    const selector = document.getElementById('filtro-chofer-informe');
+
+    if (!selector) return;
+    
+    // Eliminamos el alert de "Seleccioná un chofer" para permitir el informe global
+    window.app.generarInformeProductividad(desde, hasta, caches, selector.value);
 });
 
 document.getElementById('login-btn').addEventListener('click', () => {
@@ -200,12 +212,12 @@ function updateTablePanelVisibility() {
         panel.style.display = 'block';
         if(contador) contador.textContent = selectedTableIds.size;
         
-        // --- CORRECCIÓN: Guardamos los IDs en el HTML para que el botón de anular los encuentre ---
+        
         lista.innerHTML = '';
         selectedTableIds.forEach(id => {
             const li = document.createElement('li');
-            li.dataset.id = id; // Guardamos el ID invisible
-            li.style.display = 'none'; // No hace falta mostrar la lista de IDs, solo el mensaje
+            li.dataset.id = id; 
+            li.style.display = 'none'; 
             lista.appendChild(li);
         });
 
@@ -213,7 +225,7 @@ function updateTablePanelVisibility() {
         mensaje.style.padding = '10px';
         mensaje.textContent = `Has seleccionado ${selectedTableIds.size} viajes de la lista.`;
         lista.appendChild(mensaje);
-        // ---------------------------------------------------------------------------------------
+        
 
         if (selectMovil.options.length <= 1 && caches.moviles) {
              let opts = '<option value="">Seleccionar móvil...</option>';
@@ -248,47 +260,6 @@ function limpiarSeleccion() {
     if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
 }
 
-function actualizarFiltrosDeMoviles() {
-    const selectReservas = document.getElementById('filtro-chofer-asignados');
-    const selectMapa = document.getElementById('filtro-chofer-mapa');
-    const selectAdmin = document.getElementById('chofer-movil-select');
-
-    if (selectReservas || selectMapa) {
-        let optionsHTMLFiltro = '<option value="">Ver todos los móviles</option>';
-        const movilesConChofer = caches.choferes
-            .filter(chofer => chofer.movil_actual_id)
-            .map(chofer => {
-                const movilAsignado = caches.moviles.find(m => m.id === chofer.movil_actual_id);
-                return movilAsignado ? { choferId: chofer.id, choferNombre: chofer.nombre, movilNumero: movilAsignado.numero } : null;
-            })
-            .filter(item => item !== null)
-            .sort((a, b) => a.movilNumero - b.movilNumero);
-
-        movilesConChofer.forEach(item => {
-            optionsHTMLFiltro += `<option value="${item.choferId}">Móvil ${item.movilNumero} - ${item.choferNombre}</option>`;
-        });
-
-        [selectReservas, selectMapa].forEach(select => {
-            if (select) {
-                const valorSeleccionado = select.value;
-                select.innerHTML = optionsHTMLFiltro;
-                select.value = valorSeleccionado;
-            }
-        });
-    }
-
-    if (selectAdmin) {
-        let optionsHTMLAdmin = '<option value="">(Opcional) Asignar Móvil</option>';
-        caches.moviles.forEach(movil => {
-            const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
-            const infoChofer = choferAsignado ? `(Asignado a ${choferAsignado.nombre})` : '(Libre)';
-            optionsHTMLAdmin += `<option value="${movil.id}">N° ${movil.numero} ${infoChofer}</option>`;
-        });
-        const valorSeleccionado = selectAdmin.value;
-        selectAdmin.innerHTML = optionsHTMLAdmin;
-        selectAdmin.value = valorSeleccionado;
-    }
-}
 
 function filtrarReservasAsignadasPorChofer(choferId) {
     filtroChoferAsignadosId = choferId || null;
@@ -322,7 +293,7 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     const inputOrigen = container.querySelector('.origen-input');
     if(inputOrigen) {
         inputOrigen.value = datos.origen || '';
-        activarAutocomplete(inputOrigen); // Activar autocomplete y ruta
+        activarAutocomplete(inputOrigen); 
     }
     
     const inputDestino = document.getElementById('destino');
@@ -336,7 +307,7 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     document.getElementById('reserva-modal').style.display = 'block';
 
     if(initMapaModalCallback) {
-        // Inicializar mapa y calcular ruta
+        
         setTimeout(() => {
             initMapaModalCallback(null, null);
             calcularYMostrarRuta(); 
@@ -401,7 +372,7 @@ function initApp() {
 
             div.querySelector('.btn-remove-origen').addEventListener('click', () => {
                 div.remove();
-                calcularYMostrarRuta(); // Recalcular al borrar
+                calcularYMostrarRuta(); 
             });
         });
     }
@@ -447,7 +418,7 @@ function initApp() {
         document.getElementById('modal-title').textContent = 'Nueva Reserva';
         document.getElementById('reserva-id').value = '';
         
-        // Resetear orígenes a 1 solo
+        
         const container = document.getElementById('origenes-container');
         container.innerHTML = `<div class="input-group-origen" style="display: flex; gap: 5px;"><input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;"><div style="width: 30px;"></div></div>`;
         const inp = container.querySelector('.origen-input');
@@ -455,7 +426,7 @@ function initApp() {
         inp.addEventListener('change', calcularYMostrarRuta);
 
         document.getElementById('reserva-modal').style.display = 'block';
-        initMapaModal(null, null); // Inicia el mapa modal limpio
+        initMapaModal(null, null); 
     });
     
     document.getElementById('btn-toggle-select-table')?.addEventListener('click', function() {
@@ -517,8 +488,9 @@ function initApp() {
         activarAutocomplete,
         calcularYMostrarRuta,
         limpiarSeleccion,
-        confirmarReservaImportada
-    };
+        confirmarReservaImportada,
+        generarInformeProductividad,
+    }
     
     window.openTab = (e, n) => openTab(e, n, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
     window.showReservasTab = showReservasTab;
@@ -547,3 +519,57 @@ function initApp() {
 
     openTab(null, 'Reservas');
 }
+
+window.printReport = () => {
+    const contenido = document.getElementById('reporte-body-print').innerHTML;
+    const ventanaPrenta = window.open('', '', 'height=600,width=800');
+    ventanaPrenta.document.write('<html><head><title>Informe de Productividad - Premier Traslados</title>');
+    ventanaPrenta.document.write('<style>table { width: 100%; border-collapse: collapse; font-family: sans-serif; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background: #eee; } h3 { background: #6f42c1; color: white; padding: 10px; }</style>');
+    ventanaPrenta.document.write('</head><body>');
+    ventanaPrenta.document.write('<h1>Premier Traslados - Informe de Productividad</h1>');
+    ventanaPrenta.document.write(contenido);
+    ventanaPrenta.document.write('</body></html>');
+    ventanaPrenta.document.close();
+    ventanaPrenta.print();
+};
+
+function actualizarFiltrosDeMoviles() {
+    const selectReservas = document.getElementById('filtro-chofer-asignados');
+    const selectMapa = document.getElementById('filtro-chofer-mapa');
+    const selectAdmin = document.getElementById('chofer-movil-select');
+    const selectInforme = document.getElementById('filtro-chofer-informe');
+
+    if (selectReservas || selectMapa || selectInforme) {
+        let optionsHTMLFiltro = '<option value="">Todos los choferes</option>';
+        const movilesConChofer = caches.choferes
+            .filter(chofer => chofer.movil_actual_id)
+            .map(chofer => {
+                const movilAsignado = caches.moviles.find(m => m.id === chofer.movil_actual_id);
+                return movilAsignado ? { choferId: chofer.id, choferNombre: chofer.nombre, movilNumero: movilAsignado.numero } : null;
+            })
+            .filter(item => item !== null)
+            .sort((a, b) => a.movilNumero - b.movilNumero);
+
+        movilesConChofer.forEach(item => {
+            optionsHTMLFiltro += `<option value="${item.choferId}">Móvil ${item.movilNumero} - ${item.choferNombre}</option>`;
+        });
+
+        [selectReservas, selectMapa, selectInforme].forEach(select => {
+            if (select) {
+                const valorActual = select.value;
+                select.innerHTML = optionsHTMLFiltro;
+                select.value = valorActual;
+            }
+        });
+    }
+
+    if (selectAdmin) {
+        let optionsHTMLAdmin = '<option value="">(Opcional) Asignar Móvil</option>';
+        caches.moviles.forEach(movil => {
+            const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
+            const infoChofer = choferAsignado ? `(Asignado a ${choferAsignado.nombre})` : '(Libre)';
+            optionsHTMLAdmin += `<option value="${movil.id}">N° ${movil.numero} ${infoChofer}</option>`;
+        });
+        selectAdmin.innerHTML = optionsHTMLAdmin;
+    }
+}   

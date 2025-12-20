@@ -81,33 +81,32 @@ exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event)
     if (!event.data.after.exists) return null;
     const client = getMapsClient();
     const after = event.data.after.data();
-    const before = event.data.before.exists ? event.data.before.data() : null;
     
-    const updateCoords = async (field, coordsField) => {
-        if (after[field] && (!before || after[field] !== before[field])) {
-            try {
-                let direccionLimpia = after[field];
-                if (direccionLimpia.includes(" + ")) {
-                    direccionLimpia = direccionLimpia.split(" + ")[0];
+    // TRIPLE PLAN: Si no tiene duración o distancia, la pedimos automáticamente
+    if (!after.duracion_estimada_minutos || !after.distancia) {
+        try {
+            const res = await client.distancematrix({
+                params: {
+                    origins: [after.origen],
+                    destinations: [after.destino],
+                    key: GEOCODING_API_KEY
                 }
+            });
 
-                const res = await client.geocode({ 
-                    params: { 
-                        address: `${direccionLimpia}, Argentina`, 
-                        key: GEOCODING_API_KEY 
-                    } 
+            const element = res.data.rows[0].elements[0];
+            if (element.status === 'OK') {
+                const duration = Math.ceil(element.duration.value / 60);
+                const distance = (element.distance.value / 1000).toFixed(1) + " km";
+                
+                // Actualizamos el documento automáticamente con los datos de Google
+                await event.data.after.ref.update({
+                    duracion_estimada_minutos: duration,
+                    distancia: distance
                 });
-
-                if (res.data.results.length > 0) {
-                    const loc = res.data.results[0].geometry.location;
-                    await event.data.after.ref.update({ [coordsField]: new admin.firestore.GeoPoint(loc.lat, loc.lng) });
-                }
-            } catch (e) { console.error(`Error geo ${field}:`, e.message); }
-        }
-    };
-    
-    await updateCoords('origen', 'origen_coords');
-    await updateCoords('destino', 'destino_coords');
+                console.log(`✅ Triple Plan: Datos enriquecidos para ${after.nombre_pasajero}`);
+            }
+        } catch (e) { console.error("Error en Triple Plan (Background):", e.message); }
+    }
     return null;
 });
 

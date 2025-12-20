@@ -799,3 +799,147 @@ export function conectarSeleccionMultiple() {
     } 
 }
 
+export async function generarInformeProductividad(fechaDesde, fechaHasta, caches, choferId = "") {
+    if (!fechaDesde || !fechaHasta) return alert("Seleccioná un rango de fechas.");
+    
+    let query = db.collection('historico')
+        .where('fecha_turno', '>=', fechaDesde)
+        .where('fecha_turno', '<=', fechaHasta);
+        
+    if (choferId) query = query.where('chofer_asignado_id', '==', choferId);
+
+    const snapshot = await query.get();
+    if (snapshot.empty) return alert("No hay viajes en este rango.");
+
+    let datosChoferes = {};
+    let totalGralOcupado = 0;
+    let totalGralVacio = 0;
+
+    snapshot.forEach(doc => {
+        const v = doc.data();
+        const idCh = v.chofer_asignado_id;
+        if (!idCh) return;
+        const fecha = v.fecha_turno || 'S/F';
+        const choferInfo = caches.choferes.find(c => c.id === idCh);
+        if (!datosChoferes[idCh]) datosChoferes[idCh] = { nombre: choferInfo?.nombre || "Desconocido", dias: {} };
+        if (!datosChoferes[idCh].dias[fecha]) datosChoferes[idCh].dias[fecha] = { viajes: [], kmOcupado: 0, kmVacio: 0 };
+        datosChoferes[idCh].dias[fecha].viajes.push(v);
+    });
+
+    let html = `<h2>Informe de Productividad</h2><p>Período: ${fechaDesde} al ${fechaHasta}</p>`;
+
+    for (const idCh in datosChoferes) {
+        const chofer = datosChoferes[idCh];
+        html += `<h3 style="background: #6f42c1; color: white; padding: 10px; margin-top:20px;">Chofer: ${chofer.nombre}</h3>`;
+
+        for (const f in chofer.dias) {
+            const dia = chofer.dias[f];
+            dia.viajes.sort((a, b) => (a.hora_pickup || a.hora_turno || '00:00').localeCompare(b.hora_pickup || b.hora_turno || '00:00'));
+
+            html += `<table border="1" style="width:100%; border-collapse: collapse; margin-bottom: 10px; font-size: 13px;">
+                <thead style="background: #eee;"><tr><th>Detalle</th><th>KM Ocupado</th><th>KM Desplaz.</th><th>Hora Fin</th></tr></thead><tbody>`;
+
+            for (const [idx, v] of dia.viajes.entries()) {
+                let hFin = "--:--";
+                const hBase = v.hora_pickup || v.hora_turno;
+                
+                // --- RED DE SEGURIDAD (TRIPLE PLAN) ---
+                let distOcupado = parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
+                let dMin = parseInt(v.duracion_estimada_minutos) || 0;
+
+                // SI ES 0, REPARAMOS EN VIVO SOLO PARA EL REPORTE
+                if (distOcupado === 0 || dMin === 0) {
+                    const reparacion = await calcularKilometrosEntrePuntos(v.origen, v.destino);
+                    distOcupado = reparacion.distancia;
+                    dMin = reparacion.duracion;
+                    v.distancia = distOcupado.toFixed(1) + " km"; // Relleno visual
+                }
+
+                dia.kmOcupado += distOcupado;
+                totalGralOcupado += distOcupado;
+
+                if (hBase && dMin > 0) {
+                    const [h, m] = hBase.split(':').map(Number);
+                    const calc = new Date(); calc.setHours(h, m + dMin);
+                    hFin = `${calc.getHours().toString().padStart(2,'0')}:${calc.getMinutes().toString().padStart(2,'0')}`;
+                    v.hora_fin_calculada = hFin;
+                }
+
+                // Cálculo de Desplazamiento (KM Vacío entre viajes)
+                if (idx > 0) {
+                    const resVacio = await calcularKilometrosEntrePuntos(dia.viajes[idx-1].destino, v.origen);
+                    dia.kmVacio += resVacio.distancia;
+                    totalGralVacio += resVacio.distancia;
+                    if (resVacio.distancia > 0) {
+                        html += `<tr style="color: #666; font-style: italic; background: #f9f9f9;">
+                            <td style="padding-left: 20px;">🚗 Desplazamiento</td><td>-</td><td style="text-align:center;">${resVacio.distancia.toFixed(2)}</td><td>-</td></tr>`;
+                    }
+                }
+
+                html += `<tr><td style="padding:5px;">[${hBase}] ${v.origen} ➔ ${v.destino}</td>
+                    <td style="text-align:center;">${v.distancia}</td><td style="text-align:center;">-</td><td style="text-align:center;">${hFin}</td></tr>`;
+            }
+
+            // Cálculo Jornada
+            const hIni = dia.viajes[0].hora_pickup || dia.viajes[0].hora_turno;
+            const hFinJ = dia.viajes[dia.viajes.length - 1].hora_fin_calculada;
+            let jornada = "--:--";
+            if (hIni && hFinJ) {
+                const [h1, m1] = hIni.split(':').map(Number);
+                const [h2, m2] = hFinJ.split(':').map(Number);
+                const diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+                jornada = `${Math.floor(diff / 60)}h ${diff % 60}m`;
+            }
+
+            html += `<tr style="background: #eef2ff; font-weight: bold;">
+                <td style="text-align: right;">TOTAL DÍA (${f}):</td>
+                <td style="text-align:center; color: blue;">${dia.kmOcupado.toFixed(2)} km</td>
+                <td style="text-align:center; color: orange;">${dia.kmVacio.toFixed(2)} km</td>
+                <td style="text-align:center;">Jornada: ${jornada}</td>
+            </tr></tbody></table>`;
+        }
+    }
+
+    html += `<div style="margin-top: 30px; padding: 20px; border: 2px solid #6f42c1; border-radius: 10px; background: #fdfdfd;">
+        <h3>📉 Resumen del Período</h3>
+        <p><strong>Kilómetros Totales:</strong> ${(totalGralOcupado + totalGralVacio).toFixed(2)} km</p>
+        <ul><li>KM Ocupados: ${totalGralOcupado.toFixed(2)} km</li><li>KM Desplazamiento: ${totalGralVacio.toFixed(2)} km</li></ul></div>`;
+
+    document.getElementById('reporte-body-print').innerHTML = html;
+    document.getElementById('reporte-modal').style.display = 'block';
+}
+
+// FUNCIÓN AUXILIAR DE GOOGLE MAPS
+async function calcularKilometrosEntrePuntos(origen, destino) {
+    if (!origen || !destino) return { distancia: 0, duracion: 0 };
+
+    try {
+        const service = new google.maps.DistanceMatrixService();
+        const realizarConsulta = (o, d) => {
+            return new Promise((resolve) => {
+                service.getDistanceMatrix({
+                    origins: [o],
+                    destinations: [d],
+                    travelMode: 'DRIVING',
+                }, (res, status) => {
+                    if (status === "OK") resolve(res);
+                    else resolve(null);
+                });
+            });
+        };
+
+        let response = await realizarConsulta(origen, destino);
+        let elemento = response?.rows[0]?.elements[0];
+
+        if (elemento && elemento.status === "OK") {
+            return {
+                distancia: elemento.distance.value / 1000,
+                duracion: Math.ceil(elemento.duration.value / 60)
+            };
+        }
+        return { distancia: 0, duracion: 0 };
+    } catch (e) {
+        console.error("Error en Triple Plan (Maps):", e);
+        return { distancia: 0, duracion: 0 };
+    }
+}

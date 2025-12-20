@@ -31,11 +31,11 @@
         </header>
 
         <nav class="main-nav">
-            <button class="tab-link active" onclick="openTab(event, 'Reservas')">Reservas</button>
-            <button class="tab-link" onclick="openTab(event, 'Mapa')">Mapa</button>
-            <button class="tab-link" onclick="openTab(event, 'Administracion')">Administración</button>
-            <button class="tab-link" onclick="openTab(event, 'Historico')">Histórico</button>
-            <button class="tab-link" onclick="openTab(event, 'Pasajeros')">Pasajeros</button>
+            <button class="tab-link active" onclick="window.openTab(event, 'Reservas')">Reservas</button>
+            <button class="tab-link" onclick="window.openTab(event, 'Mapa')">Mapa</button>
+            <button class="tab-link" onclick="window.openTab(event, 'Administracion')">Administración</button>
+            <button class="tab-link" onclick="window.openTab(event, 'Historico')">Histórico</button>
+            <button class="tab-link" onclick="window.openTab(event, 'Pasajeros')">Pasajeros</button>
         </nav>
 
         <main>
@@ -43,11 +43,12 @@
                 <div class="reservas-header">
                     <button id="btn-nueva-reserva">Nueva Reserva</button>
                     <button id="btn-toggle-select-table" style="margin-left: 10px; background-color: #6c757d;">Activar Selección Múltiple</button>
-                     <input type="file" id="input-pdf" accept=".pdf" style="display: none;" />
-
+                    
+                    <input type="file" id="input-pdf" accept=".pdf" style="display: none;" />
                     <button id="btn-importar-pdf" style="background-color: #fd7e14; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-left: 10px;">
                         📄 Importar PDF
                     </button>
+
                     <div style="display: inline-flex; gap: 10px; align-items: center; margin-left: 10px;">
                         <input type="file" id="input-excel" accept=".xlsx, .xls" style="display: none;" />
                         <button id="btn-importar-excel" style="background-color: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px;">
@@ -56,7 +57,7 @@
                     </div>
 
                     <button id="btn-importar-gmail" style="background-color: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-left: 10px;">
-                              ✉️ Importar Gmail
+                        ✉️ Importar Gmail
                     </button>
     
                     <div class="search-container">
@@ -64,13 +65,12 @@
                       <input type="text" id="busqueda-reservas" placeholder="Buscar pasajero, origen, destino...">
                     </div>
                 </div>  
-                               
 
                 <nav class="sub-nav">
-                    <button class="sub-tab-btn" onclick="showReservasTab('importadas')" data-tab="importadas" style="color: #d63384; font-weight: bold;">Importadas (Revisión)</button>
-                    <button class="sub-tab-btn active" onclick="showReservasTab('en-curso')" data-tab="en-curso">En Curso (Próximas 24hs)</button>
-                    <button class="sub-tab-btn" onclick="showReservasTab('pendientes')" data-tab="pendientes">Pendientes (+24hs)</button>
-                    <button class="sub-tab-btn" onclick="showReservasTab('asignados')" data-tab="asignados">Asignados</button>
+                    <button class="sub-tab-btn" onclick="window.showReservasTab('importadas')" data-tab="importadas" style="color: #d63384; font-weight: bold;">Importadas (Revisión)</button>
+                    <button class="sub-tab-btn active" onclick="window.showReservasTab('en-curso')" data-tab="en-curso">En Curso (Próximas 24hs)</button>
+                    <button class="sub-tab-btn" onclick="window.showReservasTab('pendientes')" data-tab="pendientes">Pendientes (+24hs)</button>
+                    <button class="sub-tab-btn" onclick="window.showReservasTab('asignados')" data-tab="asignados">Asignados</button>
                 </nav>
                 
                 <div class="time-filters">
@@ -97,21 +97,8 @@
                           <table id="tabla-importadas">
                              <thead>
                                  <tr>
-                                 <th style="width: 40px; text-align: center;">
-                                       <input type="checkbox" id="check-all-revision">
-                                 </th>
-                                 <th>Autorización</th>
-                                 <th>Siniestro</th>
-                                 <th>Fecha</th>
-                                 <th>Hora Turno</th>
-                                 <th>Pasajero</th>
-                                 <th>Origen</th>
-                                 <th>Destino</th>
-                                 <th>Distancia</th>
-                                 <th>Hora Fin Est.</th> 
-                                 <th>Cliente</th>
-                                  <th>Estado</th> 
-                                 <th>Acciones</th>
+                                 <th style="width: 40px; text-align: center;"><input type="checkbox" id="check-all-revision"></th>
+                                 <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                              </tr>
                           </thead>
                           <tbody></tbody>
@@ -125,21 +112,7 @@
                         <table id="tabla-en-curso">
                             <thead>
                                 <tr>
-                                    <th>Autorización</th>
-                                    <th>Siniestro</th>
-                                    <th>Fecha</th>
-                                    <th>Hora Turno</th>
-                                    <th>Hora Pickup</th>
-                                    <th>Pasajero</th>
-                                    <th>Origen</th>
-                                    <th>Destino</th>
-                                    <th>Cant.</th>
-                                    <th>Zona</th>
-                                    <th>Distancia</th>
-                                    <th>Hora Fin Est.</th>
-                                    <th>Cliente</th>
-                                    <th>Estado</th>
-                                    <th>Acciones</th>
+                                    <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -153,21 +126,7 @@
                         <table id="tabla-pendientes">
                             <thead>
                                 <tr>
-                                    <th>Autorización</th>
-                                    <th>Siniestro</th>
-                                    <th>Fecha</th>
-                                    <th>Hora Turno</th>
-                                    <th>Hora Pickup</th>
-                                    <th>Pasajero</th>
-                                    <th>Origen</th>
-                                    <th>Destino</th>
-                                    <th>Cant.</th>
-                                    <th>Zona</th>
-                                    <th>Distancia</th>
-                                    <th>Hora Fin Est.</th>
-                                    <th>Cliente</th>
-                                    <th>Estado</th>
-                                    <th>Acciones</th>
+                                    <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -185,48 +144,21 @@
                         <table id="tabla-asignados">
                             <thead>
                                 <tr>
-                                    <th>Autorización</th>
-                                    <th>Siniestro</th>
-                                    <th>Fecha</th>
-                                    <th>Hora Turno</th>
-                                    <th>Hora Pickup</th>
-                                    <th>Pasajero</th>
-                                    <th>Origen</th>
-                                    <th>Destino</th>
-                                    <th>Cant.</th>
-                                    <th>Zona</th>
-                                    <th>Distancia</th>
-                                    <th>Hora Fin Est.</th>
-                                    <th>Cliente</th>
-                                    <th>Estado</th>
-                                    <th>Acciones</th>
+                                    <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
                         </table>
                     </div>
                 </div>
-                 <div id="resultados-busqueda-reservas" class="reservas-container" style="display: none;">
+
+                <div id="resultados-busqueda-reservas" class="reservas-container" style="display: none;">
                     <h2>Resultados de Búsqueda</h2>
                     <div class="table-wrapper">
                         <table id="tabla-resultados-busqueda">
                             <thead>
                                 <tr>
-                                    <th>Autorización</th>
-                                    <th>Siniestro</th>
-                                    <th>Fecha</th>
-                                    <th>Hora Turno</th>
-                                    <th>Hora Pickup</th>
-                                    <th>Pasajero</th>
-                                    <th>Origen</th>
-                                    <th>Destino</th>
-                                    <th>Cant.</th>
-                                    <th>Zona</th>
-                                    <th>Distancia</th>
-                                    <th>Hora Fin Est.</th>
-                                    <th>Cliente</th>
-                                    <th>Estado</th>
-                                    <th>Acciones</th>
+                                    <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -241,7 +173,8 @@
                         <button class="map-filter-btn active" onclick="window.app.filtrarMapa('Todos')">Todos</button>
                         <button class="map-filter-btn" onclick="window.app.filtrarMapa('En Curso')">En Curso</button>
                         <button class="map-filter-btn" onclick="window.app.filtrarMapa('Asignado')">Asignados</button>
-                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('Pendiente')">Pendientes</button> <button id="btn-multi-select" class="map-filter-btn">Selección Múltiple</button>
+                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('Pendiente')">Pendientes</button> 
+                        <button id="btn-multi-select" class="map-filter-btn">Selección Múltiple</button>
                     </div>
                     <div class="time-filters-map">
                         <button class="map-filter-btn active" onclick="window.app.filtrarMapaPorHoras(null)">24hs</button>
@@ -260,7 +193,6 @@
                         <label for="toggle-choferes">Mostrar Móviles</label>
                         <input type="checkbox" id="toggle-choferes" checked>
                     </div>
-                    
                 </div>
                 <div id="map-container"></div>
                 <div id="map-context-menu" style="display:none; position:absolute; background-color:white; border:1px solid #ccc; z-index:1000;">
@@ -270,11 +202,11 @@
 
             <div id="Administracion" class="tab-content" style="display: none;">
                 <nav class="sub-nav">
-                    <button class="sub-tab-btn active" onclick="openAdminTab(event, 'admin-clientes')">Clientes</button>
-                    <button class="sub-tab-btn" onclick="openAdminTab(event, 'admin-choferes')">Choferes</button>
-                    <button class="sub-tab-btn" onclick="openAdminTab(event, 'admin-moviles')">Móviles</button>
-                    <button class="sub-tab-btn" onclick="openAdminTab(event, 'admin-usuarios')">Usuarios</button>
-                    <button class="sub-tab-btn" onclick="openAdminTab(event, 'admin-zonas')">Zonas</button>
+                    <button class="sub-tab-btn active" onclick="window.openAdminTab(event, 'admin-clientes')">Clientes</button>
+                    <button class="sub-tab-btn" onclick="window.openAdminTab(event, 'admin-choferes')">Choferes</button>
+                    <button class="sub-tab-btn" onclick="window.openAdminTab(event, 'admin-moviles')">Móviles</button>
+                    <button class="sub-tab-btn" onclick="window.openAdminTab(event, 'admin-usuarios')">Usuarios</button>
+                    <button class="sub-tab-btn" onclick="window.openAdminTab(event, 'admin-zonas')">Zonas</button>
                 </nav>
 
                 <div id="admin-clientes" class="admin-tab-content">
@@ -332,8 +264,8 @@
     
                             <button type="submit">Crear Chofer</button>
                         </form>
-                       <label for="busqueda-choferes" style="display:none">Buscar</label>
-                       <input type="text" id="busqueda-choferes" placeholder="Buscar por nombre, DNI o N° de Móvil...">
+                        <label for="busqueda-choferes" style="display:none">Buscar</label>
+                        <input type="text" id="busqueda-choferes" placeholder="Buscar por nombre, DNI o N° de Móvil...">
                         <div id="lista-choferes"></div>
                     </div>
                 </div>
@@ -406,14 +338,19 @@
                     <select id="filtro-cliente-historial" style="min-width: 200px;">
                         <option value="">Todos los clientes</option>
                     </select>
+                    
                     <button id="btn-exportar-excel-hist">Exportar a Excel</button>
+                    <select id="filtro-chofer-informe" style="min-width: 200px; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
+                     <option value="">Seleccionar Chofer...</option>
+                    </select>
+                    <button id="btn-informe-chofer" style="background-color: #6f42c1; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px;">
+                             📊 Informe por Chofer
+                     </button>
                     <label for="search-historial-input" style="display:none">Buscar</label>
                     <input type="text" id="search-historial-input" placeholder="Buscar en historial..." style="flex-grow: 1;">
                 </div>
                 
                 <div class="table-wrapper">
-                    <table style="display: none;"> <tbody id="historial-body-legacy"></tbody>
-                    </table>
                     <div id="historial-body"></div>
                 </div>
                 
@@ -452,14 +389,13 @@
     </div>
 
     <div id="reserva-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content" style="width: 95%; max-width: 1250px;">
             <span class="close-btn">&times;</span>
             <h2 id="modal-title">Nueva Reserva</h2>
             <div class="form-map-container">
                 <form id="reserva-form">                
                        <input type="hidden" id="reserva-id" name="reserva-id">
                        <input type="hidden" id="reserva-estado-principal" name="reserva-estado-principal">
-                          
                     
                         <div class="form-row">
                             <div class="form-group">
@@ -592,7 +528,7 @@
                     </div>
 
                 </form>
-                <div id="mapa-modal-container"></div>
+                <div id="mapa-modal-container" style="flex: 1.2; height: 600px; background: #eee;"></div>
             </div>
         </div>
     </div>
@@ -617,42 +553,48 @@
             </form>
         </div>
     </div>
-    <div id="multi-select-panel" style="display: none;">
-    <h3>Viajes Seleccionados (<span id="contador-seleccion">0</span>)</h3>
-    <ul id="multi-select-list">
-        </ul>
-    <div class="panel-acciones">
-        <label for="multi-select-movil" style="display:none">Móvil</label>
-        <select id="multi-select-movil">
-            <option value="">Seleccionar móvil...</option>
-        </select>
-        <button id="btn-assign-multi" disabled>Asignar</button>
 
-        <button id="btn-anular-multi" style="background-color: #dc3545; color: white; margin-top: 5px;">Anular Seleccionados</button>
+    <div id="multi-select-panel" style="display: none; position: fixed; bottom: 20px; right: 20px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 2000;">
+        <h3>Selección (<span id="contador-seleccion">0</span>)</h3>
+        </div>
 
-        <button id="btn-cancel-multi">Cancelar</button>
+    <div id="reporte-modal" class="modal" style="display: none; z-index: 3000;">
+        <div class="modal-content" style="width: 95%; max-width: 1100px; max-height: 90vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #6f42c1; padding-bottom: 10px; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #6f42c1;">📊 Informe de Productividad por Chofer</h2>
+                
+              
+
+             
+                <div>
+                    <button onclick="window.printReport()" style="background: #28a745; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">🖨️ Imprimir / PDF</button>
+                    <button onclick="document.getElementById('reporte-modal').style.display='none'" style="background: #6c757d; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Cerrar</button>
+                </div>
+            </div>
+            <div id="reporte-body-print">
+                </div>
+        </div>
     </div>
-</div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4.23.3/dist/algoliasearch-lite.umd.js"></script>
+    
     <script>
     (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.googleapis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
       key: "AIzaSyD33ys3G9-hHG0aw34EQByXecK3c7oEbFo", 
       v: "weekly"
     });
-</script>
+    </script>
+    
     <script type="module" src="js/main.js"></script>
-
+    
     <script type="module">
         import { conectarSeleccionMultiple } from './js/reservas.js';
         document.addEventListener('DOMContentLoaded', () => {
-            // Activa la lógica para que el botón rojo maneje checkboxes o limpieza total
-            conectarSeleccionMultiple(); 
-            console.log("Premier Traslados: Sistema de selección múltiple activo.");
+            conectarSeleccionMultiple();
         });
     </script>
 </body>
