@@ -142,18 +142,31 @@ window.ejecutarReporteChofer = async () => {
                     const estado = (v.estado?.principal || 'FINALIZADO').toUpperCase();
                     let dMin = parseInt(v.duracion_estimada_minutos) || 0;
                     let dist = parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
+
+                    // 1. Triple Plan (Google Maps)
                     if ((dist === 0 || dMin === 0) && (estado === 'FINALIZADO' || estado === 'ASIGNADO')) {
                         const rep = await calcularKilometrosEntrePuntos(v.origen, v.destino);
                         if (dist === 0) dist = rep.distancia;
                         if (dMin === 0) dMin = rep.duracion;
                     }
-                    v.distancia_num = dist;
-                    if (estado !== 'ANULADO' && estado !== 'NEGATIVO' && estado !== 'PENDIENTE' && estado !== 'EN CURSO') dia.kmOcupado += dist;
-                    if (v.hora_pickup && dMin > 0) {
+                    v.dist_n = dist;
+
+                    if (estado !== 'ANULADO' && estado !== 'NEGATIVO' && estado !== 'PENDIENTE') dia.kmOcupado += dist;
+
+                    // 2. Lógica de "Jornada Protegida" para Hora Fin
+                    if (v.hora_pickup) {
                         const [h, m] = v.hora_pickup.split(':').map(Number);
-                        const calc = new Date(); calc.setHours(h, m + dMin);
-                        v.hora_fin_c = `${calc.getHours().toString().padStart(2,'0')}:${calc.getMinutes().toString().padStart(2,'0')}`;
-                    } else v.hora_fin_c = "--:--";
+                        const calc = new Date();
+                        
+                        if (dMin > 0) {
+                            calc.setHours(h, m + dMin); // Caso ideal: tenemos duración
+                        } else {
+                            calc.setHours(h, m + 30); // Caso Fallback: le damos 30 min de base para no romper la jornada
+                        }
+                        v.h_fin = `${calc.getHours().toString().padStart(2,'0')}:${calc.getMinutes().toString().padStart(2,'0')}`;
+                    } else {
+                        v.h_fin = "--:--";
+                    }
                 }
                 
                 dia.viajes.sort((a,b) => (a.hora_pickup || '00:00').localeCompare(b.hora_pickup || '00:00'));
@@ -170,11 +183,11 @@ window.ejecutarReporteChofer = async () => {
                         dia.kmVacio += resV.distancia;
                         html += `<tr style="color: #777; font-style: italic;"><td>${f}</td><td>--:--</td><td>🚗 Desplazamiento</td><td>-</td><td>${resV.distancia.toFixed(2)}</td><td>-</td></tr>`;
                     }
-                    html += `<tr style="border-bottom: 1px solid #eee;"><td>${f}</td><td>${v.hora_pickup || '--:--'}</td><td>${v.nombre_pasajero}</td><td style="text-align:center;">${v.distancia_num.toFixed(1)}</td><td style="text-align:center;">-</td><td style="text-align:center;">${v.hora_fin_c}</td></tr>`;
+                    html += `<tr style="border-bottom: 1px solid #eee;"><td>${f}</td><td>${v.hora_pickup || '--:--'}</td><td>${v.nombre_pasajero}</td><td style="text-align:center;">${v.dist_n.toFixed(1)}</td><td style="text-align:center;">-</td><td style="text-align:center;">${v.h_fin}</td></tr>`;
                 }
                 
                 const hIni = dia.viajes[0].hora_pickup;
-                const hFinU = dia.viajes[dia.viajes.length-1].hora_fin_c;
+                const hFinU = dia.viajes[dia.viajes.length-1].h_fin;
                 let jText = "--:--";
                 if (hIni && hFinU !== "--:--") {
                     const [h1, m1] = hIni.split(':').map(Number);
