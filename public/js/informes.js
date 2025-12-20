@@ -1,7 +1,7 @@
 // js/informes.js
 import { db } from './firebase-config.js';
 
-// --- 1. EXPORTACIÓN A EXCEL (Suma funcional y columnas separadas) ---
+// --- 1. EXPORTACIÓN A EXCEL (Captura la nueva estructura de 9 columnas) ---
 document.getElementById('btn-excel-reporte')?.addEventListener('click', () => {
     const tablas = document.querySelectorAll('#reporte-body-print table');
     if (tablas.length === 0) return alert("No hay datos para exportar.");
@@ -18,7 +18,7 @@ document.getElementById('btn-excel-reporte')?.addEventListener('click', () => {
     XLSX.writeFile(wb, `Reporte_Premier_${new Date().toISOString().slice(0,10)}.xlsx`);
 });
 
-// --- 2. REPORTE DE EMPRESA (Columnas de Aut. y Siniestro separadas) ---
+// --- 2. REPORTE DE EMPRESA (Ahora con Pasajero, Origen y Destino separados) ---
 window.ejecutarReporteEmpresa = async () => {
     const empresaId = document.getElementById('rep-empresa-select').value;
     const desde = document.getElementById('rep-empresa-desde').value;
@@ -57,7 +57,9 @@ window.ejecutarReporteEmpresa = async () => {
                         <thead><tr style="background: #eee; border-bottom: 2px solid #007bff;">
                             <th style="padding:8px; text-align:left;">Fecha</th>
                             <th style="padding:8px; text-align:left;">Hora</th>
-                            <th style="padding:8px; text-align:left;">Pasajero / Ruta</th>
+                            <th style="padding:8px; text-align:left;">Pasajero</th>
+                            <th style="padding:8px; text-align:left;">Domicilio Origen</th>
+                            <th style="padding:8px; text-align:left;">Domicilio Destino</th>
                             <th style="padding:8px; text-align:left;">Autorización</th>
                             <th style="padding:8px; text-align:left;">Siniestro</th>
                             <th style="padding:8px; text-align:center;">KM (km)</th>
@@ -76,14 +78,15 @@ window.ejecutarReporteEmpresa = async () => {
 
                 if (estado !== 'ANULADO' && estado !== 'NEGATIVO') dia.kmOcupado += km;
 
-                // Datos separados
                 const autorizacion = v.nro_autorizacion || v.autorizacion || '-';
                 const siniestro = v.nro_siniestro || v.siniestro || '-';
 
                 html += `<tr style="border-bottom: 1px solid #eee;">
                     <td style="padding:8px;">${f}</td>
                     <td style="padding:8px;">${v.hora_pickup || v.hora_turno || '--:--'}</td>
-                    <td style="padding:8px;"><strong>${v.nombre_pasajero}</strong><br><small style="color:#666;">${v.origen} ➔ ${v.destino}</small></td>
+                    <td style="padding:8px;"><strong>${v.nombre_pasajero}</strong></td>
+                    <td style="padding:8px;">${v.origen}</td>
+                    <td style="padding:8px;">${v.destino}</td>
                     <td style="padding:8px; color: #555;">${autorizacion}</td>
                     <td style="padding:8px; color: #555;">${siniestro}</td>
                     <td style="text-align:center; font-weight:bold;">${km.toFixed(1)}</td>
@@ -101,7 +104,7 @@ window.ejecutarReporteEmpresa = async () => {
     } catch (e) { console.error(e); alert("Error en reporte de empresa."); }
 };
 
-// --- 3. REPORTE DE CHOFER ---
+// --- 3. REPORTE DE CHOFER (Columnas separadas y Jornada Protegida) ---
 window.ejecutarReporteChofer = async () => {
     const desde = document.getElementById('rep-chofer-desde').value;
     const hasta = document.getElementById('rep-chofer-hasta').value;
@@ -142,31 +145,20 @@ window.ejecutarReporteChofer = async () => {
                     const estado = (v.estado?.principal || 'FINALIZADO').toUpperCase();
                     let dMin = parseInt(v.duracion_estimada_minutos) || 0;
                     let dist = parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
-
-                    // 1. Triple Plan (Google Maps)
                     if ((dist === 0 || dMin === 0) && (estado === 'FINALIZADO' || estado === 'ASIGNADO')) {
                         const rep = await calcularKilometrosEntrePuntos(v.origen, v.destino);
                         if (dist === 0) dist = rep.distancia;
                         if (dMin === 0) dMin = rep.duracion;
                     }
                     v.dist_n = dist;
-
-                    if (estado !== 'ANULADO' && estado !== 'NEGATIVO' && estado !== 'PENDIENTE') dia.kmOcupado += dist;
-
-                    // 2. Lógica de "Jornada Protegida" para Hora Fin
+                    if (estado !== 'ANULADO' && estado !== 'NEGATIVO' && estado !== 'PENDIENTE' && estado !== 'EN CURSO') dia.kmOcupado += dist;
                     if (v.hora_pickup) {
                         const [h, m] = v.hora_pickup.split(':').map(Number);
                         const calc = new Date();
-                        
-                        if (dMin > 0) {
-                            calc.setHours(h, m + dMin); // Caso ideal: tenemos duración
-                        } else {
-                            calc.setHours(h, m + 30); // Caso Fallback: le damos 30 min de base para no romper la jornada
-                        }
+                        if (dMin > 0) calc.setHours(h, m + dMin);
+                        else calc.setHours(h, m + 30); // 30 min de gracia
                         v.h_fin = `${calc.getHours().toString().padStart(2,'0')}:${calc.getMinutes().toString().padStart(2,'0')}`;
-                    } else {
-                        v.h_fin = "--:--";
-                    }
+                    } else v.h_fin = "--:--";
                 }
                 
                 dia.viajes.sort((a,b) => (a.hora_pickup || '00:00').localeCompare(b.hora_pickup || '00:00'));
@@ -174,16 +166,18 @@ window.ejecutarReporteChofer = async () => {
                 html += `<div style=\"background: #f8f9fa; padding: 5px; border-left: 5px solid #6f42c1; margin-top: 15px; font-family: sans-serif;\">📅 Fecha: ${f}</div>
                          <table style=\"width:100%; border-collapse: collapse; font-size: 10px; font-family: sans-serif;\">
                             <thead><tr style=\"background: #eee;\">
-                                <th style="padding:5px;">Fecha</th><th style="padding:5px;">Hora</th><th style="padding:5px;">Detalle</th><th style="padding:5px;">KM Ocup. (km)</th><th style="padding:5px;">KM Despl. (km)</th><th style="padding:5px;">Hora Fin</th>
+                                <th style="padding:5px;">Fecha</th><th style="padding:5px;">Hora</th><th style="padding:5px;">Pasajero</th><th style="padding:5px;">Origen</th><th style="padding:5px;">Destino</th><th style="padding:5px;">KM Ocup.</th><th style="padding:5px;">KM Despl.</th><th style="padding:5px;">Hora Fin</th>
                             </tr></thead><tbody>`;
 
                 for (const [idx, v] of dia.viajes.entries()) {
                     if (idx > 0) {
                         const resV = await calcularKilometrosEntrePuntos(dia.viajes[idx-1].destino, v.origen);
                         dia.kmVacio += resV.distancia;
-                        html += `<tr style="color: #777; font-style: italic;"><td>${f}</td><td>--:--</td><td>🚗 Desplazamiento</td><td>-</td><td>${resV.distancia.toFixed(2)}</td><td>-</td></tr>`;
+                        html += `<tr style="color: #777; font-style: italic;"><td>${f}</td><td>--:--</td><td>-</td><td>🚗 Desplazamiento</td><td>-</td><td>-</td><td>${resV.distancia.toFixed(2)}</td><td>-</td></tr>`;
                     }
-                    html += `<tr style="border-bottom: 1px solid #eee;"><td>${f}</td><td>${v.hora_pickup || '--:--'}</td><td>${v.nombre_pasajero}</td><td style="text-align:center;">${v.dist_n.toFixed(1)}</td><td style="text-align:center;">-</td><td style="text-align:center;">${v.h_fin}</td></tr>`;
+                    html += `<tr style="border-bottom: 1px solid #eee;">
+                        <td>${f}</td><td>${v.hora_pickup || '--:--'}</td><td><strong>${v.nombre_pasajero}</strong></td><td>${v.origen}</td><td>${v.destino}</td><td style="text-align:center;">${v.dist_n.toFixed(1)}</td><td style="text-align:center;">-</td><td style="text-align:center;">${v.h_fin}</td>
+                    </tr>`;
                 }
                 
                 const hIni = dia.viajes[0].hora_pickup;
