@@ -900,13 +900,39 @@ export async function generarInformeProductividad(fechaDesde, fechaHasta, caches
         }
     }
 
-    html += `<div style="margin-top: 30px; padding: 20px; border: 2px solid #6f42c1; border-radius: 10px; background: #fdfdfd;">
-        <h3>📉 Resumen del Período</h3>
-        <p><strong>Kilómetros Totales:</strong> ${(totalGralOcupado + totalGralVacio).toFixed(2)} km</p>
-        <ul><li>KM Ocupados: ${totalGralOcupado.toFixed(2)} km</li><li>KM Desplazamiento: ${totalGralVacio.toFixed(2)} km</li></ul></div>`;
+    html += `
+    <div style="margin-top: 20px; display: flex; justify-content: center;">
+        <div style="width: 300px; height: 300px;">
+            <canvas id="graficoProductividad"></canvas>
+        </div>
+    </div>`;
 
     document.getElementById('reporte-body-print').innerHTML = html;
     document.getElementById('reporte-modal').style.display = 'block';
+
+    // Dibujamos el gráfico después de que el modal sea visible
+    setTimeout(() => {
+        const ctx = document.getElementById('graficoProductividad').getContext('2d');
+        new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['KM Ocupados (Ingreso)', 'KM Vacíos (Costo)'],
+                datasets: [{
+                    data: [totalGralOcupado, totalGralVacio],
+                    backgroundColor: ['#4e73df', '#f6c23e'],
+                    hoverBackgroundColor: ['#2e59d9', '#dda20a'],
+                    hoverBorderColor: "rgba(234, 236, 244, 1)",
+                }],
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    title: { display: true, text: 'Distribución de Kilometraje' }
+                }
+            }
+        });
+    }, 100);
 }
 
 // FUNCIÓN AUXILIAR DE GOOGLE MAPS
