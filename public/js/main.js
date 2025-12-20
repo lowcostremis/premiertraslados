@@ -1,4 +1,4 @@
-// js/main.js
+
 
 import { auth, db } from './firebase-config.js';
 import { openTab, showReservasTab, openAdminTab } from './tabs.js';
@@ -85,16 +85,6 @@ auth.onAuthStateChanged(user => {
     }
 });
 
-document.getElementById('btn-informe-chofer')?.addEventListener('click', () => {
-    const desde = document.getElementById('fecha-desde-historial').value;
-    const hasta = document.getElementById('fecha-hasta-historial').value;
-    const selector = document.getElementById('filtro-chofer-informe');
-
-    if (!selector) return;
-    
-    // Eliminamos el alert de "Seleccioná un chofer" para permitir el informe global
-    window.app.generarInformeProductividad(desde, hasta, caches, selector.value);
-});
 
 document.getElementById('login-btn').addEventListener('click', () => {
     const email = document.getElementById('email').value;
@@ -503,6 +493,7 @@ function initApp() {
     
     document.getElementById('btn-confirmar-modal')?.addEventListener('click', (e) => handleConfirmarDesdeModal(e, caches));
     document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
+    
 
     // Cargar datos iniciales
     loadAuxData();
@@ -510,7 +501,6 @@ function initApp() {
     initPasajeros();
     initAdmin(caches);
     initMapa(caches, () => lastReservasSnapshot);
-
     listenToReservas(snapshot => {
         lastReservasSnapshot = snapshot;
         renderAllReservas(snapshot, caches, filtroChoferAsignadosId, filtroHoras);
@@ -518,7 +508,8 @@ function initApp() {
     });
 
     openTab(null, 'Reservas');
-}
+};
+
 
 window.printReport = () => {
     const contenido = document.getElementById('reporte-body-print').innerHTML;
@@ -537,9 +528,8 @@ function actualizarFiltrosDeMoviles() {
     const selectReservas = document.getElementById('filtro-chofer-asignados');
     const selectMapa = document.getElementById('filtro-chofer-mapa');
     const selectAdmin = document.getElementById('chofer-movil-select');
-    const selectInforme = document.getElementById('filtro-chofer-informe');
 
-    if (selectReservas || selectMapa || selectInforme) {
+    if (selectReservas || selectMapa) {
         let optionsHTMLFiltro = '<option value="">Todos los choferes</option>';
         const movilesConChofer = caches.choferes
             .filter(chofer => chofer.movil_actual_id)
@@ -554,7 +544,8 @@ function actualizarFiltrosDeMoviles() {
             optionsHTMLFiltro += `<option value="${item.choferId}">Móvil ${item.movilNumero} - ${item.choferNombre}</option>`;
         });
 
-        [selectReservas, selectMapa, selectInforme].forEach(select => {
+        
+        [selectReservas, selectMapa].forEach(select => {
             if (select) {
                 const valorActual = select.value;
                 select.innerHTML = optionsHTMLFiltro;
@@ -572,4 +563,284 @@ function actualizarFiltrosDeMoviles() {
         });
         selectAdmin.innerHTML = optionsHTMLAdmin;
     }
+
+    // Actualizar selectores de reportes
+    const repEmpresaSelect = document.getElementById('rep-empresa-select');
+    if (repEmpresaSelect && window.appCaches.clientes) {
+        let opts = '<option value="">Seleccionar Empresa...</option>';
+        Object.entries(window.appCaches.clientes).forEach(([id, data]) => {
+            opts += `<option value="${id}">${data.nombre}</option>`;
+        });
+        repEmpresaSelect.innerHTML = opts;
+    }
+
+    const repChoferSelect = document.getElementById('rep-chofer-select');
+    if (repChoferSelect && window.appCaches.choferes) {
+        let optsChofer = '<option value="">Todos los móviles</option>';
+        window.appCaches.choferes.forEach(ch => {
+            const movil = window.appCaches.moviles.find(m => m.id === ch.movil_actual_id);
+            if (movil) optsChofer += `<option value="${ch.id}">Móvil ${movil.numero} - ${ch.nombre}</option>`;
+        });
+        repChoferSelect.innerHTML = optsChofer;
+    }
 }
+
+
+document.getElementById('btn-excel-reporte')?.addEventListener('click', () => {
+    const tablas = document.querySelectorAll('#reporte-body-print table');
+    if (tablas.length === 0) return alert("No hay datos para exportar.");
+    
+    // 1. Creamos un libro de trabajo nuevo
+    const wb = XLSX.utils.book_new();
+    let ws;
+
+    tablas.forEach((tabla, index) => {
+        if (index === 0) {
+           
+            ws = XLSX.utils.table_to_sheet(tabla);
+            XLSX.utils.book_append_sheet(wb, ws, "Reporte Completo");
+        } else {
+            
+            XLSX.utils.sheet_add_dom(ws, tabla, { origin: -1 });
+        }
+    });
+    
+    const nombreArchivo = `Reporte_Premier_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, nombreArchivo);
+});
+
+// --- REPORTE DE EMPRESA (OPTIMIZADO PARA ADMINISTRACIÓN Y EXCEL) ---
+window.ejecutarReporteEmpresa = async () => {
+    const empresaId = document.getElementById('rep-empresa-select').value;
+    const desde = document.getElementById('rep-empresa-desde').value;
+    const hasta = document.getElementById('rep-empresa-hasta').value;
+
+    if (!empresaId || !desde || !hasta) return alert("Completa todos los filtros.");
+
+    try {
+        const [snapReservas, snapHistorico] = await Promise.all([
+            db.collection('reservas').where('cliente', '==', empresaId).where('fecha_turno', '>=', desde).where('fecha_turno', '<=', hasta).get(),
+            db.collection('historico').where('cliente', '==', empresaId).where('fecha_turno', '>=', desde).where('fecha_turno', '<=', hasta).get()
+        ]);
+
+        const todosLosViajes = [...snapReservas.docs, ...snapHistorico.docs];
+        if (todosLosViajes.length === 0) return alert("Sin datos para esta empresa.");
+
+        let dias = {};
+        todosLosViajes.forEach(doc => {
+            const v = doc.data();
+            const f = v.fecha_turno || 'S/F';
+            if (!dias[f]) dias[f] = { viajes: [], kmOcupado: 0 };
+            dias[f].viajes.push(v);
+        });
+
+        let html = '';
+        const diasOrdenados = Object.keys(dias).sort();
+
+        for (const f of diasOrdenados) {
+            const dia = dias[f];
+            dia.viajes.sort((a, b) => (a.hora_pickup || a.hora_turno || '00:00').localeCompare(b.hora_pickup || b.hora_turno || '00:00'));
+
+            html += `<div style="background: #f8f9fa; padding: 10px; border-left: 5px solid #007bff; margin-top: 20px; font-weight: bold; font-family: sans-serif;">
+                        📅 Fecha: ${new Date(f + 'T00:00:00').toLocaleDateString('es-AR')}
+                     </div>
+                     <table style="width:100%; border-collapse: collapse; font-size: 11px; font-family: sans-serif;">
+                        <thead><tr style="background: #eee; border-bottom: 2px solid #007bff;">
+                            <th style="padding:8px; text-align:left;">Fecha</th>
+                            <th style="padding:8px; text-align:left;">Hora</th>
+                            <th style="padding:8px; text-align:left;">Detalle / Pasajero</th>
+                            <th style="padding:8px; text-align:center;">KM Ocup.</th>
+                            <th style="padding:8px; text-align:left;">Estado</th>
+                        </tr></thead><tbody>`;
+
+            for (let v of dia.viajes) {
+                const estado = (v.estado?.principal || v.estado || 'FINALIZADO').toUpperCase();
+                
+                // FILTRO DE INCLUSIÓN: Solo procesamos los que ya tienen acción (Asignado, Finalizado, etc)
+                if (estado === 'PENDIENTE' || estado === 'EN CURSO') continue;
+
+                let km = parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
+                
+                // Triple Plan: Solo si está en un estado válido para cobro
+                if (km === 0 && (estado === 'FINALIZADO' || estado === 'ASIGNADO')) {
+                    const rep = await calcularKilometrosEntrePuntos(v.origen, v.destino);
+                    km = rep.distancia;
+                }
+
+                // SUMATORIA CONDICIONAL: Solo sumamos si no es un viaje perdido para la empresa
+                if (estado !== 'ANULADO' && estado !== 'NEGATIVO') {
+                    dia.kmOcupado += km;
+                }
+
+                html += `<tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding:8px;">${f}</td>
+                    <td style="padding:8px;">${v.hora_pickup || v.hora_turno || '--:--'}</td>
+                    <td style="padding:8px;"><strong>${v.nombre_pasajero}</strong><br><small style="color:#666;">${v.origen} ➔ ${v.destino}</small></td>
+                    <td style="text-align:center; font-weight:bold;">${km.toFixed(1)} km</td>
+                    <td style="padding:8px; font-weight:bold; color:${estado === 'ANULADO' ? 'red' : '#007bff'};">${estado}</td>
+                </tr>`;
+            }
+            html += `</tbody></table>
+                     <div style="background: #e7f1ff; padding: 10px; font-weight: bold; text-align: right; border-bottom: 2px solid #007bff; font-family: sans-serif;">
+                        Total Facturable del día: <span style="font-size:16px;">${dia.kmOcupado.toFixed(1)} km</span>
+                     </div>`;
+        }
+
+        document.getElementById('reporte-body-print').innerHTML = html;
+        document.getElementById('titulo-reporte-dinamico').textContent = `Auditoría de Cuenta Corriente: ${window.appCaches.clientes[empresaId]?.nombre || 'Cliente'}`;
+        document.getElementById('reporte-modal').style.display = 'block';
+        document.getElementById('modal-param-empresa').style.display = 'none';
+    } catch (e) { console.error(e); alert("Error al generar reporte de empresa."); }
+};
+
+// --- REPORTE DE CHOFER (CAJAS DIARIAS CON COLUMNA DE FECHA PARA EXCEL) ---
+window.ejecutarReporteChofer = async () => {
+    const desde = document.getElementById('rep-chofer-desde').value;
+    const hasta = document.getElementById('rep-chofer-hasta').value;
+    const choferId = document.getElementById('rep-chofer-select').value;
+
+    if (!desde || !hasta) return alert("Selecciona el rango de fechas.");
+
+    try {
+        const [snapReservas, snapHistorico] = await Promise.all([
+            db.collection('reservas').where('fecha_turno', '>=', desde).where('fecha_turno', '<=', hasta).get(),
+            db.collection('historico').where('fecha_turno', '>=', desde).where('fecha_turno', '<=', hasta).get()
+        ]);
+
+        const todosLosDocs = [...snapReservas.docs, ...snapHistorico.docs];
+        if (todosLosDocs.length === 0) return alert("No se encontraron viajes.");
+
+        let datosChoferes = {};
+        todosLosDocs.forEach(doc => {
+            const v = doc.data();
+            const idCh = v.chofer_asignado_id || v.asignado_a;
+            if (!idCh || (choferId && idCh !== choferId)) return;
+
+            const fecha = v.fecha_turno || 'S/F';
+            if (!datosChoferes[idCh]) {
+                const choferInfo = window.appCaches.choferes.find(c => c.id === idCh);
+                datosChoferes[idCh] = { nombre: choferInfo?.nombre || "Desconocido", dias: {} };
+            }
+            if (!datosChoferes[idCh].dias[fecha]) datosChoferes[idCh].dias[fecha] = { viajes: [], kmOcupado: 0, kmVacio: 0 };
+            datosChoferes[idCh].dias[fecha].viajes.push(v);
+        });
+
+        let html = '';
+        for (const idCh in datosChoferes) {
+            const chofer = datosChoferes[idCh];
+            html += `<div style="margin-bottom: 30px; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: white;">
+                     <h2 style="background: #6f42c1; color: white; padding: 12px; margin: 0; border-radius: 4px; font-family: sans-serif;">Chofer: ${chofer.nombre}</h2>`;
+
+            const diasOrdenados = Object.keys(chofer.dias).sort();
+            for (const f of diasOrdenados) {
+                const dia = chofer.dias[f];
+
+                for (let v of dia.viajes) {
+                    const estado = (v.estado?.principal || v.estado || 'FINALIZADO').toUpperCase();
+                    const hBase = v.hora_pickup || v.hora_turno;
+                    let distOcupado = parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
+                    let dMin = parseInt(v.duracion_estimada_minutos) || 0;
+
+                    if ((distOcupado === 0 || dMin === 0) && (estado === 'FINALIZADO' || estado === 'ASIGNADO')) {
+                        const rep = await calcularKilometrosEntrePuntos(v.origen, v.destino);
+                        if (distOcupado === 0) distOcupado = rep.distancia;
+                        if (dMin === 0) dMin = rep.duracion; 
+                        v.distancia = distOcupado.toFixed(1) + " km";
+                    }
+
+                    // SOLO SUMAMOS SI ES PRODUCTIVO (No Anulado/Negativo/Pendiente)
+                    if (estado !== 'ANULADO' && estado !== 'NEGATIVO' && estado !== 'PENDIENTE' && estado !== 'EN CURSO') {
+                        dia.kmOcupado += distOcupado;
+                    }
+
+                    if (hBase && dMin > 0) {
+                        const [h, m] = hBase.split(':').map(Number);
+                        const calc = new Date(); calc.setHours(h, m + dMin);
+                        v.hora_fin_calculada = `${calc.getHours().toString().padStart(2,'0')}:${calc.getMinutes().toString().padStart(2,'0')}`;
+                    } else v.hora_fin_calculada = "--:--";
+                }
+
+                dia.viajes.sort((a, b) => (a.hora_pickup || a.hora_turno || '00:00').localeCompare(b.hora_pickup || b.hora_turno || '00:00'));
+
+                html += `<div style="background: #f8f9fa; padding: 10px; border-left: 5px solid #6f42c1; margin-top: 20px; font-weight: bold; font-family: sans-serif;">
+                             📅 Fecha: ${new Date(f + 'T00:00:00').toLocaleDateString('es-AR')}
+                         </div>
+                         <table style="width:100%; border-collapse: collapse; font-size: 11px; font-family: sans-serif;">
+                            <thead><tr style="background: #eee; border-bottom: 2px solid #6f42c1;">
+                                <th style="padding: 8px; text-align: left;">Fecha</th>
+                                <th style="padding: 8px; text-align: left;">Hora</th>
+                                <th style="padding: 8px; text-align: left;">Detalle del Traslado</th>
+                                <th style="padding: 8px; text-align: center;">KM Ocup.</th>
+                                <th style="padding: 8px; text-align: center;">KM Despl.</th>
+                                <th style="padding: 8px; text-align: center;">Hora Fin</th>
+                            </tr></thead><tbody>`;
+
+                for (const [idx, v] of dia.viajes.entries()) {
+                    if (idx > 0) {
+                        const resV = await calcularKilometrosEntrePuntos(dia.viajes[idx-1].destino, v.origen);
+                        dia.kmVacio += resV.distancia;
+                        if (resV.distancia > 0) {
+                            html += `<tr style="color: #777; font-style: italic; background: #fafafa; border-bottom: 1px dashed #ddd;">
+                                <td style="padding: 5px;">${f}</td><td style="padding: 5px;">--:--</td>
+                                <td style="padding: 5px 20px;">🚗 Desplazamiento</td><td style="text-align:center;">-</td>
+                                <td style="text-align:center;">${resV.distancia.toFixed(2)} km</td><td style="text-align:center;">-</td></tr>`;
+                        }
+                    }
+                    html += `<tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding: 8px;">${f}</td>
+                        <td style="padding: 8px;">${v.hora_pickup || v.hora_turno || '--:--'}</td>
+                        <td style="padding: 8px;"><strong>${v.nombre_pasajero}</strong><br><small style="color:#666;">${v.origen} ➔ ${v.destino}</small></td>
+                        <td style="text-align: center; font-weight: bold;">${v.distancia}</td><td style="text-align: center;">-</td>
+                        <td style="text-align: center;">${v.hora_fin_calculada}</td></tr>`;
+                }
+
+                const hIni = dia.viajes[0].hora_pickup || dia.viajes[0].hora_turno;
+                const hFinU = dia.viajes[dia.viajes.length - 1].hora_fin_calculada;
+                let jText = "--:--";
+                if (hIni && hFinU !== "--:--") {
+                    const [h1, m1] = hIni.split(':').map(Number);
+                    const [h2, m2] = hFinU.split(':').map(Number);
+                    let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+                    if (diff < 0) diff += 1440; 
+                    jText = `${Math.floor(diff / 60)}h ${diff % 60}m`;
+                }
+
+                html += `</tbody></table>
+                         <div style="background: #eef2ff; padding: 12px; border-bottom: 2px solid #6f42c1; display: flex; justify-content: space-between; font-weight: bold; font-family: sans-serif;">
+                            <span>📏 KM Realizados: <span style="color:#6f42c1">${dia.kmOcupado.toFixed(1)} km</span></span>
+                            <span>🚗 KM Vacío: <span style="color:#fd7e14">${dia.kmVacio.toFixed(1)} km</span></span>
+                            <span>⏳ Jornada: <span style="color:#28a745">${jText}</span></span>
+                         </div>`;
+            }
+            html += `</div>`;
+        }
+        document.getElementById('reporte-body-print').innerHTML = html;
+        document.getElementById('reporte-modal').style.display = 'block';
+        document.getElementById('modal-param-chofer').style.display = 'none';
+    } catch (error) { console.error("Error:", error); alert("Error al generar el informe."); }
+};
+
+async function calcularKilometrosEntrePuntos(origen, destino) {
+    if (!origen || !destino) return { distancia: 0, duracion: 0 };
+    try {
+        const service = new google.maps.DistanceMatrixService();
+        return new Promise((resolve) => {
+            service.getDistanceMatrix({
+                origins: [origen],
+                destinations: [destino],
+                travelMode: 'DRIVING',
+            }, (res, status) => {
+                if (status === "OK" && res.rows[0].elements[0].status === "OK") {
+                    const el = res.rows[0].elements[0];
+                    resolve({
+                        distancia: el.distance.value / 1000,
+                        duracion: Math.ceil(el.duration.value / 60)
+                    });
+                } else resolve({ distancia: 0, duracion: 0 });
+            });
+        });
+    } catch (e) {
+            console.error("Error en Distance Matrix:", e);
+            return { distancia: 0, duracion: 0 };
+        }
+    }
