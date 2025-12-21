@@ -197,32 +197,35 @@ exports.exportarHistorico = onCall(async (r) => {
     const registros = []; // <-- Cambiamos string por Array
 
     s.forEach(d => {
-        const v = d.data();
-        const cliente = v.cliente_nombre || v.clienteNombre || 'N/A';
-        const chofer = v.chofer_nombre || v.choferNombre || 'N/A';
-        
-        let estadoStr = 'N/A';
-        if (v.estado) {
-            estadoStr = (typeof v.estado === 'object' && v.estado.principal) ? v.estado.principal : v.estado;
-        }
+    const v = d.data();
+    const cliente = v.cliente_nombre || v.clienteNombre || 'N/A';
+    const chofer = v.chofer_nombre || v.choferNombre || 'N/A';
+    
+    // 1. Extraemos solo el número (ej: de "10.5 km" a 10.5)
+    const kmNumerico = parseFloat((v.distancia || "0").replace(/[^0-9.]/g, "")) || 0;
 
-        // Creamos el objeto con los nombres de columna finales
-        registros.push({
-            "Fecha Turno": v.fecha_turno || 'N/A',
-            "Hora Turno": v.hora_turno || 'N/A',
-            "Hora PickUp": v.hora_pickup || 'N/A',
-            "Pasajero": v.nombre_pasajero || 'N/A',
-            "Cliente": cliente,
-            "Chofer": chofer,
-            "Origen": v.origen || 'N/A',
-            "Destino": v.destino || 'N/A',
-            "Estado": estadoStr,
-            "Siniestro": v.siniestro || 'N/A',
-            "Autorizacion": v.autorizacion || 'N/A',
-            "Espera Total": v.espera_total || 0,
-            "Espera Sin Cargo": v.espera_sin_cargo || 0
-        });
+    let estadoStr = 'N/A';
+    if (v.estado) {
+        estadoStr = (typeof v.estado === 'object' && v.estado.principal) ? v.estado.principal : v.estado;
+    }
+
+    registros.push({
+        "Fecha Turno": v.fecha_turno || 'N/A',
+        "Hora Turno": v.hora_turno || 'N/A',
+        "Hora PickUp": v.hora_pickup || 'N/A',
+        "Pasajero": v.nombre_pasajero || 'N/A',
+        "Cliente": cliente,
+        "Chofer": chofer,
+        "Origen": v.origen || 'N/A',
+        "Destino": v.destino || 'N/A',
+        "Distancia (KM)": kmNumerico, // <--- Enviamos el número puro
+        "Estado": estadoStr,
+        "Siniestro": v.siniestro || 'N/A',
+        "Autorizacion": v.autorizacion || 'N/A',
+        "Espera Total": v.espera_total || 0,
+        "Espera Sin Cargo": v.espera_sin_cargo || 0
     });
+});
     
     return { data: registros }; // <-- Devolvemos la lista
 });
