@@ -169,7 +169,7 @@ window.ejecutarReporteChofer = async () => {
     } catch (e) { console.error(e); }
 };
 
-// --- 4. RANKING DE CLIENTES (Solución UID y TypeError) ---
+// --- 4. RANKING DE CLIENTES (ACTUALIZADO CON TOTALES Y FINALIZADOS) ---
 window.ejecutarRankingClientes = async () => {
     const desde = document.getElementById('rep-kpi-desde').value;
     const hasta = document.getElementById('rep-kpi-hasta').value;
@@ -184,38 +184,63 @@ window.ejecutarRankingClientes = async () => {
         let stats = {};
         [...snapR.docs, ...snapH.docs].forEach(doc => {
             const v = doc.data();
-            // CORRECCIÓN TYPEERROR: Soporta Array u Objeto de Clientes
             let infoC = Array.isArray(window.appCaches?.clientes) 
                 ? window.appCaches.clientes.find(c => c.id === v.cliente) 
                 : window.appCaches?.clientes?.[v.cliente];
             
             let cliente = v.nombre_cliente || infoC?.nombre || v.cliente || "Sin Nombre";
-    
             const estado = (v.estado?.principal || v.estado || 'FINALIZADO').toUpperCase();
-    
-            if (!stats[cliente]) stats[cliente] = { km: 0, esperaCon: 0, esperaSin: 0, anulados: 0, negativos: 0 };
-    
+
+            if (!stats[cliente]) stats[cliente] = { total: 0, finalizadas: 0, km: 0, anulados: 0, negativos: 0, esperaSin: 0 };
+
+            stats[cliente].total++;
+
             if (estado === 'ANULADO') stats[cliente].anulados++;
             else if (estado === 'NEGATIVO') stats[cliente].negativos++;
-            else if (estado !== 'PENDIENTE' && estado !== 'EN CURSO') {
-                stats[cliente].km += parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
-                stats[cliente].esperaCon += parseFloat(v.espera_con_cargo) || 0;
-                stats[cliente].esperaSin += parseFloat(v.espera_sin_cargo) || 0;
+            else {
+                if (estado === 'FINALIZADO') stats[cliente].finalizadas++;
+                if (estado !== 'PENDIENTE' && estado !== 'EN CURSO') {
+                    stats[cliente].km += parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
+                    stats[cliente].esperaSin += parseFloat(v.espera_sin_cargo) || 0;
+                }
             }
         });
 
         const ranking = Object.entries(stats).sort((a, b) => b[1].km - a[1].km);
-        let html = `<h3>📊 Ranking de Clientes (KM y Auditoría)</h3>
-                    <table style="width:100%; border-collapse:collapse; font-size:11px;">
-                        <tr style="background:#007bff; color:white;">
-                            <th style="padding:10px;">Cliente</th><th>KM Fact.</th><th>Esp. C/C</th><th>Esp. S/C</th><th>Anulados</th><th>Negativos</th>
-                        </tr>`;
+
+        let html = `<h3>📊 Ranking de Clientes (Auditoría Integral)</h3>
+                    <table style="width:100%; border-collapse:collapse; font-size:11px; font-family: sans-serif;">
+                        <thead>
+                            <tr style="background:#007bff; color:white;">
+                                <th style="padding:10px; text-align:left;">Cliente</th>
+                                <th>Total</th>
+                                <th>Finaliz.</th>
+                                <th>% Efec.</th>
+                                <th>KM Fact.</th>
+                                <th>Anulados</th>
+                                <th>Negativos</th>
+                                <th>Esp. S/C</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
         ranking.forEach(([name, data]) => {
-            html += `<tr style="border-bottom:1px solid #ddd;">
-                <td style="padding:10px;">${name}</td><td style="font-weight:bold; text-align:center;">${data.km.toFixed(1)}</td><td style="text-align:center;">${data.esperaCon}</td><td style="text-align:center; color:${data.esperaSin > 5 ? 'red' : 'black'}">${data.esperaSin}</td><td style="text-align:center; color:red;">${data.anulados}</td><td style="text-align:center;">${data.negativos}</td>
+            // Cálculo de efectividad: Finalizados / Total
+            const efec = data.total > 0 ? ((data.finalizadas / data.total) * 100).toFixed(1) : 0;
+            const colorEfec = efec > 80 ? 'green' : (efec > 50 ? '#f6c23e' : 'red');
+
+            html += `<tr style="border-bottom:1px solid #eee;">
+                <td style="padding:10px; font-weight:500;">${name}</td>
+                <td style="text-align:center;">${data.total}</td>
+                <td style="text-align:center; color:green; font-weight:bold;">${data.finalizadas}</td>
+                <td style="text-align:center; font-weight:bold; color:${colorEfec};">${efec}%</td>
+                <td style="font-weight:bold; text-align:center; background:#f9f9f9;">${data.km.toFixed(1)}</td>
+                <td style="text-align:center; color:red;">${data.anulados}</td>
+                <td style="text-align:center; color:#dc3545;">${data.negativos}</td>
+                <td style="text-align:center; color:${data.esperaSin > 5 ? 'red' : '#666'}">${data.esperaSin}</td>
             </tr>`;
         });
-        document.getElementById('reporte-body-print').innerHTML = html + "</table>";
+        document.getElementById('reporte-body-print').innerHTML = html + "</tbody></table>";
         document.getElementById('reporte-modal').style.display = 'block';
     } catch (e) { console.error(e); }
 };

@@ -425,13 +425,7 @@ function initApp() {
     document.querySelector('.close-edit-btn')?.addEventListener('click', () => closeModal('edit-modal'));
     
     document.getElementById('busqueda-reservas')?.addEventListener('input', (e) => buscarEnReservas(e.target.value, caches));
-    //document.getElementById('btn-multi-select')?.addEventListener('click', toggleMultiSelectMode);
     
-    //document.getElementById('btn-cancel-multi')?.addEventListener('click', () => {
-    //    if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
-    ///    else toggleMultiSelectMode(); 
-    //});
-
     document.getElementById('btn-assign-multi')?.addEventListener('click', async () => {
         const movilId = document.getElementById('select-movil-multi').value;
         if (!movilId) return alert('Selecciona un móvil.');
