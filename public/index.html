@@ -168,37 +168,52 @@
             </div>
 
             <div id="Mapa" class="tab-content" style="display: none;">
-                <div class="map-controls">
-                    <div class="map-filters">
-                        <button class="map-filter-btn active" onclick="window.app.filtrarMapa('Todos')">Todos</button>
-                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('En Curso')">En Curso</button>
-                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('Asignado')">Asignados</button>
-                        <button class="map-filter-btn" onclick="window.app.filtrarMapa('Pendiente')">Pendientes</button> 
-                        <button id="btn-multi-select" class="map-filter-btn">Selección Múltiple</button>
+                    <div class="map-controls">
+                        <div class="map-filters">
+                            <button class="map-filter-btn active" onclick="window.app.filtrarMapa('Todos')">Todos</button>
+                            <button class="map-filter-btn" onclick="window.app.filtrarMapa('En Curso')">En Curso</button>
+                            <button class="map-filter-btn" onclick="window.app.filtrarMapa('Asignado')">Asignados</button>
+                            <button class="map-filter-btn" onclick="window.app.filtrarMapa('Pendiente')">Pendientes</button> 
+                            <button id="btn-multi-select" class="map-filter-btn" onclick="window.app.toggleMultiSelectMode()">Selección Múltiple</button>
+                        </div>
+                        <div class="time-filters-map">
+                            <button class="map-filter-btn active" onclick="window.app.filtrarMapaPorHoras(null)">24hs</button>
+                            <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(4)">4hs</button>
+                            <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(8)">8hs</button>
+                            <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(12)">12hs</button>
+                        </div>
+                        
+                        <div class="chofer-filter">
+                            <select id="filtro-chofer-mapa" onchange="window.app.filtrarMapaPorChofer(this.value)">
+                                <option value="">Ver todos los móviles</option>
+                            </select>
+                        </div>
+                        <div class="toggle-switch">
+                            <label for="toggle-choferes">Mostrar Móviles</label>
+                            <input type="checkbox" id="toggle-choferes" checked>
+                        </div>
                     </div>
-                    <div class="time-filters-map">
-                        <button class="map-filter-btn active" onclick="window.app.filtrarMapaPorHoras(null)">24hs</button>
-                        <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(4)">4hs</button>
-                        <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(8)">8hs</button>
-                        <button class="map-filter-btn" onclick="window.app.filtrarMapaPorHoras(12)">12hs</button>
+
+                    <div id="map-container"></div>
+
+                    <div id="map-context-menu" style="display:none; position:absolute; background-color:white; border:1px solid #ccc; z-index:1000; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+                        <ul id="map-context-menu-items" style="list-style:none; margin:0; padding:5px;"></ul>
                     </div>
-                    
-                    <div class="chofer-filter">
-                        <label for="filtro-chofer-mapa" style="display:none">Chofer</label>
-                        <select id="filtro-chofer-mapa" onchange="window.app.filtrarMapaPorChofer(this.value)">
-                            <option value="">Ver todos los móviles</option>
-                        </select>
+
+                    <div id="multi-select-panel" style="display:none; position:absolute; top:80px; right:20px; background:white; padding:15px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.2); z-index:1000; width:250px;">
+                        <h3 style="margin-top:0; font-size:16px;">Asignación Múltiple</h3>
+                        <p style="font-size:14px;">Seleccionados: <span id="contador-seleccion" style="font-weight:bold;">0</span></p>
+                        <ul id="multi-select-list" style="max-height:150px; overflow-y:auto; font-size:13px; margin-bottom:10px; padding-left:20px;"></ul>
+
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <label style="font-size:12px;">Asignar a móvil:</label>
+                            <select id="select-movil-multi" style="padding:5px;"></select> 
+                            <button id="btn-assign-multi" disabled style="background:#28a745; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer;">Asignar Viajes</button>
+                            <button id="btn-anular-multi" disabled style="background:#dc3545; color:white; border:none; padding:8px; border-radius:4px; cursor:pointer;">Anular Viajes</button>
+                            <button onclick="window.app.toggleMultiSelectMode()" style="background:#6c757d; color:white; border:none; padding:5px; border-radius:4px; cursor:pointer;">Cancelar</button>
+                        </div>
                     </div>
-                    <div class="toggle-switch">
-                        <label for="toggle-choferes">Mostrar Móviles</label>
-                        <input type="checkbox" id="toggle-choferes" checked>
-                    </div>
-                </div>
-                <div id="map-container"></div>
-                <div id="map-context-menu" style="display:none; position:absolute; background-color:white; border:1px solid #ccc; z-index:1000;">
-                    <ul id="map-context-menu-items" style="list-style:none; margin:0; padding:5px;"></ul>
-                </div>
-            </div>
+            </div> 
 
             <div id="Administracion" class="tab-content" style="display: none;">
                 <nav class="sub-nav">

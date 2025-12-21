@@ -38,6 +38,7 @@ import {
     updateZona,
     handleDniBlur,
     confirmarReservaImportada,
+    ejecutarAccionMasiva,
     handleConfirmarDesdeModal,
     generarInformeProductividad
 } from './reservas.js';
@@ -94,15 +95,11 @@ document.getElementById('login-btn').addEventListener('click', () => {
 });
 
 // --- EVENTOS DE REVISIÓN MASIVA ---
-document.getElementById('btn-limpiar-revision')?.addEventListener('click', async () => {
-    if (confirm("⚠️ ¡PELIGRO!\n\nEstás a punto de borrar TODAS las reservas de la lista de revisión.\nEsta acción no se puede deshacer.\n\n¿Estás seguro?")) {
-        const btn = document.getElementById('btn-limpiar-revision');
-        btn.disabled = true;
-        btn.textContent = "⏳ Borrando...";
-        const { limpiarReservasDeRevision } = await import('./reservas.js');
-        await limpiarReservasDeRevision();
-        btn.disabled = false;
-        btn.textContent = "🔥 Borrar TODAS las de Revisión";
+document.getElementById('btn-limpiar-revision')?.addEventListener('click', () => {
+    if (confirm("¿Querés borrar TODAS las reservas en revisión?")) {
+        const todos = Array.from(document.querySelectorAll('#tabla-importadas tbody tr'))
+                           .map(tr => tr.dataset.id);
+        ejecutarAccionMasiva('borrar', todos);
     }
 });
 
@@ -112,31 +109,17 @@ document.getElementById('check-all-revision')?.addEventListener('change', (e) =>
     actualizarPanelLote();
 });
 
-document.getElementById('tabla-importadas')?.addEventListener('change', (e) => {
-    if (e.target.classList.contains('check-reserva-revision')) actualizarPanelLote();
-});
-
-function actualizarPanelLote() {
-    const checks = document.querySelectorAll('.check-reserva-revision:checked');
-    const panel = document.getElementById('panel-acciones-lote');
-    document.getElementById('contador-check-revision').textContent = checks.length;
-    panel.style.display = checks.length > 0 ? 'flex' : 'none';
-}
-
-document.getElementById('btn-borrar-lote')?.addEventListener('click', async () => {
+document.getElementById('btn-borrar-lote')?.addEventListener('click', () => {
     const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
-    if (confirm(`¿Borrar estas ${ids.length} reservas?`)) {
-        const { procesarLoteRevision } = await import('./reservas.js');
-        await procesarLoteRevision('borrar', ids);
-    }
+    ejecutarAccionMasiva('borrar', ids);
 });
 
 document.getElementById('btn-confirmar-lote')?.addEventListener('click', async () => {
     const ids = Array.from(document.querySelectorAll('.check-reserva-revision:checked')).map(c => c.value);
-    if (confirm(`¿Confirmar estas ${ids.length} reservas?`)) {
-        const { procesarLoteRevision } = await import('./reservas.js');
-        await procesarLoteRevision('confirmar', ids);
+    for (let id of ids) {
+        await confirmarReservaImportada(id);
     }
+    alert("Proceso de confirmación terminado.");
 });
 
 
@@ -195,7 +178,7 @@ function updateTablePanelVisibility() {
     const panel = document.getElementById('multi-select-panel');
     const contador = document.getElementById('contador-seleccion');
     const lista = document.getElementById('multi-select-list');
-    const selectMovil = document.getElementById('multi-select-movil');
+    const selectMovil = document.getElementById('select-movil-multi');
     const btnAsignar = document.getElementById('btn-assign-multi');
 
     if (selectedTableIds.size > 0) {
@@ -291,10 +274,12 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
         inputDestino.value = datos.destino || '';
         activarAutocomplete(inputDestino);
     }
+    
 
     document.getElementById('reserva-id').value = '';
     document.getElementById('modal-title').textContent = 'Nueva Reserva (Regreso)';
     document.getElementById('reserva-modal').style.display = 'block';
+    
 
     if(initMapaModalCallback) {
         
@@ -325,6 +310,7 @@ function initApp() {
             }
         });
     }
+    
 
     // --- LÓGICA MULTI-ORIGEN CONECTADA AL MAPA ---
     function initMultiOrigenLogic() {
@@ -439,22 +425,22 @@ function initApp() {
     document.querySelector('.close-edit-btn')?.addEventListener('click', () => closeModal('edit-modal'));
     
     document.getElementById('busqueda-reservas')?.addEventListener('input', (e) => buscarEnReservas(e.target.value, caches));
-    document.getElementById('btn-multi-select')?.addEventListener('click', toggleMultiSelectMode);
+    //document.getElementById('btn-multi-select')?.addEventListener('click', toggleMultiSelectMode);
     
-    document.getElementById('btn-cancel-multi')?.addEventListener('click', () => {
-        if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
-        else toggleMultiSelectMode(); 
-    });
+    //document.getElementById('btn-cancel-multi')?.addEventListener('click', () => {
+    //    if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
+    ///    else toggleMultiSelectMode(); 
+    //});
 
     document.getElementById('btn-assign-multi')?.addEventListener('click', async () => {
-        const movilId = document.getElementById('multi-select-movil').value;
+        const movilId = document.getElementById('select-movil-multi').value;
         if (!movilId) return alert('Selecciona un móvil.');
         let ids = window.isTableMultiSelectMode ? Array.from(selectedTableIds) : window.app.getSelectedReservasIds();
         if (ids.length === 0) return alert("Sin selección.");
         if (await asignarMultiplesReservas(ids, movilId, caches)) {
             if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
             else toggleMultiSelectMode();
-            document.getElementById('multi-select-movil').value = "";
+            document.getElementById('select-movil-multi').value = "";
         }
     });
 
@@ -467,6 +453,7 @@ function initApp() {
         finalizarReserva: (id) => finalizarReserva(id, caches),
         quitarAsignacion, updateHoraPickup, updateZona,
         toggleMenu, hideTableMenus,
+        toggleMultiSelectMode,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer, filtrarPorHoras,
         getSelectedReservasIds: () => {
@@ -583,4 +570,4 @@ function actualizarFiltrosDeMoviles() {
         });
         repChoferSelect.innerHTML = optsChofer;
     }
-} // <--- ESTA ES LA ÚLT
+}

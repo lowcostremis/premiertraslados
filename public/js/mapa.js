@@ -239,14 +239,26 @@ function crearIconoDePin(color, texto) {
 }
 
 export function filtrarMapa(estado) { 
-    filtroMapaActual = estado; 
-    document.querySelectorAll('.map-filters .map-filter-btn').forEach(btn => btn.classList.remove('active'));
+    // Corregimos: Si el HTML manda 'Asignado', lo tratamos como 'Asignados' para que coincida con cargarMarcadoresDeReservas
+    filtroMapaActual = (estado === 'Asignado') ? 'Asignados' : estado; 
+    
+    // Actualizar clase activa en los botones
+    document.querySelectorAll('.map-filters .map-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText.includes(estado));
+    });
+
     cargarMarcadoresDeReservas(); 
 }
 
 export function filtrarMapaPorHoras(horas) { 
     filtroHorasMapa = horas; 
-    document.querySelectorAll('.time-filters-map .map-filter-btn').forEach(btn => btn.classList.remove('active'));
+    
+    // Esta parte es la que faltaba en tu archivo cargado:
+    document.querySelectorAll('.time-filters-map .map-filter-btn').forEach(btn => {
+        const texto = (horas === null) ? '24hs' : horas + 'hs';
+        btn.classList.toggle('active', btn.innerText.trim() === texto);
+    });
+
     cargarMarcadoresDeReservas(); 
 }
 
@@ -304,8 +316,28 @@ function mostrarMenuContextualReserva(event, reserva, estado) {
     if (mapContextMenuItems) { mapContextMenuItems.innerHTML = menuHTML; mapContextMenu.style.left = `${event.domEvent.clientX}px`; mapContextMenu.style.top = `${event.domEvent.clientY}px`; mapContextMenu.style.display = 'block'; }
 }
 
-export function toggleMultiSelectMode() { isMultiSelectMode = !isMultiSelectMode; document.getElementById('multi-select-panel').style.display = isMultiSelectMode ? 'block' : 'none'; if(!isMultiSelectMode) { selectedReservas.clear(); cargarMarcadoresDeReservas(); } }
-export function getSelectedReservasIds() { return Array.from(selectedReservas.keys()); }
+export function toggleMultiSelectMode() { 
+    isMultiSelectMode = !isMultiSelectMode;
+    const panel = document.getElementById('multi-select-panel');
+    
+    if (panel) {
+        panel.style.display = isMultiSelectMode ? 'block' : 'none';
+        
+        // Poblamos el select del panel si se abre
+        if (isMultiSelectMode) {
+            const sel = document.getElementById('select-movil-multi');
+            if (sel && cachesRef.moviles) {
+                sel.innerHTML = '<option value="">Seleccionar móvil...</option>' + 
+                    cachesRef.moviles.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('');
+            }
+        }
+    }
+
+    if (!isMultiSelectMode) {
+        selectedReservas.clear();
+        cargarMarcadoresDeReservas();
+    }
+}
 
 export function getModalMarkerCoords() { 
     const inputs = Array.from(document.querySelectorAll('.origen-input')); const inputDestino = document.getElementById('destino');
@@ -314,4 +346,8 @@ export function getModalMarkerCoords() {
         return { latitude: typeof coord.lat === 'function' ? coord.lat() : coord.lat, longitude: typeof coord.lng === 'function' ? coord.lng() : coord.lng };
     };
     return { origen: limpiarCoordenada(inputs[0]), destino: limpiarCoordenada(inputDestino) }; 
+}
+
+export function getSelectedReservasIds() {
+    return Array.from(selectedReservas.keys());
 }
