@@ -98,7 +98,7 @@
                              <thead>
                                  <tr>
                                  <th style="width: 40px; text-align: center;"><input type="checkbox" id="check-all-revision"></th>
-                                 <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                 <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>KM</th><th>Hora Fin</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                              </tr>
                           </thead>
                           <tbody></tbody>
@@ -112,7 +112,7 @@
                         <table id="tabla-en-curso">
                             <thead>
                                 <tr>
-                                    <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -126,7 +126,7 @@
                         <table id="tabla-pendientes">
                             <thead>
                                 <tr>
-                                    <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -144,7 +144,7 @@
                         <table id="tabla-asignados">
                             <thead>
                                 <tr>
-                                    <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -158,7 +158,7 @@
                         <table id="tabla-resultados-busqueda">
                             <thead>
                                 <tr>
-                                    <th>Autorización</th><th>Siniestro</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -211,29 +211,32 @@
                 </nav>
 
                 <div id="admin-clientes" class="admin-tab-content">
-                    <div class="admin-section">
-                        <h2>Clientes</h2>
-                        <form id="form-clientes" class="admin-form">
-                            <label for="cliente-nombre" style="display:none">Nombre</label>
-                            <input type="text" id="cliente-nombre" name="nombre" placeholder="Nombre del Cliente" required>
-                            <label for="cliente-cuit" style="display:none">CUIT</label>
-                            <input type="text" id="cliente-cuit" name="cuit" placeholder="CUIT">
-                            <label for="cliente-domicilio" style="display:none">Domicilio</label>
-                            <input type="text" id="cliente-domicilio" name="domicilio" placeholder="Domicilio">
-                            <label for="cliente-telefono" style="display:none">Tel</label>
-                            <input type="text" id="cliente-telefono" name="telefono" placeholder="Teléfono">
-                            <label for="cliente-color" style="display:none">Color</label>
-                            <input type="color" id="cliente-color" name="color" value="#FFFFFF">
-                            <button type="submit">Guardar Cliente</button>
-                        </form>
-                        <div id="lista-clientes"></div>
-                    </div>
+                   <div class="admin-section">
+                      <h2 id="cliente-form-titulo">Clientes</h2>         
+                     <form id="form-clientes" class="admin-form">
+                         <input type="hidden" id="cliente-id" name="id">
+                         <label for="cliente-nombre" style="display:none">Nombre</label>
+                         <input type="text" id="cliente-nombre" name="nombre" placeholder="Nombre del Cliente" required>
+                         <label for="cliente-cuit" style="display:none">CUIT</label>
+                         <input type="text" id="cliente-cuit" name="cuit" placeholder="CUIT">
+                         <label for="cliente-domicilio" style="display:none">Domicilio</label>
+                         <input type="text" id="cliente-domicilio" name="domicilio" placeholder="Domicilio">
+                         <label for="cliente-telefono" style="display:none">Tel</label>
+                         <input type="text" id="cliente-telefono" name="telefono" placeholder="Teléfono">
+                         <label for="cliente-color" style="display:none">Color</label>
+                         <input type="color" id="cliente-color" name="color" value="#FFFFFF">
+            
+                         <button type="submit" id="btn-clientes-submit">Guardar Cliente</button>
+                      </form>
+                      <div id="lista-clientes"></div>
+                 </div>
                 </div>
 
                 <div id="admin-choferes" class="admin-tab-content" style="display: none;">
                     <div class="admin-section">
-                        <h2>Choferes</h2>
+                        <h2 id="choferes-form-titulo">Choferes</h2>
                         <form id="form-choferes" class="admin-form">
+                            <input type="hidden" id="chofer-id" name="id">
                            <div class="form-group">
                                <label for="chofer-movil-select">Móvil Actual (Opcional)</label>
                                <select name="movil_actual_id" id="chofer-movil-select"></select>
@@ -262,8 +265,8 @@
                               <label for="chofer-telefono">Teléfono</label>
                               <input type="text" id="chofer-telefono" name="telefono" placeholder="Teléfono de contacto">
                             </div>
-    
-                            <button type="submit">Crear Chofer</button>
+
+                            <button type="submit" id="btn-choferes-submit">Crear Chofer</button>
                         </form>
                         <label for="busqueda-choferes" style="display:none">Buscar</label>
                         <input type="text" id="busqueda-choferes" placeholder="Buscar por nombre, DNI o N° de Móvil...">
@@ -273,8 +276,9 @@
                 
                 <div id="admin-moviles" class="admin-tab-content" style="display: none;">
                     <div class="admin-section">
-                        <h2>Móviles</h2>
+                        <h2 id="moviles-form-titulo">Móviles</h2>
                         <form id="form-moviles" class="admin-form">
+                            <input type="hidden" id="movil-id" name="id">
                             <label for="movil-numero" style="display:none">N</label>
                             <input type="number" id="movil-numero" name="numero" placeholder="N° de Móvil" required>
                             <label for="movil-patente" style="display:none">Patente</label>
@@ -291,61 +295,42 @@
                             <input type="text" id="movil-titular-dom" name="titular_domicilio" placeholder="Domicilio del Titular">
                             <label for="movil-titular-tel" style="display:none">Tel</label>
                             <input type="text" id="movil-titular-tel" name="titular_telefono" placeholder="Teléfono del Titular">
-                            <button type="submit">Guardar Móvil</button>
+                            <button type="submit" id="btn-moviles-submit">Guardar Móvil</button>
                         </form>
                         <div id="lista-moviles"></div>
                     </div>
                 </div>
-                   <div id="admin-reportes" class="admin-tab-content" style="display: none;">
-                       <div class="admin-section">
-                          <h2>Reportes del Sistema</h2>
-                          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; margin-top: 20px;">
-            
-                          <div class="report-card" style="border: 1px solid #ddd; padding: 20px; border-radius: 8px; text-align: center; background: #f8f9fa;">
-                            <span style="font-size: 30px;">👨‍✈️</span>
-                         <h3>Productividad por Chofer</h3>
-                          <p>Resumen de viajes, km y horas de espera por móvil.</p>
-                          <button onclick="document.getElementById('modal-param-chofer').style.display='block'" style="background: #6f42c1; color: white; width: 100%;">Configurar Informe</button>
-                      </div>
 
-                         <div class="report-card" style="border: 1px solid #ddd; padding: 20px; border-radius: 8px; text-align: center; background: #f8f9fa;">
-                           <span style="font-size: 30px;">🏢</span>
-                           <h3>Traslados por Empresa</h3>
-                           <p>Detalle técnico de viajes realizados para un cliente específico.</p>
-                            <button onclick="document.getElementById('modal-param-empresa').style.display='block'" style="background: #007bff; color: white; width: 100%;">Configurar Informe</button>
-                         </div>
+                <div id="admin-reportes" class="admin-tab-content" style="display: none;">
+                    <div class="admin-section">
+                        <h2>Reportes del Sistema</h2>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; margin-top: 20px;">
+                            
+                            <div class="report-card" style="border: 1px solid #ddd; padding: 20px; border-radius: 8px; text-align: center; background: #f8f9fa;">
+                                <span style="font-size: 30px;">👨‍✈️</span>
+                                <h3>Productividad por Chofer</h3>
+                                <p>Resumen de viajes, km y horas de espera por móvil.</p>
+                                <button onclick="document.getElementById('modal-param-chofer').style.display='block'" style="background: #6f42c1; color: white; width: 100%; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Configurar Informe</button>
+                            </div>
 
-                      </div>
-                  </div>
+                            <div class="report-card" style="border: 1px solid #ddd; padding: 20px; border-radius: 8px; text-align: center; background: #f8f9fa;">
+                                <span style="font-size: 30px;">🏢</span>
+                                <h3>Traslados por Empresa</h3>
+                                <p>Detalle técnico de viajes realizados para un cliente específico.</p>
+                                <button onclick="document.getElementById('modal-param-empresa').style.display='block'" style="background: #007bff; color: white; width: 100%; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Configurar Informe</button>
+                            </div>
+
+                            <div class="report-card" style="border: 1px solid #ddd; padding: 20px; border-radius: 8px; text-align: center; background: #f8f9fa;">
+                                <span style="font-size: 30px;">📊</span>
+                                <h3>Rankings y KPI</h3>
+                                <p>Análisis de rentabilidad de clientes y eficiencia de vaciado.</p>
+                                <button onclick="document.getElementById('modal-param-kpi').style.display='block'" style="background: #28a745; color: white; width: 100%; padding: 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Ver Rankings</button>
+                            </div>
+
+                        </div>
+                    </div>
                 </div>
 
-                        <div id="modal-param-chofer" class="modal">
-                         <div class="modal-content" style="max-width: 400px;">
-                          <h3>Configurar Informe Chofer</h3>
-                            <label>Desde:</label><input type="date" id="rep-chofer-desde" class="form-control" style="width:100%; margin-bottom:10px;">
-                           <label>Hasta:</label><input type="date" id="rep-chofer-hasta" class="form-control" style="width:100%; margin-bottom:10px;">
-                           <label>Chofer (Opcional):</label>
-                           <select id="rep-chofer-select" class="form-control" style="width:100%; margin-bottom:20px; padding: 8px;"></select>
-                        <div style="display:flex; gap:10px;">
-                          <button onclick="window.ejecutarReporteChofer()" style="flex:1; background:#6f42c1; color:white;">Generar</button>
-                           <button onclick="document.getElementById('modal-param-chofer').style.display='none'" style="flex:1; background:#ccc;">Cancelar</button>
-                     </div>
-                 </div>
-                </div>
-
-                        <div id="modal-param-empresa" class="modal">
-                        <div class="modal-content" style="max-width: 400px;">
-                          <h3>Configurar Informe Empresa</h3>
-                          <label>Empresa:</label>
-                       <select id="rep-empresa-select" class="form-control" style="width:100%; margin-bottom:10px; padding: 8px;"></select>
-                     <label>Desde:</label><input type="date" id="rep-empresa-desde" class="form-control" style="width:100%; margin-bottom:10px;">
-                      <label>Hasta:</label><input type="date" id="rep-empresa-hasta" class="form-control" style="width:100%; margin-bottom:20px;">
-                     <div style="display:flex; gap:10px;">
-                        <button onclick="window.ejecutarReporteEmpresa()" style="flex:1; background:#007bff; color:white;">Generar</button>
-                       <button onclick="document.getElementById('modal-param-empresa').style.display='none'" style="flex:1; background:#ccc;">Cancelar</button>
-                   </div>
-                </div>
-                </div>
                 <div id="admin-usuarios" class="admin-tab-content" style="display: none;">
                     <div class="admin-section">
                         <h2>Usuarios del Sistema</h2>
@@ -378,22 +363,34 @@
             </div>
 
             <div id="Historico" class="tab-content" style="display: none;">
-                <h2>Historial de Viajes</h2>
-                <div class="toolbar" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                      <input type="date" id="fecha-desde-historial">
-                      <input type="date" id="fecha-hasta-historial">
-                      <select id="filtro-cliente-historial" style="min-width: 200px;">
-                         <option value="">Todos los clientes</option>
-                      </select>
-                      <button id="btn-exportar-excel-hist">Exportar a Excel</button>
-                      <input type="text" id="search-historial-input" placeholder="Buscar en historial..." style="flex-grow: 1;">
-                 </div>
+                 <h2>Historial de Viajes</h2>
+                 <div class="toolbar" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 20px;">
+                         <input type="date" id="fecha-desde-historial">
+                         <input type="date" id="fecha-hasta-historial">
+                         <select id="filtro-cliente-historial" style="min-width: 200px;">
+                          <option value="">Todos los clientes</option>
+                         </select>
+                         <button id="btn-exportar-excel-hist">Exportar a Excel</button>
+                         <input type="text" id="search-historial-input" placeholder="Buscar en historial..." style="flex-grow: 1;">
+                     </div>
                 
-                
-                 <div id="paginacion-historico" class="paginacion">
-                     <button id="btn-anterior">Anterior</button>
-                     <span id="indicador-pagina"></span>
-                     <button id="btn-siguiente">Siguiente</button>
+                     <div id="contenedor-historico" class="reservas-container">
+                        <div class="table-wrapper">
+                              <table id="tabla-historico">
+                                 <thead>
+                                      <tr>
+                                        <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>KM</th><th>Chofer</th><th>Estado</th>
+                                      </tr>
+                            </thead>
+                            <tbody id="body-historico"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="paginacion-historico" class="paginacion" style="margin-top: 20px;">
+                    <button id="btn-anterior">Anterior</button>
+                    <span id="indicador-pagina"></span>
+                    <button id="btn-siguiente">Siguiente</button>
                 </div>
             </div>
 
@@ -422,6 +419,50 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <div id="modal-param-chofer" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Configurar Informe Chofer</h3>
+            <label>Desde:</label><input type="date" id="rep-chofer-desde" class="form-control" style="width:100%; margin-bottom:10px;">
+            <label>Hasta:</label><input type="date" id="rep-chofer-hasta" class="form-control" style="width:100%; margin-bottom:10px;">
+            <label>Chofer (Opcional):</label>
+            <select id="rep-chofer-select" class="form-control" style="width:100%; margin-bottom:20px; padding: 8px;"></select>
+            <div style="display:flex; gap:10px;">
+                <button onclick="window.ejecutarReporteChofer()" style="flex:1; background:#6f42c1; color:white;">Generar</button>
+                <button onclick="document.getElementById('modal-param-chofer').style.display='none'" style="flex:1; background:#ccc;">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-param-empresa" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Configurar Informe Empresa</h3>
+            <label>Empresa:</label>
+            <select id="rep-empresa-select" class="form-control" style="width:100%; margin-bottom:10px; padding: 8px;"></select>
+            <label>Desde:</label><input type="date" id="rep-empresa-desde" class="form-control" style="width:100%; margin-bottom:10px;">
+            <label>Hasta:</label><input type="date" id="rep-empresa-hasta" class="form-control" style="width:100%; margin-bottom:20px;">
+            <div style="display:flex; gap:10px;">
+                <button onclick="window.ejecutarReporteEmpresa()" style="flex:1; background:#007bff; color:white;">Generar</button>
+                <button onclick="document.getElementById('modal-param-empresa').style.display='none'" style="flex:1; background:#ccc;">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-param-kpi" class="modal">
+        <div class="modal-content" style="background-color: white; margin: 10% auto; padding: 20px; border-radius: 8px; width: 300px; font-family: sans-serif; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <h3 style="color: #28a745; margin-top: 0; text-align: center;">Análisis KPI</h3>
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Desde:</label>
+            <input type="date" id="rep-kpi-desde" style="width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
+            <label style="display: block; margin-bottom: 5px; font-weight: bold;">Hasta:</label>
+            <input type="date" id="rep-kpi-hasta" style="width: 100%; padding: 8px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px;">
+
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button onclick="ejecutarRankingClientes()" style="background: #007bff; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">🏆 Ranking Clientes</button>
+                <button onclick="ejecutarRankingChoferes()" style="background: #6f42c1; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">🥇 Ranking Choferes</button>
+                <button onclick="document.getElementById('modal-param-kpi').style.display='none'" style="background: #6c757d; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer;">Cerrar</button>
+            </div>
+        </div>
     </div>
 
     <div id="reserva-modal" class="modal">
@@ -569,49 +610,50 @@
         </div>
     </div>
 
-    <div id="edit-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-edit-btn">&times;</span>
-            <h2 id="edit-modal-title">Editar Item</h2>
-            <form id="edit-form"></form>
-        </div>
-    </div>
-    
-    <div id="reset-password-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-reset-password-btn">&times;</span>
-            <h2>Resetear Contraseña de <span id="reset-chofer-nombre"></span></h2>
-            <form id="reset-password-form">
-                <input type="hidden" id="reset-chofer-uid">
-                <label for="nueva-password" style="display:none">Pass</label>
-                <input type="password" id="nueva-password" placeholder="Nueva Contraseña" required>
-                <button type="submit">Actualizar Contraseña</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="multi-select-panel" style="display: none; position: fixed; bottom: 20px; right: 20px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 2000;">
-        <h3>Selección (<span id="contador-seleccion">0</span>)</h3>
-        </div>
-
-        <div id="reporte-modal" class="modal" style="display: none; z-index: 3000;">
-             <div class="modal-content" style="width: 95%; max-width: 1100px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #6f42c1; padding-bottom: 10px; margin-bottom: 20px;">
-                        <h2 id="titulo-reporte-dinamico" style="margin: 0; color: #6f42c1;">Reporte del Sistema</h2>
-                       <div>
-                          <button id="btn-excel-reporte" style="background: #28a745; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">📊 Exportar Excel</button>
-                          <button onclick="window.printReport()" style="background: #dc3545; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">📄 Imprimir PDF</button>
-                          <button onclick="document.getElementById('reporte-modal').style.display='none'" style="background: #6c757d; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Cerrar</button>
-                      </div>
-                 </div>
-                <div id="reporte-body-print"></div>
+    <div id="reporte-modal" class="modal">
+        
+         <div class="modal-content" style="width: 95%; max-width: 1100px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #6f42c1; padding-bottom: 10px; margin-bottom: 20px;">
+                    <h2 id="titulo-reporte-dinamico" style="margin: 0; color: #6f42c1;">Reporte del Sistema</h2>
+                   <div>
+                      <button id="btn-excel-reporte" style="background: #28a745; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">📊 Exportar Excel</button>
+                      <button onclick="window.printReport()" style="background: #dc3545; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-right: 10px;">📄 Imprimir PDF</button>
+                      <button onclick="document.getElementById('reporte-modal').style.display='none'" style="background: #6c757d; color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Cerrar</button>
+                  </div>
+             </div>
+            <div id="reporte-body-print"></div>
          </div>
+    </div>
+    <div id="loading-bar-container" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.9); z-index:99999; flex-direction:column; align-items:center; justify-content:center;">
+        <div style="width:300px; background:#eee; border-radius:10px; overflow:hidden; border:1px solid #ccc; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+            <div id="loading-bar-fill" style="width:0%; height:20px; background:#28a745; transition:width 0.3s;"></div>
         </div>
-                
-              
+        <p id="loading-text" style="margin-top:15px; font-weight:bold; font-family:sans-serif; color:#333; font-size: 16px;">Iniciando cálculos...</p>
+    </div>
+    <div id="edit-modal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close-edit-btn" onclick="document.getElementById('edit-modal').style.display='none'" style="float:right; cursor:pointer; font-size:24px;">&times;</span>
+        <h2 id="edit-modal-title">Editar Item</h2>
+        <form id="edit-form" class="admin-form">
+            </form>
+    </div>
+ </div>
 
-             
-                
+ <div id="reset-password-modal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <h3>Resetear Contraseña</h3>
+        <p>Chofer: <span id="reset-chofer-nombre" style="font-weight:bold;"></span></p>
+        <form id="reset-password-form">
+            <input type="hidden" id="reset-chofer-uid">
+            <label>Nueva Contraseña (mín. 6 caracteres):</label>
+            <input type="password" id="nueva-password" required style="width:100%; margin:10px 0; padding:8px;">
+            <div style="display:flex; gap:10px;">
+                <button type="submit" style="flex:1; background:#28a745; color:white;">Guardar</button>
+                <button type="button" onclick="document.getElementById('reset-password-modal').style.display='none'" style="flex:1; background:#ccc;">Cancelar</button>
+            </div>
+        </form>
+    </div>
+ </div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>

@@ -139,7 +139,7 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
     });
 }
 function renderFilaReserva(tbody, reserva, caches) {
-    const cliente = caches.clientes[reserva.cliente] || { nombre: 'Default', color: '#ffffff' };
+    const cliente = caches.clientes[reserva.cliente] || { nombre: '⚠️ ASIGNAR CLIENTE', color: '#ffcccc' };
     const row = tbody.insertRow();
     row.dataset.id = reserva.id;
 
@@ -273,6 +273,13 @@ export async function handleSaveReserva(e, caches) {
     const submitBtn = f.querySelector('button[type="submit"]');    
     const operador = window.currentUserEmail || 'Sistema';
     const ahora = new Date().toLocaleString('es-AR');
+
+    if (f.cliente.value === "null" || !f.cliente.value) {
+        alert("⚠️ Error: Debes asignar un Cliente antes de guardar o confirmar la reserva.");
+        return; 
+    }
+
+    
     
     // 1. Validaciones Previas
     const estadoActual = document.getElementById('reserva-estado-principal')?.value || '';
@@ -377,6 +384,12 @@ export async function handleSaveReserva(e, caches) {
 export async function handleConfirmarDesdeModal(e, caches) {
    e.preventDefault();
     const f = document.getElementById('reserva-form');
+
+    if (f.cliente.value === "null" || !f.cliente.value) {
+        alert("⚠️ No puedes confirmar una reserva sin asignar un cliente.");
+        return;
+    }
+
     if (!f.checkValidity()) { f.reportValidity(); return; }
     
     const btn = document.getElementById('btn-confirmar-modal');
@@ -493,14 +506,23 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
 }
 
 export async function confirmarReservaImportada(reservaId) {
-    const operador = window.currentUserEmail || 'Operador';
-    const ahora = new Date().toLocaleString('es-AR');
     const ref = db.collection('reservas').doc(reservaId);
     try {
         await db.runTransaction(async (t) => {
             const doc = await t.get(ref);
             if (!doc.exists) return;
-            const logActual = doc.data().log || '';
+
+            // --- AGREGAR ESTA VALIDACIÓN ---
+            const data = doc.data();
+            if (data.cliente === "null" || !data.cliente) {
+                throw new Error("Esta reserva no tiene un cliente asignado. Edítala para asignar uno antes de confirmar.");
+            }
+            // -------------------------------
+
+            const logActual = data.log || '';
+            const operador = window.currentUserEmail || 'Operador';
+            const ahora = new Date().toLocaleString('es-AR');
+            
             t.update(ref, {
                 estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() },
                 log: logActual + `\n✅ Confirmado por: ${operador} (${ahora})`
@@ -508,7 +530,7 @@ export async function confirmarReservaImportada(reservaId) {
         });
     } catch (e) { 
         console.error("Error confirmando:", e);
-        alert("Error: " + e.message); 
+        alert(e.message); // Mostrará el error del cliente faltante
     }
 }
 
@@ -709,7 +731,7 @@ async function guardarReservasEnLote(list) {
     let batch = db.batch(), count = 0;
     for (let i = 0; i < list.length; i++) {
         const r = list[i];
-        let cId = Object.keys(clientsCache).find(k => clientsCache[k].nombre?.toUpperCase() === r.cliente?.toUpperCase()) || 'Default';
+        let cId = Object.keys(clientsCache).find(k => clientsCache[k].nombre?.toUpperCase() === r.cliente?.toUpperCase()) || 'null';
         batch.set(db.collection('reservas').doc(), {
             ...r, cliente: cId, log: `📥 Importado por: ${operador}, via IA, (${ahora})`,
             estado: { principal: 'Revision', detalle: 'Importado IA', actualizado_en: new Date() },

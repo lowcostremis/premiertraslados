@@ -146,7 +146,7 @@ function loadAuxData() {
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
         caches.clientes = {};
-        if (clienteSelect) clienteSelect.innerHTML = '<option value="Default">Default</option>';
+        if (clienteSelect) clienteSelect.innerHTML = '<option value="null">-- Seleccionar Cliente --</option>';
         snapshot.forEach(doc => {
             const data = doc.data();
             caches.clientes[doc.id] = data;

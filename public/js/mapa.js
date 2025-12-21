@@ -112,7 +112,20 @@ export async function calcularYMostrarRuta() {
 });
 }
 
-function geocodificar(address) { return new Promise((resolve) => { if(!geocoder) return resolve(null); geocoder.geocode({ 'address': address + ", Santa Fe, Argentina" }, (res, status) => { if (status === 'OK') resolve(res); else resolve(null); }); }); }
+function geocodificar(address) { 
+    let fullAddress = address;
+    // Evita duplicar "Argentina" si ya viene del Autocomplete
+    if (!address.includes("Argentina")) {
+        fullAddress += ", Santa Fe, Argentina";
+    }
+    return new Promise((resolve) => { 
+        geocoder.geocode({ 'address': fullAddress }, (results, status) => { 
+            if (status === 'OK') resolve(results);
+            else resolve(null);
+        }); 
+    }); 
+}
+
 
 function procesarResultadosRuta(response) {
     const legs = response.routes[0].legs; let dist = 0, time = 0; limpiarMarcadoresRuta();

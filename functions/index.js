@@ -78,34 +78,52 @@ exports.borrarChofer = onCall(async (request) => {
 // ===================================================================================
 
 exports.geocodeAddress = onDocumentWritten("reservas/{reservaId}", async (event) => {
+    // 1. Si el documento fue eliminado, salir.
     if (!event.data.after.exists) return null;
-    const client = getMapsClient();
-    const after = event.data.after.data();
-    
-    // TRIPLE PLAN: Si no tiene duración o distancia, la pedimos automáticamente
-    if (!after.duracion_estimada_minutos || !after.distancia) {
-        try {
-            const res = await client.distancematrix({
-                params: {
-                    origins: [after.origen],
-                    destinations: [after.destino],
-                    key: GEOCODING_API_KEY
-                }
-            });
 
-            const element = res.data.rows[0].elements[0];
-            if (element.status === 'OK') {
-                const duration = Math.ceil(element.duration.value / 60);
-                const distance = (element.distance.value / 1000).toFixed(1) + " km";
-                
-                // Actualizamos el documento automáticamente con los datos de Google
-                await event.data.after.ref.update({
-                    duracion_estimada_minutos: duration,
-                    distancia: distance
-                });
-                console.log(`✅ Triple Plan: Datos enriquecidos para ${after.nombre_pasajero}`);
+    const before = event.data.before.exists ? event.data.before.data() : {};
+    const after = event.data.after.data();
+
+    // 2. FILTRO ANTIBUCLE Y OPTIMIZACIÓN
+    // Solo actuamos si cambiaron las direcciones O si faltan los cálculos.
+    // Si la distancia ya existe, no volvemos a preguntar a Google.
+    const cambioDireccion = (before.origen !== after.origen) || (before.destino !== after.destino);
+    const faltanDatos = !after.distancia || !after.duracion_estimada_minutos;
+
+    if (!cambioDireccion && !faltanDatos) {
+        return null; // Detiene la ejecución aquí y evita el bucle
+    }
+
+    // 3. Verificación de seguridad para no procesar "Revision" o "Anulado" si no es necesario
+    if (after.estado?.principal === 'Anulado') return null;
+
+    try {
+        const mapsClient = getMapsClient(); // Usamos la función auxiliar definida arriba
+        const res = await mapsClient.distancematrix({
+            params: {
+                origins: [after.origen],
+                destinations: [after.destino],
+                key: GEOCODING_API_KEY
             }
-        } catch (e) { console.error("Error en Triple Plan (Background):", e.message); }
+        });
+
+        const element = res.data.rows[0].elements[0];
+        
+        if (element && element.status === 'OK') {
+            const duration = Math.ceil(element.duration.value / 60);
+            const distance = (element.distance.value / 1000).toFixed(1) + " km";
+            
+            // 4. ACTUALIZACIÓN ATÓMICA
+            console.log(`✨ Enriqueciendo datos para reserva ${event.params.reservaId}`);
+            return event.data.after.ref.update({
+                duracion_estimada_minutos: duration,
+                distancia: distance
+            });
+        } else {
+            console.warn(`⚠️ Google Maps no encontró ruta para reserva ${event.params.reservaId}: ${element?.status}`);
+        }
+    } catch (e) {
+        console.error("❌ Error en geocodeAddress:", e.message);
     }
     return null;
 });
@@ -161,23 +179,52 @@ exports.listUsers = onCall(async () => {
     const s = await db.collection('users').get();
     return { users: s.docs.map(d => ({ uid: d.id, ...d.data() })) };
 });
+
 exports.exportarHistorico = onCall(async (r) => {
     const { fechaDesde, fechaHasta, clienteId } = r.data;
+    
+    if (!fechaDesde || !fechaHasta) {
+        throw new HttpsError('invalid-argument', 'Fechas no proporcionadas.');
+    }
+
     const inicio = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00Z'));
     const fin = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59Z'));
-    let q = db.collection('historico').where('archivadoEn', '>=', inicio).where('archivadoEn', '<=', fin);
-    if (clienteId) q = q.where('cliente', '==', clienteId);
-    const s = await q.get();
-    let csv = "\uFEFFFecha Turno;Hora Turno;Hora PickUp;Pasajero;Cliente;Chofer;Origen;Destino;Estado;Siniestro;Autorizacion;Espera Total;Espera Sin Cargo\n";
     
+    let q = db.collection('historico').where('archivadoEn', '>=', inicio).where('archivadoEn', '<=', fin);
+    if (clienteId && clienteId !== "") q = q.where('cliente', '==', clienteId);
+    
+    const s = await q.get();
+    const registros = []; // <-- Cambiamos string por Array
+
     s.forEach(d => {
         const v = d.data();
-        const esc = (f) => `"${(f||'').toString().replace(/"/g, '""')}"`;
+        const cliente = v.cliente_nombre || v.clienteNombre || 'N/A';
+        const chofer = v.chofer_nombre || v.choferNombre || 'N/A';
         
-        // NUEVO: Agregamos los valores al final de la fila
-        csv += `${v.fecha_turno||'N/A'};${v.hora_turno||'N/A'};${v.hora_pickup||'N/A'};${esc(v.nombre_pasajero)};${esc(v.clienteNombre)};${esc(v.choferNombre)};${esc(v.origen)};${esc(v.destino)};${(typeof v.estado==='object'?v.estado.principal:v.estado)||'N/A'};${v.siniestro||'N/A'};${v.autorizacion||'N/A'};${v.espera_total||0};${v.espera_sin_cargo||0}\n`;
+        let estadoStr = 'N/A';
+        if (v.estado) {
+            estadoStr = (typeof v.estado === 'object' && v.estado.principal) ? v.estado.principal : v.estado;
+        }
+
+        // Creamos el objeto con los nombres de columna finales
+        registros.push({
+            "Fecha Turno": v.fecha_turno || 'N/A',
+            "Hora Turno": v.hora_turno || 'N/A',
+            "Hora PickUp": v.hora_pickup || 'N/A',
+            "Pasajero": v.nombre_pasajero || 'N/A',
+            "Cliente": cliente,
+            "Chofer": chofer,
+            "Origen": v.origen || 'N/A',
+            "Destino": v.destino || 'N/A',
+            "Estado": estadoStr,
+            "Siniestro": v.siniestro || 'N/A',
+            "Autorizacion": v.autorizacion || 'N/A',
+            "Espera Total": v.espera_total || 0,
+            "Espera Sin Cargo": v.espera_sin_cargo || 0
+        });
     });
-    return { csvData: csv };
+    
+    return { data: registros }; // <-- Devolvemos la lista
 });
 
 // ===================================================================================
