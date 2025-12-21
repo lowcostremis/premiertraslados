@@ -91,36 +91,42 @@ export function initHistorial(caches) {
     }
 }
 
+// 2. Cargar Historial con FILTROS REALES
 export async function cargarHistorial() {
     if (!historialBody) return;
+    
+    const clienteId = document.getElementById('filtro-cliente-historial')?.value;
+    const fechaDesde = document.getElementById('fecha-desde-historial')?.value;
+    const fechaHasta = document.getElementById('fecha-hasta-historial')?.value;
+
     try {
-        historialBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">Cargando historial...</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Filtrando...</td></tr>';
         
-        let query = db.collection('historico').orderBy('archivadoEn', 'desc');
+        let query = db.collection('historico').orderBy('fecha_turno', 'desc');
+
+        // Aplicamos filtros de Firebase si existen
+        if (clienteId) query = query.where('cliente', '==', clienteId);
+        if (fechaDesde) query = query.where('fecha_turno', '>=', fechaDesde);
+        if (fechaHasta) query = query.where('fecha_turno', '<=', fechaHasta);
+
         const cursor = historialDePaginas[paginaActual];
         if (cursor) query = query.startAfter(cursor);
         
-        query = query.limit(registrosPorPagina);
-        
-        const querySnapshot = await query.get();
+        const querySnapshot = await query.limit(registrosPorPagina).get();
         const documentos = querySnapshot.docs;
 
-        if (documentos.length === 0 && paginaActual === 0) {
-            historialBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">No hay viajes en el historial.</td></tr>';
-            actualizarEstadoBotonesPaginacion(0);
+        if (documentos.length === 0) {
+            historialBody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding:20px;">No se encontraron viajes con estos filtros.</td></tr>';
             return;
         }
 
-        if (documentos.length > 0) {
-            ultimoDocVisible = documentos[documentos.length - 1];
-        }
-
+        ultimoDocVisible = documentos[documentos.length - 1];
         mostrarDatosHistorialEnTabla(documentos);
         actualizarEstadoBotonesPaginacion(documentos.length);
 
     } catch (error) {
-        console.error("Error al cargar el historial: ", error);
-        historialBody.innerHTML = '<tr><td colspan="10" style="color:red; text-align:center;">Error al cargar los datos.</td></tr>';
+        console.error("Error:", error);
+        historialBody.innerHTML = '<tr><td colspan="10" style="color:red;">Error de índice: Asegurate de crear el índice en Firebase.</td></tr>';
     }
 }
 
@@ -145,6 +151,7 @@ export async function buscarEnHistorial(texto) {
     }
 }
 
+// 1. Mejorar el renderizado para usar el Caché de Nombres
 function mostrarDatosHistorialEnTabla(documentos) {
     if (!historialBody) return;
     historialBody.innerHTML = ''; 
@@ -152,44 +159,42 @@ function mostrarDatosHistorialEnTabla(documentos) {
     documentos.forEach(item => {
         const viaje = typeof item.data === 'function' ? item.data() : item;
         const estado = (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A';
-        const estadoClassName = estado.toLowerCase().replace(/\s+/g, '-');
         
-        // CORRECCIÓN: Fallback para nombres de cliente y chofer según tus triggers 
-        const cNombre = viaje.cliente_nombre || viaje.clienteNombre || 'N/A';
-        const chNombre = viaje.choferNombre || 'N/A';
+        // Resolvemos nombres usando los caches globales del sistema
+        const clienteObj = window.appCaches?.clientes?.[viaje.cliente] || { nombre: viaje.cliente_nombre || 'N/A' };
+        const choferObj = window.appCaches?.choferes?.find(c => c.id === (viaje.chofer_asignado_id || viaje.asignado_a)) || { nombre: 'N/A' };
+
+        // Formateamos el Log para que se vea bien en el alert (reemplazamos saltos de línea)
+        const logLimpio = viaje.log ? viaje.log.replace(/\n/g, '\\n') : 'Sin registros de auditoría';
 
         const filaHTML = `
             <tr>
                 <td colspan="10">
-                    <div class="historial-card" style="margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: white;">
+                    <div class="historial-card" style="margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                         <div class="card-header" style="background: #f8f9fa; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee;">
-                            <div class="card-fecha">
-                                <span style="margin-right: 15px;">📅 ${viaje.fecha_turno || 'Sin fecha'}</span>
-                                <span>🕒 ${viaje.hora_turno || '--:--'}</span>
-                            </div>
-                            <div class="card-pasajero"><strong>Pasajero:</strong> ${viaje.nombre_pasajero || 'N/A'}</div>
-                            <div class="estado-tag estado-${estadoClassName}" style="padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; background: #e9ecef;">${estado}</div>
-                        </div>
-                        
-                        <div class="card-body" style="padding: 10px;">
-                            <div class="card-details-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 13px;">
-                                <div class="card-detail-item"><strong>Cliente:</strong> ${cNombre}</div>
-                                <div class="card-detail-item"><strong>Chofer:</strong> ${chNombre}</div>
-                                <div class="card-detail-item"><strong>Siniestro:</strong> ${viaje.siniestro || '-'}</div>
-                                <div class="card-detail-item"><strong>Aut.:</strong> ${viaje.autorizacion || '-'}</div>
-                                <div class="card-detail-item"><strong>KM:</strong> ${viaje.distancia || '--'}</div>
+                            <div style="font-size: 13px;">📅 ${viaje.fecha_turno || 'S/F'} 🕒 ${viaje.hora_turno || '--:--'}</div>
+                            <div style="font-weight: bold; color: #333;">👤 ${viaje.nombre_pasajero || 'N/A'}</div>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <button onclick="alert(\`${viaje.log || 'Sin registros'}\`)" 
+                                        style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                                    📜 Ver Log
+                                </button>
+                                <span style="font-weight: bold; color: #007bff; font-size: 12px;">${estado.toUpperCase()}</span>
                             </div>
                         </div>
-
-                        <div class="card-locations" style="padding: 10px; background: #fdfdfd; font-size: 12px; display: flex; align-items: center; gap: 10px; border-top: 1px dashed #eee;">
-                            <div style="flex: 1;"><span style="color: #666; display: block; font-size: 10px;">ORIGEN</span>${viaje.origen || 'N/A'}</div>
-                            <div style="color: #ccc;">➔</div>
-                            <div style="flex: 1;"><span style="color: #666; display: block; font-size: 10px;">DESTINO</span>${viaje.destino || 'N/A'}</div>
+                        <div class="card-body" style="padding: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 13px;">
+                            <div><strong>Cliente:</strong> ${clienteObj.nombre}</div>
+                            <div><strong>Chofer:</strong> ${choferObj.nombre}</div>
+                            <div><strong>KM:</strong> ${viaje.distancia || '--'}</div>
+                            <div><strong>Siniestro:</strong> ${viaje.siniestro || '-'}</div>
+                        </div>
+                        <div style="padding: 10px; font-size: 12px; border-top: 1px dashed #eee; color: #555; background: #fffcf5;">
+                            📍 ${viaje.origen || 'N/A'} <br>
+                            🏁 ${viaje.destino || 'N/A'}
                         </div>
                     </div>
                 </td>
-            </tr>
-        `;
+            </tr>`;
         historialBody.innerHTML += filaHTML;
     });
 }
