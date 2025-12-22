@@ -26,7 +26,8 @@ export function initMapa(caches, getLatestSnapshot) {
 
     initMapInstance(); 
     escucharUbicacionChoferes();
-}
+}    
+
 
 export async function initMapInstance() {
     const c = document.getElementById("map-container");
@@ -177,7 +178,8 @@ export function cargarMarcadoresDeReservas() {
         idsDeReservasActivas.add(r.id);
         let posicion = (['Viaje Iniciado', 'En Origen'].includes(e) && r.destino_coords?.latitude) ? { lat: r.destino_coords.latitude, lng: r.destino_coords.longitude } : { lat: r.origen_coords?.latitude, lng: r.origen_coords?.longitude };
         if (!posicion.lat) return;
-        let icono = selectedReservas.has(r.id) ? crearIconoDePin('#007BFF', '✓') : _getIconoParaReserva(r, e);
+        const idsSeleccionados = window.app.getSelectedReservasIds();
+        let icono = idsSeleccionados.includes(r.id) ? crearIconoDePin('#007BFF', '✓') : _getIconoParaReserva(r, e);
         
         if (marcadoresReservas[r.id]) { 
             marcadoresReservas[r.id].setPosition(posicion); 
@@ -205,9 +207,19 @@ function _getIconoParaReserva(reserva, e) {
 }
 
 function handleMarkerSelection(reserva) {
-    if (selectedReservas.has(reserva.id)) { selectedReservas.delete(reserva.id); const e = (typeof reserva.estado === 'object') ? reserva.estado.principal : reserva.estado; marcadoresReservas[reserva.id].setIcon(_getIconoParaReserva(reserva, e)); } 
-    else { selectedReservas.set(reserva.id, reserva); marcadoresReservas[reserva.id].setIcon(crearIconoDePin('#007BFF', '✓')); }
-    actualizarPanelMultiSelect();
+    // Buscamos si la fila de este viaje está visible en alguna tabla
+    const fila = document.querySelector(`tr[data-id="${reserva.id}"]`);
+    
+    // Llamamos a la función de main.js para que agregue el ID al Set global
+    // y resalte la fila si la encontró
+    window.app.toggleTableSelection(reserva.id, fila);
+    
+    // Refrescamos visualmente los marcadores del mapa
+    cargarMarcadoresDeReservas();
+    
+    // Actualizamos el panel (contador, etc)
+    const contador = document.getElementById('contador-seleccion');
+    if (contador) contador.textContent = window.app.getSelectedReservasIds().length;
 }
 
 function actualizarPanelMultiSelect() {
@@ -350,4 +362,12 @@ export function getModalMarkerCoords() {
 
 export function getSelectedReservasIds() {
     return Array.from(selectedReservas.keys());
+}
+
+export function actualizarMarcadorMapa(id, isSelected) {
+    if (marcadoresReservas[id]) {
+        const r = { id: id }; // Objeto mínimo para el icono
+        // Forzamos el refresco del marcador
+        cargarMarcadoresDeReservas(); 
+    }
 }

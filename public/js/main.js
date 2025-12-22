@@ -19,7 +19,8 @@ import {
     toggleMultiSelectMode, 
     getSelectedReservasIds,
     activarAutocomplete,    
-    calcularYMostrarRuta    
+    calcularYMostrarRuta,
+    actualizarMarcadorMapa    
 } from './mapa.js';
 
 import { 
@@ -218,19 +219,45 @@ function updateTablePanelVisibility() {
 function toggleTableSelection(reservaId, rowElement) {
     if (selectedTableIds.has(reservaId)) {
         selectedTableIds.delete(reservaId);
-        rowElement.classList.remove('selected-row');
+        if(rowElement) rowElement.classList.remove('selected-row');
     } else {
         selectedTableIds.add(reservaId);
-        rowElement.classList.add('selected-row');
+        if(rowElement) rowElement.classList.add('selected-row');
     }
+    
+    // Sincronizar con el marcador del mapa si existe
+    if (window.app.actualizarMarcadorMapa) {
+        window.app.actualizarMarcadorMapa(reservaId, selectedTableIds.has(reservaId));
+    }
+    
     updateTablePanelVisibility();
 }
 
 function limpiarSeleccion() {
+    // 1. Limpiar el Set de IDs de la tabla
     selectedTableIds.clear();
+    
+    // 2. Quitar el resaltado visual de las filas
     document.querySelectorAll('.selected-row').forEach(r => r.classList.remove('selected-row'));
+    
+    // 3. Resetear el modo de selección en el Mapa si estaba activo
+    if (window.app.toggleMultiSelectMode && window.isMapMultiSelectActive) {
+        // Esto limpia los marcadores del mapa internamente
+        window.app.toggleMultiSelectMode(); 
+    }
+
+    // 4. Ocultar el panel y resetear botones
     document.getElementById('multi-select-panel').style.display = 'none';
-    if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
+    
+    const btnTable = document.getElementById('btn-toggle-select-table');
+    if (window.isTableMultiSelectMode && btnTable) {
+        window.isTableMultiSelectMode = false;
+        btnTable.textContent = 'Activar Selección Múltiple';
+        btnTable.classList.remove('active');
+    }
+    
+    // 5. Refrescar los marcadores del mapa para que vuelvan a su color original
+    cargarMarcadoresDeReservas();
 }
 
 
@@ -427,16 +454,21 @@ function initApp() {
     document.getElementById('busqueda-reservas')?.addEventListener('input', (e) => buscarEnReservas(e.target.value, caches));
     
     document.getElementById('btn-assign-multi')?.addEventListener('click', async () => {
-        const movilId = document.getElementById('select-movil-multi').value;
-        if (!movilId) return alert('Selecciona un móvil.');
-        let ids = window.isTableMultiSelectMode ? Array.from(selectedTableIds) : window.app.getSelectedReservasIds();
-        if (ids.length === 0) return alert("Sin selección.");
-        if (await asignarMultiplesReservas(ids, movilId, caches)) {
-            if (window.isTableMultiSelectMode) document.getElementById('btn-toggle-select-table').click();
-            else toggleMultiSelectMode();
-            document.getElementById('select-movil-multi').value = "";
-        }
-    });
+    const movilId = document.getElementById('select-movil-multi').value;
+    if (!movilId) return alert('Selecciona un móvil.');
+
+    // Obtenemos los IDs sin importar si vienen de la tabla o del mapa
+    let ids = window.app.getSelectedReservasIds();
+    
+    if (ids.length === 0) return alert("No hay viajes seleccionados.");
+
+    if (await asignarMultiplesReservas(ids, movilId, caches)) {
+        // --- LA CLAVE: LIMPIEZA TOTAL ---
+        limpiarSeleccion(); 
+        document.getElementById('select-movil-multi').value = "";
+        alert(`Éxito: Se asignaron ${ids.length} viajes.`);
+    }
+});
 
     // --- WINDOW.APP DEFINITIVO ---
         window.app = { 
@@ -451,9 +483,7 @@ function initApp() {
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
         filtrarReservasAsignadasPorChofer, filtrarPorHoras,
         getSelectedReservasIds: () => {
-            if (window.isTableMultiSelectMode) return Array.from(selectedTableIds);
-            if (typeof getSelectedReservasIds === 'function') return getSelectedReservasIds();
-            return [];
+            return Array.from(selectedTableIds);
         },
         toggleTableSelection, handleConfirmarDesdeModal,
         activarAutocomplete,
@@ -461,6 +491,7 @@ function initApp() {
         limpiarSeleccion,
         confirmarReservaImportada,
         generarInformeProductividad,
+        actualizarMarcadorMapa
     }
     
     window.openTab = (e, n) => openTab(e, n, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
@@ -546,22 +577,29 @@ function actualizarFiltrosDeMoviles() {
     }
 
     // Actualizar selectores de reportes
-    const repEmpresaSelect = document.getElementById('rep-empresa-select');
+   const repEmpresaSelect = document.getElementById('rep-empresa-select');
     if (repEmpresaSelect && window.appCaches.clientes) {
+        const valorActual = repEmpresaSelect.value; // Guardar selección
         let opts = '<option value="">Seleccionar Empresa...</option>';
         Object.entries(window.appCaches.clientes).forEach(([id, data]) => {
             opts += `<option value="${id}">${data.nombre}</option>`;
         });
         repEmpresaSelect.innerHTML = opts;
+        repEmpresaSelect.value = valorActual; // Restaurar selección
     }
 
+    // Actualizar selectores de reportes (Chofer)
     const repChoferSelect = document.getElementById('rep-chofer-select');
     if (repChoferSelect && window.appCaches.choferes) {
+        const valorActualChofer = repChoferSelect.value; // Guardar selección
         let optsChofer = '<option value="">Todos los móviles</option>';
         window.appCaches.choferes.forEach(ch => {
             const movil = window.appCaches.moviles.find(m => m.id === ch.movil_actual_id);
-            if (movil) optsChofer += `<option value="${ch.id}">Móvil ${movil.numero} - ${ch.nombre}</option>`;
+            if (movil) {
+                optsChofer += `<option value="${ch.id}">Móvil ${movil.numero} - ${ch.nombre}</option>`;
+            }
         });
         repChoferSelect.innerHTML = optsChofer;
+        repChoferSelect.value = valorActualChofer; // Restaurar selección
     }
 }

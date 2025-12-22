@@ -9,12 +9,23 @@ export function openTab(evt, tabName, callbacks) {
 
     const activeLink = evt ? evt.currentTarget : document.querySelector(`.tab-link[onclick*="'${tabName}'"]`); 
     if(activeLink) activeLink.classList.add('active'); 
-    
+
+    // --- NUEVA LÓGICA PARA EL PANEL DE ASIGNACIÓN ---
+    const panel = document.getElementById('multi-select-panel');
+    if (panel) {
+        // Si entramos a Historico, Administración o Pasajeros, ocultamos y limpiamos
+        if (tabName !== 'Reservas' && tabName !== 'Mapa') {
+            panel.style.display = 'none';
+            if (window.app && window.app.limpiarSeleccion) {
+                window.app.limpiarSeleccion();
+            }
+        }
+    }
     if (tabName === 'Mapa') {
         if(callbacks.initMapInstance) callbacks.initMapInstance();
         if(callbacks.escucharUbicacionChoferes) callbacks.escucharUbicacionChoferes();
         if(callbacks.cargarMarcadoresDeReservas) callbacks.cargarMarcadoresDeReservas();
-    } 
+    }
     if (tabName === 'Historico') { 
         if(callbacks.cargarHistorial) callbacks.cargarHistorial(); 
     } 
