@@ -565,19 +565,30 @@ export async function asignarMovil(id, movilId, caches) {
         hideMapContextMenu(); if(window.app) window.app.hideTableMenus();
     } catch(e) { alert(e.message); }
 }
+
 export async function changeReservaState(id, st, caches) { 
-    if(['Anulado','Negativo'].includes(st) && confirm(`¿Seguro que desea marcar como ${st}?`)) {
-        const operador = window.currentUserEmail || 'Operador';
-        const ahora = new Date().toLocaleString('es-AR');
+    // 1. Verificamos si es uno de los estados de cancelación
+    if(['Anulado','Negativo'].includes(st) && confirm(`¿Marcar como ${st}?`)) {
         const ref = db.collection('reservas').doc(id);
-        const snap = await ref.get();
-        const logActual = snap.exists ? (snap.data().log || '') : '';
-        if (st === 'Anulado') {
-            await moverReservaAHistorico(id, st, caches, logActual + `\n🚫 Anulado por: ${operador} (${ahora})`);
+        const doc = await ref.get();
+        
+        // 2. CORRECCIÓN: Si es Anulado O Negativo, lo mandamos al Histórico
+        if (st === 'Anulado' || st === 'Negativo') {
+            // Diferenciamos el icono para el log
+            const icono = st === 'Anulado' ? '🚫' : '⛔'; 
+            
+            await moverReservaAHistorico(
+                id, 
+                st, 
+                caches, 
+                (doc.data().log||'') + `\n${icono} ${st} por: ${window.currentUserEmail} (${new Date().toLocaleString()})`
+            );
         } else {
+            // Este bloque queda por seguridad para otros estados futuros que no requieran archivar
             await ref.update({ 
-                "estado.principal": st, "estado.actualizado_en": new Date(),
-                log: logActual + `\n⚠️ Marcado como ${st} por: ${operador} (${ahora})`
+                "estado.principal": st, 
+                "estado.actualizado_en": new Date(), 
+                log: (doc.data().log||'') + `\n⚠️ ${st} por: ${window.currentUserEmail}` 
             });
         }
     }
