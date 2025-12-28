@@ -159,6 +159,7 @@ export function cargarMarcadoresDeReservas() {
     lastReservasSnapshotRef().forEach(doc => {
         const r = { id: doc.id, ...doc.data() };
         let e = (typeof r.estado === 'object') ? r.estado.principal : r.estado;
+        if (e === 'Anulado' || e === 'Finalizado' || e === 'Cancelado') return;
         
         if (filtroMapaActual !== 'Todos') {
             if (filtroMapaActual === 'Pendientes' && e !== 'Pendiente') return;

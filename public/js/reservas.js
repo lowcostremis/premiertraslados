@@ -764,27 +764,52 @@ export async function ejecutarAccionMasiva(accion, ids) {
     const operador = window.currentUserEmail || 'Operador';
     const ahora = new Date().toLocaleString('es-AR');
 
-    ids.forEach(id => {
-        const ref = db.collection('reservas').doc(id);
-        if (accion === 'borrar') {
-            batch.delete(ref);
-        } else if (accion === 'anular') {
-            batch.update(ref, {
-                "estado.principal": "Anulado",
-                "estado.detalle": "Anulación Masiva",
-                "estado.actualizado_en": new Date(),
-                log: `🚫 Anulación Masiva por: ${operador} (${ahora})`
-            });
-        }
-    });
-
     try {
+        // Obtenemos todos los documentos primero para poder moverlos si es necesario
+        const snapshots = await Promise.all(ids.map(id => db.collection('reservas').doc(id).get()));
+
+        snapshots.forEach(docSnap => {
+            if (!docSnap.exists) return;
+            const ref = db.collection('reservas').doc(docSnap.id);
+            const data = docSnap.data();
+
+            if (accion === 'borrar') {
+                batch.delete(ref);
+            } else if (accion === 'anular') {
+                // LOGICA CORREGIDA: Mover a Historico en lugar de solo actualizar
+                const histRef = db.collection('historico').doc(docSnap.id);
+                
+                const dataArchivada = {
+                    ...data,
+                    estado: { 
+                        principal: "Anulado", 
+                        detalle: "Anulación Masiva", 
+                        actualizado_en: new Date() 
+                    },
+                    archivadoEn: new Date(),
+                    log: (data.log || '') + `\n🚫 Anulación Masiva por: ${operador} (${ahora})`
+                };
+
+                // Si tenía chofer, le quitamos el viaje activo
+                if (data.chofer_asignado_id) {
+                    const choferRef = db.collection('choferes').doc(data.chofer_asignado_id);
+                    batch.update(choferRef, { 
+                        viajes_activos: db.app.firebase_.firestore.FieldValue.arrayRemove(docSnap.id) 
+                    });
+                }
+
+                batch.set(histRef, dataArchivada); // Copiar a historico
+                batch.delete(ref);                 // Borrar de reservas
+            }
+        });
+
         await batch.commit();
         alert(`Éxito: ${ids.length} reservas procesadas.`);
         if (window.app && window.app.limpiarSeleccion) window.app.limpiarSeleccion();
+
     } catch (error) {
         console.error("Error en lote:", error);
-        alert("Falló la operación masiva.");
+        alert("Falló la operación masiva: " + error.message);
     }
 }
 
