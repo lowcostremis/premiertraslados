@@ -87,31 +87,48 @@ export async function calcularYMostrarRuta() {
     if (puntosValidos.length < 2) { if (directionsRenderer) directionsRenderer.setMap(null); return; }
     directionsRenderer.setMap(mapaModal);
     const request = {
+        
         origin: puntosValidos[0].location,
         destination: puntosValidos[puntosValidos.length - 1].location,
         waypoints: puntosValidos.slice(1, -1).map(p => ({ location: p.location, stopover: true })),
         travelMode: 'DRIVING'
     };
+
+    // 2. Llamada al servicio de rutas
     directionsService.route(request, (response, status) => {
-    if (status === 'OK') {
-        directionsRenderer.setDirections(response);
+        if (status === 'OK') {
+            directionsRenderer.setDirections(response);
 
-        // --- PEGÁ ESTO AQUÍ ---
-        const leg = response.routes[0].legs[0];
-        const duracionEnMinutos = Math.ceil(leg.duration.value / 60);
-        const distanciaKm = (leg.distance.value / 1000).toFixed(2);
+            // --- LÓGICA CORREGIDA: Suma de todos los tramos ---
+            let totalDistanciaMetros = 0;
+            let totalDuracionSegundos = 0;
+            const ruta = response.routes[0];
 
-        // Actualizamos los campos del formulario para que se guarden en Firebase
-        document.getElementById('duracion_estimada_minutos').value = duracionEnMinutos;
-        document.getElementById('distancia_total_input').value = distanciaKm + " km";
-        document.getElementById('tiempo_total_input').value = duracionEnMinutos + " min";
-        // -----------------------
+            // Recorremos todos los tramos (legs) del viaje
+            for (let i = 0; i < ruta.legs.length; i++) {
+                totalDistanciaMetros += ruta.legs[i].distance.value;
+                totalDuracionSegundos += ruta.legs[i].duration.value;
+            }
 
-    } else {
-        console.error("Error al calcular ruta: " + status);
-    }
-});
-}
+            const duracionEnMinutos = Math.ceil(totalDuracionSegundos / 60);
+            const distanciaKm = (totalDistanciaMetros / 1000).toFixed(2);
+
+            // Actualizamos los campos del formulario
+            if (document.getElementById('duracion_estimada_minutos')) {
+                document.getElementById('duracion_estimada_minutos').value = duracionEnMinutos;
+            }
+            if (document.getElementById('distancia_total_input')) {
+                document.getElementById('distancia_total_input').value = distanciaKm + " km";
+            }
+            if (document.getElementById('tiempo_total_input')) {
+                document.getElementById('tiempo_total_input').value = duracionEnMinutos + " min";
+            }
+
+        } else {
+            console.error("Error al calcular ruta: " + status);
+        }
+    }); // Cierre del directionsService.route
+}   // Cierre de la función calcularYMostrarRuta
 
 function geocodificar(address) { 
     let fullAddress = address;
