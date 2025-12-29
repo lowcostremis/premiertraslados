@@ -131,7 +131,7 @@
                         <table id="tabla-en-curso">
                             <thead>
                                 <tr>
-                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -145,7 +145,7 @@
                         <table id="tabla-pendientes">
                             <thead>
                                 <tr>
-                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -163,7 +163,7 @@
                         <table id="tabla-asignados">
                             <thead>
                                 <tr>
-                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -177,7 +177,7 @@
                         <table id="tabla-resultados-busqueda">
                             <thead>
                                 <tr>
-                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -594,9 +594,9 @@
                             <label for="cantidad_pasajeros">Cantidad Pasajeros</label>
                             <input type="number" id="cantidad_pasajeros" name="cantidad_pasajeros" value="1" min="1">
                         </div>
-                        <div class="form-group">
-                            <label for="zona">Zona</label>
+                        <div class="form-group" style="display:none"> <label for="zona">Zona</label>
                             <select id="zona" name="zona"></select>
+                            
                         </div>
                     </div>
                     <div class="form-group">

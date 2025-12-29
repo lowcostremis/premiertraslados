@@ -194,7 +194,7 @@ function renderFilaReserva(tbody, reserva, caches) {
         if(m) estHTML += `<br><small>Móvil ${m.numero}</small>`;
     }
 
-    row.innerHTML = `
+   row.innerHTML = `
        ${checkHTML}
         <td>${reserva.autorizacion || ''}</td>
         <td>${reserva.siniestro || ''}</td>
@@ -205,9 +205,14 @@ function renderFilaReserva(tbody, reserva, caches) {
         <td>${reserva.origen || ''}</td>
         <td>${reserva.destino || ''}</td>
         <td>${reserva.cantidad_pasajeros || 1}</td>
-        <td class="editable-cell zona-cell">${reserva.zona || ''}</td>
+        
+        <td class="editable-cell zona-cell" style="display:none">${reserva.zona || ''}</td>
+
         <td style="font-weight:bold; color:#1877f2;">${reserva.distancia || '--'}</td>
-        <td style="font-weight:bold; color:#28a745;">${horaFinEst}</td> <td>${cliente.nombre}</td>
+        
+        <td style="font-weight:bold; color:#28a745;">${horaFinEst}</td> 
+        <td>${cliente.nombre}</td>
+
         <td>${estHTML}</td>
         <td class="acciones">
             <div class="acciones-dropdown">
