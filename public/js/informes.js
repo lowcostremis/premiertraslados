@@ -1,4 +1,4 @@
-// js/informes.js
+
 import { db } from './firebase-config.js';
 
 // --- 1. EXPORTACIÓN A EXCEL ---
@@ -26,14 +26,51 @@ window.ejecutarReporteEmpresa = async () => {
 
     if (!empresaId || !desde || !hasta) return alert("Completa los filtros.");
 
+    // --- 1. VALIDACIÓN DE FECHAS (NUEVO) ---
+    const fDesde = new Date(desde);
+    const fHasta = new Date(hasta);
+    const diferenciaTiempo = fHasta - fDesde;
+    const diferenciaDias = diferenciaTiempo / (1000 * 3600 * 24);
+
+    if (diferenciaDias > 62) { // 62 días = aprox 2 meses
+        alert(`⚠️ El rango de fechas es demasiado amplio (${Math.ceil(diferenciaDias)} días).\n\nPara evitar saturar el sistema, por favor selecciona un período máximo de 2 meses.`);
+        return;
+    }
+    // ---------------------------------------
+
+    // --- 2. MOSTRAR CARGANDO (NUEVO) ---
+    const loadingContainer = document.getElementById('loading-bar-container');
+    const loadingText = document.getElementById('loading-text');
+    const loadingFill = document.getElementById('loading-bar-fill');
+    
+    if (loadingContainer) {
+        loadingContainer.style.display = 'flex';
+        loadingFill.style.width = '30%'; // Avance inicial ficticio
+        loadingText.textContent = "Consultando base de datos...";
+    }
+    // -----------------------------------
+
     try {
         const [snapReservas, snapHistorico] = await Promise.all([
             db.collection('reservas').where('cliente', '==', empresaId).where('fecha_turno', '>=', desde).where('fecha_turno', '<=', hasta).get(),
             db.collection('historico').where('cliente', '==', empresaId).where('fecha_turno', '>=', desde).where('fecha_turno', '<=', hasta).get()
         ]);
 
+        // Actualizamos barra
+        if (loadingContainer) {
+            loadingFill.style.width = '70%';
+            loadingText.textContent = "Procesando viajes y calculando totales...";
+        }
+
         const todosLosViajes = [...snapReservas.docs, ...snapHistorico.docs];
-        if (todosLosViajes.length === 0) return alert("Sin datos.");
+        
+        if (todosLosViajes.length === 0) {
+            if (loadingContainer) loadingContainer.style.display = 'none';
+            return alert("Sin datos para este período.");
+        }
+
+        // Permitimos un breve respiro al navegador para pintar la barra antes del bucle pesado
+        await new Promise(r => setTimeout(r, 100));
 
         let dias = {};
         todosLosViajes.forEach(doc => {
@@ -63,21 +100,43 @@ window.ejecutarReporteEmpresa = async () => {
                 if (estado === 'PENDIENTE' || estado === 'EN CURSO') continue;
 
                 let km = parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
+                
+                // Cálculo asíncrono si falta distancia
                 if (km === 0 && (estado === 'FINALIZADO' || estado === 'ASIGNADO')) {
                     const rep = await calcularKilometrosEntrePuntos(v.origen, v.destino);
                     km = rep.distancia;
                 }
 
                 if (estado !== 'ANULADO' && estado !== 'NEGATIVO') dia.kmOcupado += km;
+                
+                // CORRECCIÓN: Buscamos nro_autorizacion O autorizacion (y lo mismo con siniestro)
+                const auth = v.nro_autorizacion || v.autorizacion || '-';
+                const sin = v.nro_siniestro || v.siniestro || '-';
+                
+                // CORRECCIÓN: Color Rojo para Negativos
+                const colorEstado = (estado === 'ANULADO' || estado === 'NEGATIVO') ? 'red' : '#007bff';
+
                 html += `<tr style="border-bottom: 1px solid #eee;">
-                    <td>${f}</td><td>${v.hora_pickup || v.hora_turno || '--:--'}</td><td><strong>${v.nombre_pasajero}</strong></td><td>${v.origen}</td><td>${v.destino}</td><td>${v.nro_autorizacion || '-'}</td><td>${v.nro_siniestro || '-'}</td><td style="text-align:center;">${km.toFixed(1)}</td><td style="color:${estado === 'ANULADO' ? 'red' : '#007bff'};">${estado}</td>
+                    <td>${f}</td><td>${v.hora_pickup || v.hora_turno || '--:--'}</td><td><strong>${v.nombre_pasajero}</strong></td><td>${v.origen}</td><td>${v.destino}</td><td>${auth}</td><td>${sin}</td><td style="text-align:center;">${km.toFixed(1)}</td><td style="color:${colorEstado};">${estado}</td>
                 </tr>`;
             }
             html += `</tbody></table><div style="text-align:right; font-weight:bold; padding:10px;">Total: ${dia.kmOcupado.toFixed(1)} km</div>`;
         }
+        
+        // Finalizamos barra
+        if (loadingContainer) {
+            loadingFill.style.width = '100%';
+            loadingText.textContent = "¡Listo!";
+            setTimeout(() => { loadingContainer.style.display = 'none'; }, 500);
+        }
+
         document.getElementById('reporte-body-print').innerHTML = html;
         document.getElementById('reporte-modal').style.display = 'block';
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error(e); 
+        if (loadingContainer) loadingContainer.style.display = 'none';
+        alert("Ocurrió un error al generar el reporte.");
+    }
 };
 
 // --- 3. REPORTE DE CHOFER (Jornada Real) ---
@@ -97,7 +156,6 @@ window.ejecutarReporteChofer = async () => {
         [...snapR.docs, ...snapH.docs].forEach(doc => {
             const v = doc.data();
             const idCh = v.chofer_asignado_id || v.asignado_a;
-            // CORREGIDO: idCh !== choferId
             if (!idCh || (choferId && idCh !== choferId)) return;
             const fecha = v.fecha_turno || 'S/F';
             if (!datosChoferes[idCh]) {
@@ -225,7 +283,6 @@ window.ejecutarRankingClientes = async () => {
                         <tbody>`;
 
         ranking.forEach(([name, data]) => {
-            // Cálculo de efectividad: Finalizados / Total
             const efec = data.total > 0 ? ((data.finalizadas / data.total) * 100).toFixed(1) : 0;
             const colorEfec = efec > 80 ? 'green' : (efec > 50 ? '#f6c23e' : 'red');
 
@@ -234,13 +291,14 @@ window.ejecutarRankingClientes = async () => {
                 <td style="text-align:center;">${data.total}</td>
                 <td style="text-align:center; color:green; font-weight:bold;">${data.finalizadas}</td>
                 <td style="text-align:center; font-weight:bold; color:${colorEfec};">${efec}%</td>
-                <td style="font-weight:bold; text-align:center; background:#f9f9f9;">${data.km.toFixed(1)}</td>
+                <td style="text-align:right; padding-right:10px;">${data.km.toFixed(1)}</td>
                 <td style="text-align:center; color:red;">${data.anulados}</td>
-                <td style="text-align:center; color:#dc3545;">${data.negativos}</td>
-                <td style="text-align:center; color:${data.esperaSin > 5 ? 'red' : '#666'}">${data.esperaSin}</td>
+                <td style="text-align:center; color:red;">${data.negativos}</td>
+                <td style="text-align:right; padding-right:10px;">${data.esperaSin.toFixed(0)} min</td>
             </tr>`;
         });
-        document.getElementById('reporte-body-print').innerHTML = html + "</tbody></table>";
+        html += `</tbody></table>`;
+        document.getElementById('reporte-body-print').innerHTML = html;
         document.getElementById('reporte-modal').style.display = 'block';
     } catch (e) { console.error(e); }
 };

@@ -210,8 +210,9 @@ function renderFilaReserva(tbody, reserva, caches) {
 
         <td style="font-weight:bold; color:#1877f2;">${reserva.distancia || '--'}</td>
         
-        <td style="font-weight:bold; color:#28a745;">${horaFinEst}</td> 
-        <td>${cliente.nombre}</td>
+        <td style="background-color: ${cliente.color || '#ffffff'}; color: #000; font-weight:bold;">
+        ${cliente.nombre}
+        </td>
 
         <td>${estHTML}</td>
         <td class="acciones">

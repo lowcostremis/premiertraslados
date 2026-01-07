@@ -136,13 +136,23 @@ function loadAuxData() {
             caches.clientes[doc.id] = data;
             if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
         });
+               
+        actualizarFiltrosDeMoviles();     
         poblarFiltroClientes(caches.clientes);
+
+       
+        const tabReservas = document.getElementById('reservas-tab');
+        if (tabReservas && tabReservas.style.display === 'block' && window.cargarReservas) {
+             console.log("🔄 Clientes cargados tarde: Actualizando tabla de reservas...");
+             window.cargarReservas();
+        }
     });
 
     db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
        caches.choferes = [];
        snapshot.forEach(doc => caches.choferes.push({ id: doc.id, ...doc.data() }));
        actualizarFiltrosDeMoviles();
+       poblarFiltroClientes(caches.clientes);
     });
 
     db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
@@ -285,6 +295,8 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     form.telefono_pasajero.value = datos.telefono_pasajero || '';
     form.espera_total.value = '';
     form.espera_sin_cargo.value = '';
+    form.siniestro.value = datos.siniestro || '';
+    form.autorizacion.value = datos.autorizacion || '';
     const duracionOculta = document.getElementById('duracion_estimada_minutos');
     if (duracionOculta) duracionOculta.value = '';
     
@@ -505,7 +517,11 @@ function initApp() {
     
     document.getElementById('btn-confirmar-modal')?.addEventListener('click', (e) => handleConfirmarDesdeModal(e, caches));
     document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
-    
+    document.getElementById('logout-btn')?.addEventListener('click', () => {
+        auth.signOut().then(() => {
+            window.location.reload();
+        });
+    });
 
     // Cargar datos iniciales
     loadAuxData();
@@ -603,3 +619,25 @@ function actualizarFiltrosDeMoviles() {
         repChoferSelect.value = valorActualChofer; // Restaurar selección
     }
 }
+
+// Función para mostrar/ocultar el panel de confirmación masiva
+window.actualizarPanelLote = function() {
+    const checkboxes = document.querySelectorAll('.check-reserva-revision:checked');
+    const panel = document.getElementById('panel-acciones-lote');
+    const contador = document.getElementById('contador-check-revision');
+    
+    if (checkboxes.length > 0) {
+        panel.style.display = 'inline-flex'; // O 'flex' según tu CSS
+        if(contador) contador.textContent = checkboxes.length;
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+// Y asegúrate que el listener existente llame a esta función:
+// Busca esto en main.js y asegúrate que existe:
+document.getElementById('tabla-importadas')?.addEventListener('change', (e) => {
+    if (e.target.classList.contains('check-reserva-revision')) {
+        window.actualizarPanelLote();
+    }
+});

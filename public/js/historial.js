@@ -159,13 +159,21 @@ function mostrarDatosHistorialEnTabla(documentos) {
     documentos.forEach(item => {
         const viaje = typeof item.data === 'function' ? item.data() : item;
         const estado = (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A';
+        const estadoStr = estado.toUpperCase();
         
+        // --- CAMBIO DE COLOR: NEGATIVOS TAMBIÉN EN ROJO ---
+        const colorEstado = (estadoStr === 'ANULADO' || estadoStr === 'NEGATIVO') ? 'red' : '#007bff';
+
         // Resolvemos nombres usando los caches globales del sistema
         const clienteObj = window.appCaches?.clientes?.[viaje.cliente] || { nombre: viaje.cliente_nombre || 'N/A' };
         const choferObj = window.appCaches?.choferes?.find(c => c.id === (viaje.chofer_asignado_id || viaje.asignado_a)) || { nombre: 'N/A' };
 
-        // Formateamos el Log para que se vea bien en el alert (reemplazamos saltos de línea)
+        // Formateamos el Log para que se vea bien en el alert
         const logLimpio = viaje.log ? viaje.log.replace(/\n/g, '\\n') : 'Sin registros de auditoría';
+
+        // Buscamos autorizacion/siniestro en ambos campos posibles
+        const auth = viaje.nro_autorizacion || viaje.autorizacion || '-';
+        const sin = viaje.nro_siniestro || viaje.siniestro || '-';
 
         const filaHTML = `
             <tr>
@@ -175,18 +183,18 @@ function mostrarDatosHistorialEnTabla(documentos) {
                             <div style="font-size: 13px;">📅 ${viaje.fecha_turno || 'S/F'} 🕒 ${viaje.hora_turno || '--:--'}</div>
                             <div style="font-weight: bold; color: #333;">👤 ${viaje.nombre_pasajero || 'N/A'}</div>
                             <div style="display: flex; gap: 10px; align-items: center;">
-                                <button onclick="alert(\`${viaje.log || 'Sin registros'}\`)" 
+                                <button onclick="alert(\`${logLimpio}\`)" 
                                         style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">
                                     📜 Ver Log
                                 </button>
-                                <span style="font-weight: bold; color: #007bff; font-size: 12px;">${estado.toUpperCase()}</span>
+                                <span style="font-weight: bold; color: ${colorEstado}; font-size: 12px;">${estadoStr}</span>
                             </div>
                         </div>
                         <div class="card-body" style="padding: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 13px;">
                             <div><strong>Cliente:</strong> ${clienteObj.nombre}</div>
                             <div><strong>Chofer:</strong> ${choferObj.nombre}</div>
                             <div><strong>KM:</strong> ${viaje.distancia || '--'}</div>
-                            <div><strong>Siniestro:</strong> ${viaje.siniestro || '-'}</div>
+                            <div><strong>Sin:</strong> ${sin} | <strong>Aut:</strong> ${auth}</div>
                         </div>
                         <div style="padding: 10px; font-size: 12px; border-top: 1px dashed #eee; color: #555; background: #fffcf5;">
                             📍 ${viaje.origen || 'N/A'} <br>
