@@ -149,21 +149,20 @@ function renderFilaReserva(tbody, reserva, caches) {
     const det = (typeof reserva.estado === 'object') ? reserva.estado.detalle : '';
     
     // --- LÓGICA DE CÁLCULO HORA FIN ESTIMADA ---
-   let horaFinEst = "Calculando..";
+    let horaFinEst = "--:--";
     const horaBase = reserva.hora_pickup || reserva.hora_turno; 
     const duracionMins = parseInt(reserva.duracion_estimada_minutos);
 
     if (horaBase && !isNaN(duracionMins) && duracionMins > 0) {
         const [hrs, mins] = horaBase.split(':').map(Number);
         const fechaCalc = new Date();
-        fechaCalc.setHours(hrs, mins, 0);
-        const fechaFin = new Date(fechaCalc.getTime() + duracionMins * 60000);
+        fechaCalc.setHours(hrs, mins + duracionMins); 
         
-        const hrsFin = fechaFin.getHours().toString().padStart(2, '0');
-        const minsFin = fechaFin.getMinutes().toString().padStart(2, '0');
+        const hrsFin = fechaCalc.getHours().toString().padStart(2, '0');
+        const minsFin = fechaCalc.getMinutes().toString().padStart(2, '0');
         horaFinEst = `${hrsFin}:${minsFin}`;
     }
-
+    
     if (reserva.es_exclusivo) row.style.backgroundColor = '#51ED8D';
     
     const fT = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
@@ -196,31 +195,32 @@ function renderFilaReserva(tbody, reserva, caches) {
 
    row.innerHTML = `
        ${checkHTML}
-        <td>${reserva.autorizacion || ''}</td>
-        <td>${reserva.siniestro || ''}</td>
-        <td>${fT}</td>
-        <td>${reserva.hora_turno || ''}</td>
-        <td class="editable-cell pickup-cell">${reserva.hora_pickup || ''}</td>
-        <td>${reserva.nombre_pasajero || ''}</td>
-        <td>${reserva.origen || ''}</td>
-        <td>${reserva.destino || ''}</td>
-        <td>${reserva.cantidad_pasajeros || 1}</td>
-        
-        <td class="editable-cell zona-cell" style="display:none">${reserva.zona || ''}</td>
+       <td>${reserva.autorizacion || ''}</td>
+       <td>${reserva.siniestro || ''}</td>
+       <td>${fT}</td>
+       <td>${reserva.hora_turno || ''}</td>
+       <td class="editable-cell pickup-cell">${reserva.hora_pickup || ''}</td>
+       <td>${reserva.nombre_pasajero || ''}</td>
+       <td>${reserva.origen || ''}</td>
+       <td>${reserva.destino || ''}</td>
+       <td>${reserva.cantidad_pasajeros || 1}</td>
+       
+       <td class="editable-cell zona-cell" style="display:none">${reserva.zona || ''}</td>
 
-        <td style="font-weight:bold; color:#1877f2;">${reserva.distancia || '--'}</td>
-        
-        <td style="background-color: ${cliente.color || '#ffffff'}; color: #000; font-weight:bold;">
-        ${cliente.nombre}
-        </td>
+       <td style="font-weight:bold; color:#1877f2;">${reserva.distancia || '--'}</td>
+       
+       <td style="color: #666; font-weight: bold;">${horaFinEst}</td>
+       <td style="background-color: ${cliente.color || '#ffffff'}; color: #000; font-weight:bold;">
+       ${cliente.nombre}
+       </td>
 
-        <td>${estHTML}</td>
-        <td class="acciones">
-            <div class="acciones-dropdown">
-                <button class="icono-tres-puntos" onclick="window.app.toggleMenu(event)">⋮</button>
-                <div class="menu-contenido">${menuItems}</div>
-            </div>
-        </td>
+       <td>${estHTML}</td>
+       <td class="acciones">
+           <div class="acciones-dropdown">
+               <button class="icono-tres-puntos" onclick="window.app.toggleMenu(event)">⋮</button>
+               <div class="menu-contenido">${menuItems}</div>
+           </div>
+       </td>
     `;
 
     if (!isRev && e !== 'Finalizado') {
