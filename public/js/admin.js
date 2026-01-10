@@ -1,8 +1,6 @@
-// js/admin.js
-
 import { db, functions, choferesSearchIndex } from './firebase-config.js';
 
-// Guardamos una referencia al objeto de caches completo.
+
 let cachesRef = {};
 let adminListeners = [];
 
@@ -30,6 +28,7 @@ export function initAdmin(caches) {
 
 export async function editItem(collection, id) {
     let doc;
+    // 1. Obtención del documento (Usuario vs Colección normal)
     if (collection === 'users') {
         const userDoc = await db.collection('users').doc(id).get();
         if (!userDoc.exists) { alert("Error: Usuario no encontrado."); return; }
@@ -37,6 +36,7 @@ export async function editItem(collection, id) {
     } else {
         doc = await db.collection(collection).doc(id).get();
     }
+    
     if (!doc.exists) { alert("Error: Item no encontrado."); return; }
     
     const data = doc.data();
@@ -45,55 +45,155 @@ export async function editItem(collection, id) {
     form.dataset.collection = collection;
     form.dataset.id = id;
 
-    if (collection === 'pasajeros') {
-        const dniLabel = document.createElement('label');
-        dniLabel.textContent = 'DNI';
-        form.appendChild(dniLabel);
+    // 2. Definimos campos obligatorios de facturación (incluyendo los nuevos)
+    const camposFacturacion = [
+        'paga_peaje', 'paga_negativos', 
+        'precio_km', 'km_minimo', 'precio_minimo', 
+        'espera_cortesia', 'espera_valor_hora', 'espera_fraccion', 
+        'bajada_bandera'
+    ];
 
-        const dniInput = document.createElement('input');
-        dniInput.name = 'dni';
-        dniInput.value = id; 
-        dniInput.disabled = true; 
-        form.appendChild(dniInput);
-    }   
+    let fieldsToEdit = Object.keys(data);
+    if (collection === 'clientes') {
+        fieldsToEdit = [...new Set([...fieldsToEdit, ...camposFacturacion])];
+    }
 
-    const fieldsToEdit = Object.keys(data);
+    // 3. ORDENAMIENTO VISUAL
+    const ordenPreferido = [
+        // Identidad (Nombre siempre primero)
+        'nombre', 'email', 'dni', 'color',
+        // Tarifas
+        'bajada_bandera', 'precio_km', 'km_minimo', 'precio_minimo',
+        // Esperas (Valor hora primero)
+        'espera_valor_hora', 'espera_cortesia', 'espera_fraccion',
+        // Configuración Extra
+        'paga_peaje', 'paga_negativos',
+        // Datos de Vehículo (si es chofer/movil)
+        'movil_actual_id', 'marca', 'modelo', 'patente', 'numero'
+    ];
+
+    fieldsToEdit.sort((a, b) => {
+        let indexA = ordenPreferido.indexOf(a);
+        let indexB = ordenPreferido.indexOf(b);
+        if (indexA === -1) indexA = 999; // Lo que no esté en la lista, va al fondo
+        if (indexB === -1) indexB = 999;
+        return indexA - indexB;
+    });
+
+    // 4. GENERACIÓN DE INPUTS
     fieldsToEdit.forEach(field => {
-        // ▼▼▼ ¡AQUÍ ESTÁ LA MODIFICACIÓN! ▼▼▼
-        if (['creadoEn', 'auth_uid', 'coordenadas', 'fcm_token'].includes(field)) return;
-        
+        // A. Filtros Globales (Campos técnicos que nunca se tocan)
+        if (['creadoEn', 'auth_uid', 'coordenadas', 'fcm_token', 'uid', 'id', 'tarifas_fijas', 'espera_precio_min'].includes(field)) return;
+
+        // B. FILTRO EXCLUSIVO CLIENTES: Ocultamos datos de contacto innecesarios
+        if (collection === 'clientes' && ['cuit', 'domicilio', 'telefono'].includes(field)) return;
+
+        // C. Creación del Label
         const label = document.createElement('label');
-        label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
+        if (field === 'espera_valor_hora') {
+            label.textContent = "Valor Hora Espera ($)";
+        } else {
+            label.textContent = field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' ');
+        }
         form.appendChild(label);
 
-       if (field === 'movil_actual_id' && collection === 'choferes') {
+        // D. Lógica de Inputs Específicos
+        
+        // --- Selectores Booleanos (Peaje y Negativos) ---
+        if (field === 'paga_peaje') {
+            const select = document.createElement('select');
+            select.name = field;
+            select.innerHTML = `
+                <option value="false" ${data[field] === false ? 'selected' : ''}>NO (No paga)</option>
+                <option value="true" ${data[field] === true ? 'selected' : ''}>SI (Paga Peajes)</option>
+            `;
+            form.appendChild(select);
+        }
+        else if (field === 'paga_negativos') {
+            const select = document.createElement('select');
+            select.name = field;
+            select.innerHTML = `
+                <option value="false" ${data[field] === false ? 'selected' : ''}>NO (No paga Negativos)</option>
+                <option value="true" ${data[field] === true ? 'selected' : ''}>SI (Paga Negativos)</option>
+            `;
+            form.appendChild(select);
+        }
+
+        // --- Selector de Móviles (Solo Choferes) ---
+        else if (field === 'movil_actual_id' && collection === 'choferes') {
             const select = document.createElement('select');
             select.name = field;
             select.id = 'edit-chofer-movil-select'; 
             form.appendChild(select);
-            poblarSelectDeMovilesAdmin('edit-chofer-movil-select', data[field]);
+            if (typeof poblarSelectDeMovilesAdmin === 'function') {
+                poblarSelectDeMovilesAdmin('edit-chofer-movil-select', data[field]);
+            }
         } 
-        else if (field === 'color' && data.color !== undefined) {
+
+        // --- Campos Numéricos (Precios y Facturación) ---
+        else if (['precio_km', 'km_minimo', 'precio_minimo', 'espera_cortesia', 'espera_valor_hora', 'espera_fraccion', 'bajada_bandera'].includes(field)) {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.step = "0.01";
+            input.name = field;
+            input.value = data[field] !== undefined ? data[field] : 0;
+            input.placeholder = "0.00";
+            form.appendChild(input);
+        }
+        
+        // --- Selector de Color ---
+        else if (field === 'color') {
             const colorInput = document.createElement('input');
             colorInput.type = 'color';
             colorInput.name = field;
-            colorInput.value = data[field];
+            colorInput.value = data[field] || '#ffffff';
             form.appendChild(colorInput);
-        } else {
+        }
+        
+        // --- Texto General (Nombre, Email, etc) ---
+        else {
             const input = document.createElement('input');
             input.name = field;
-            
             input.value = Array.isArray(data[field]) ? data[field].join(', ') : (data[field] || '');
-            if (['uid', 'email'].includes(field)) {
-                input.disabled = true;
-            }
+            if (['email', 'dni'].includes(field)) input.disabled = true; // Protegemos campos clave
             form.appendChild(input);
         }
     });
 
+    // 5. BOTÓN ESPECIAL: GESTIÓN DE TARIFAS FIJAS (Solo Clientes)
+    if (collection === 'clientes') {
+        const btnTarifas = document.createElement('button');
+        btnTarifas.type = 'button';
+        btnTarifas.innerHTML = '💰 Gestionar Tarifas Fijas por Ruta';
+        btnTarifas.style.cssText = "width:100%; margin-top:15px; margin-bottom:10px; background-color:#17a2b8; color:white; padding:10px; border:none; border-radius:4px; cursor:pointer; font-weight:bold;";
+        
+        btnTarifas.onclick = async () => {
+            const textoOriginal = btnTarifas.innerHTML;
+            btnTarifas.textContent = '⏳ Cargando...';
+            btnTarifas.disabled = true;
+            try {
+                // Leemos fresco de la DB para evitar caché vieja
+                const docFresca = await db.collection('clientes').doc(id).get();
+                const listaFresca = docFresca.data().tarifas_fijas || [];
+                window.abrirModalTarifasFijas(id, data.nombre, listaFresca);
+            } catch (e) {
+                console.error(e);
+                alert("Error al cargar tarifas.");
+            } finally {
+                btnTarifas.innerHTML = textoOriginal;
+                btnTarifas.disabled = false;
+            }
+        };
+        form.appendChild(btnTarifas);
+    }
+
+    // 6. Botón de Guardar
     const submitBtn = document.createElement('button');
     submitBtn.type = 'submit';
     submitBtn.textContent = 'Guardar Cambios';
+    submitBtn.style.marginTop = '15px';
+    submitBtn.style.backgroundColor = '#28a745';
+    submitBtn.style.color = 'white';
     form.appendChild(submitBtn);
     
     document.getElementById('edit-modal-title').textContent = `Editar ${collection.slice(0, -1)}`;
@@ -144,7 +244,7 @@ function poblarSelectDeMovilesAdmin(selectId, selectedId = null) {
     
     cachesRef.moviles.forEach(movil => {
         const isSelected = movil.id === selectedId ? 'selected' : '';
-        // CORREGIDO: Se cambió 'patente' por 'patente'
+        
         optionsHTML += `<option value="${movil.id}" ${isSelected}>N° ${movil.numero} (${movil.patente || 'Sin Patente'})</option>`;
     });
 
@@ -360,12 +460,12 @@ function renderAdminList(collectionName, containerId, fields, headers) {
             const item = doc.data();
             tableHTML += `<tr>`;
             
-            // ▼▼▼ LÓGICA MODIFICADA ▼▼▼
+            
             fields.forEach(field => {
-                // Si el campo es 'movil_actual_id', buscamos el móvil en la caché para mostrar su número.
+                
                 if (field === 'movil_actual_id' && collectionName === 'choferes') {
                     const movilId = item[field];
-                    let movilDisplay = '-'; // Valor por defecto si no tiene móvil
+                    let movilDisplay = '-'; 
                     if (movilId && cachesRef.moviles) {
                         const movilAsignado = cachesRef.moviles.find(m => m.id === movilId);
                         if (movilAsignado) {
@@ -374,12 +474,12 @@ function renderAdminList(collectionName, containerId, fields, headers) {
                     }
                     tableHTML += `<td>${movilDisplay}</td>`;
                 } 
-                // Para todos los demás campos, usamos la lógica que ya existía.
+                
                 else if (field !== 'auth_uid') {
                     tableHTML += `<td>${item[field] || '-'}</td>`;
                 }
             });
-            // ▲▲▲ FIN DE LA MODIFICACIÓN ▲▲▲
+            
 
             let accionesHTML = `<button onclick="window.app.editItem('${collectionName}', '${doc.id}')">Editar</button>`;
             if (collectionName === 'choferes' && item.auth_uid) {
@@ -405,7 +505,7 @@ function renderChoferesTable(documentos) {
         return;
     }
 
-    // Reutilizamos la misma estructura de la tabla principal para consistencia
+    
     let tableHTML = `<div class="table-wrapper"><table><thead><tr>
         <th>DNI</th>
         <th>Nombre</th>
@@ -446,27 +546,27 @@ function renderChoferesTable(documentos) {
 
 
 async function buscarEnChoferes(texto) {
-    // Si el texto de búsqueda está vacío, volvemos a renderizar la lista completa original.
+    
     if (!texto || texto.trim() === '') {
-        // Limpiamos los listeners anteriores para evitar duplicados
+        
         adminListeners.forEach(unsubscribe => unsubscribe());
         adminListeners = [];
-        // Re-renderizamos la lista original de choferes
+        
         renderAdminList('choferes', 'lista-choferes', ['dni', 'nombre', 'movil_actual_id', 'telefono', 'email', 'app_version'], ['DNI', 'Nombre', 'Móvil Asignado', 'Teléfono', 'Email de Acceso', 'Versión App']);
         return;
     }
 
      adminListeners.forEach(unsubscribe => unsubscribe());
-    adminListeners = []; // Vaciamos el array ya que los oyentes están inactivos.
+    adminListeners = []; 
 
     try {
-        // Usamos el índice de búsqueda importado para buscar
+        
         const resultados = await choferesSearchIndex.search(texto);
         
-        // Algolia devuelve los resultados en la propiedad 'hits'
+        
         const documentos = resultados.hits.map(hit => ({ ...hit, id: hit.objectID }));
 
-        // Renderizamos la tabla con los resultados de la búsqueda
+        
         renderChoferesTable(documentos);
 
     } catch (error) {
@@ -481,58 +581,56 @@ async function handleUpdateItem(e) {
    e.preventDefault();
     const form = e.target;
     const collection = form.dataset.collection;
-    const originalId = form.dataset.id; // El DNI original
+    const originalId = form.dataset.id; 
     const updatedData = {};
     const formData = new FormData(form);
 
     for (let [key, value] of formData.entries()) {
         if (form.querySelector(`[name="${key}"]`) && form.querySelector(`[name="${key}"]`).disabled) continue;
         
+        
         if (key === 'domicilios') {
             updatedData[key] = value.split(',').map(domicilio => domicilio.trim());
-        } else {
+        } 
+
+        else if (key === 'paga_peaje' || key === 'paga_negativos') {
+            updatedData[key] = (value === 'true');
+        }
+
+        else if (['precio_km', 'km_minimo', 'precio_minimo', 'espera_cortesia', 'espera_valor_hora', 'espera_fraccion', 'bajada_bandera'].includes(key)) {
+            updatedData[key] = parseFloat(value) || 0;
+        }
+
+        else {
             updatedData[key] = value;
         }
+        
     }
 
     try {
-        // --- INICIO DE LA LÓGICA MEJORADA ---
         
-        // Caso especial: se está editando un chofer y el DNI (ID) ha cambiado.
         if (collection === 'choferes' && updatedData.dni && updatedData.dni !== originalId) {
-            const nuevoDni = updatedData.dni;
-            
-            // Usamos una transacción para asegurar que la operación sea atómica
             await db.runTransaction(async (transaction) => {
                 const oldDocRef = db.collection('choferes').doc(originalId);
                 const oldDoc = await transaction.get(oldDocRef);
-
-                if (!oldDoc.exists) {
-                    throw "El chofer original no fue encontrado.";
-                }
-
-                // Creamos una copia de los datos viejos y los mezclamos con los nuevos
+                if (!oldDoc.exists) throw "El chofer original no fue encontrado.";
                 const newData = { ...oldDoc.data(), ...updatedData };
-
-                const newDocRef = db.collection('choferes').doc(nuevoDni);
-                transaction.set(newDocRef, newData); // 1. Crea el nuevo documento
-                transaction.delete(oldDocRef);      // 2. Borra el antiguo
+                const newDocRef = db.collection('choferes').doc(updatedData.dni);
+                transaction.set(newDocRef, newData); 
+                transaction.delete(oldDocRef);
             });
-
         } else if (collection === 'choferes' && updatedData.movil_actual_id !== undefined) {
-            // Lógica para reasignar móviles si solo cambia el móvil pero no el DNI
             const batch = db.batch();
             const choferRef = db.collection('choferes').doc(originalId);
-
             const nuevoMovilId = updatedData.movil_actual_id || null;
+            
             if (nuevoMovilId) {
                 const q = db.collection('choferes').where('movil_actual_id', '==', nuevoMovilId);
                 const snapshot = await q.get();
                 if (!snapshot.empty) {
                     snapshot.forEach(doc => {
                         if (doc.id !== originalId) {
-                            const otroChoferRef = db.collection('choferes').doc(doc.id);
-                            batch.update(otroChoferRef, { movil_actual_id: null });
+                            batch.update(db.collection('choferes').doc(doc.id), { movil_actual_id: null });
                         }
                     });
                 }
@@ -540,15 +638,169 @@ async function handleUpdateItem(e) {
             batch.update(choferRef, updatedData);
             await batch.commit();
         } else {
-            // Para todas las demás colecciones, o si el DNI del chofer no cambió
+            
             await db.collection(collection).doc(originalId).update(updatedData);
         }
-        // --- FIN DE LA LÓGICA MEJORADA ---
         
-        alert("Item actualizado.");
+        alert("Datos guardados correctamente.");
         document.getElementById('edit-modal').style.display = 'none';
     } catch (error) {
         console.error("Error al actualizar:", error);
         alert("Error al guardar: " + error.message);
+    }
+}
+
+
+let clienteIdEditandoTarifas = null;
+let indiceEdicion = -1;
+
+
+window.abrirModalTarifasFijas = function(id, nombre, lista) {
+    clienteIdEditandoTarifas = id;
+    indiceEdicion = -1; // Reseteamos modo edición
+    resetearFormularioTarifas();
+    
+    const titulo = document.getElementById('titulo-cliente-fijo');
+    if (titulo) titulo.textContent = nombre;
+    
+    document.getElementById('modal-tarifas-fijas').style.display = 'block';
+    renderizarTablaTarifas(lista);
+}
+
+
+function resetearFormularioTarifas() {
+    document.getElementById('tf-origen').value = '';
+    document.getElementById('tf-destino').value = '';
+    document.getElementById('tf-precio').value = '';
+    
+    const btn = document.querySelector('#modal-tarifas-fijas button[onclick*="window.agregarTarifaFija"]');
+    if (btn) {
+        btn.textContent = '➕ Agregar';
+        btn.style.backgroundColor = '#28a745'; // Verde
+    }
+    indiceEdicion = -1;
+}
+
+// Dibuja la tabla dentro del modal con botón de Editar y Borrar
+function renderizarTablaTarifas(lista) {
+    const tbody = document.getElementById('body-tarifas-fijas');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    if (!lista || lista.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:10px;">Sin tarifas fijas asignadas.</td></tr>';
+        return;
+    }
+
+    lista.forEach((item, index) => {
+        const row = `
+            <tr>
+                <td>${item.origen}</td>
+                <td>${item.destino}</td>
+                <td style="font-weight:bold; color:#28a745;">$ ${parseFloat(item.precio).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                <td>
+                    <button onclick="window.prepararEdicionTarifa(${index})" style="background:#ffc107; color:black; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-right:5px;" title="Editar Precio">✏️</button>
+                    <button onclick="window.borrarTarifaFija(${index})" style="background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" title="Borrar">🗑️</button>
+                </td>
+            </tr>
+        `;
+        tbody.innerHTML += row;
+    });
+}
+
+window.prepararEdicionTarifa = async function(index) {
+    try {
+        // Leemos la lista actual de la base de datos (o del DOM, pero mejor DB)
+        const doc = await db.collection('clientes').doc(clienteIdEditandoTarifas).get();
+        const lista = doc.data().tarifas_fijas || [];
+        const item = lista[index];
+
+        if (!item) return;
+
+        // Llenamos los inputs
+        document.getElementById('tf-origen').value = item.origen;
+        document.getElementById('tf-destino').value = item.destino;
+        document.getElementById('tf-precio').value = item.precio;
+
+        // Cambiamos estado a "Editando"
+        indiceEdicion = index;
+        
+        // Cambiamos el botón visualmente
+        const btn = document.querySelector('#modal-tarifas-fijas button[onclick*="window.agregarTarifaFija"]');
+        btn.textContent = '💾 Guardar Cambio';
+        btn.style.backgroundColor = '#007bff'; // Azul
+        document.getElementById('tf-precio').focus(); // Foco en el precio para editar rápido
+
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// 2. Función Inteligente: Agrega O Edita según el estado
+window.agregarTarifaFija = async function() {
+    const origenInput = document.getElementById('tf-origen');
+    const destinoInput = document.getElementById('tf-destino');
+    const precioInput = document.getElementById('tf-precio');
+
+    const origen = origenInput.value.trim();
+    const destino = destinoInput.value.trim();
+    const precio = parseFloat(precioInput.value);
+
+    if (!origen || !destino || !precio) {
+        return alert("Por favor, completá Origen, Destino y Precio.");
+    }
+
+    try {
+        const docRef = db.collection('clientes').doc(clienteIdEditandoTarifas);
+        const docSnap = await docRef.get();
+        let lista = docSnap.data().tarifas_fijas || [];
+
+        const nuevoItem = { origen, destino, precio };
+
+        if (indiceEdicion >= 0) {
+            // --- MODO EDICIÓN: Reemplazamos el item existente ---
+            lista[indiceEdicion] = nuevoItem;
+        } else {
+            // --- MODO CREACIÓN: Agregamos al final ---
+            lista.push(nuevoItem);
+        }
+
+        // Guardamos la lista completa actualizada
+        await docRef.update({ tarifas_fijas: lista });
+        
+        // Reseteamos todo
+        resetearFormularioTarifas();
+        
+        // Refrescamos la tabla visual
+        renderizarTablaTarifas(lista);
+        
+    } catch (e) {
+        console.error(e);
+        alert("Error al guardar tarifa: " + e.message);
+    }
+}
+
+// 3. Función de Borrado (Actualizada para lista completa)
+window.borrarTarifaFija = async function(index) {
+    if(!confirm("¿Borrar esta tarifa fija?")) return;
+    
+    try {
+        const docRef = db.collection('clientes').doc(clienteIdEditandoTarifas);
+        const docSnap = await docRef.get();
+        let lista = docSnap.data().tarifas_fijas || [];
+        
+        // Eliminamos el elemento por su índice
+        lista.splice(index, 1);
+        
+        // Guardamos el array actualizado
+        await docRef.update({ tarifas_fijas: lista });
+        
+        // Si estábamos editando justo el que borramos, reseteamos form
+        if (indiceEdicion === index) resetearFormularioTarifas();
+        
+        renderizarTablaTarifas(lista);
+        
+    } catch (e) {
+        alert("Error al borrar: " + e.message);
     }
 }

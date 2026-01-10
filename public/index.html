@@ -34,6 +34,7 @@
             <button class="tab-link active" onclick="window.openTab(event, 'Reservas')">Reservas</button>
             <button class="tab-link" onclick="window.openTab(event, 'Mapa')">Mapa</button>
             <button class="tab-link" onclick="window.openTab(event, 'Administracion')">Administración</button>
+            <button class="tab-link" onclick="window.openTab(event, 'Facturacion')" style="background-color: #28a745; color: white;">Facturación</button>
             <button class="tab-link" onclick="window.openTab(event, 'Historico')">Histórico</button>
             <button class="tab-link" onclick="window.openTab(event, 'Pasajeros')">Pasajeros</button>
         </nav>
@@ -395,7 +396,60 @@
                     </div>
                 </div>
             </div>
+            <div id="Facturacion" class="tab-content" style="display: none;">
+                <nav class="sub-nav">
+                    <button class="sub-tab-fact active" onclick="window.app.mostrarSubTabFact('generar', event)">Generar Liquidación</button>
+                    <button class="sub-tab-fact" onclick="window.app.mostrarSubTabFact('emitidas', event)">Facturas Emitidas</button>
+                </nav>
 
+                <div id="sub-fact-generar" class="fact-section">
+                    <div class="toolbar" style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group">
+                            <label>Cliente a Facturar:</label>
+                            <select id="fact-cliente-select" class="form-control" style="min-width: 250px;"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Desde:</label>
+                            <input type="date" id="fact-fecha-desde" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Hasta:</label>
+                            <input type="date" id="fact-fecha-hasta" class="form-control">
+                        </div>
+                        <button id="btn-buscar-facturar" class="btn-primary" style="padding: 10px 20px;">🔍 Buscar Viajes</button>
+                        <button id="btn-emitir-factura" class="btn-success" style="padding: 10px 20px; background-color: #28a745;">✅ Emitir Factura</button>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table id="tabla-previa-factura">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Pasajero</th>
+                                    <th>Ruta</th>
+                                    <th>Distancia</th>
+                                    <th>Base (Regla 25km)</th>
+                                    <th>Esperas</th>
+                                    <th>Peaje</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                </tbody>
+                        </table>
+                    </div>
+                    
+                    <div id="resumen-factura-card" style="margin-top: 20px; text-align: right; padding: 20px; background: #eef2ff; border-radius: 8px; display: none;">
+                        <h3 style="margin:0; color: #1e3a8a;">Total Liquidación: <span id="fact-total-final">$ 0.00</span></h3>
+                    </div>
+                </div>
+
+                <div id="sub-fact-emitidas" class="fact-section" style="display: none;">
+                    <h3>Historial Administrativo</h3>
+                    <div id="lista-facturas-emitidas">
+                        </div>
+                </div>
+            </div>
             <div id="Historico" class="tab-content" style="display: none;">
                  <h2>Historial de Viajes</h2>
                  <div class="toolbar" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 20px;">
@@ -454,7 +508,44 @@
             </div>
         </main>
     </div>
+    <div id="modal-tarifas-fijas" class="modal" style="z-index: 9999;">
+            <div class="modal-content" style="max-width: 700px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ccc; padding-bottom:10px;">
+                    <h3 style="margin:0; color:#1877f2;">Tarifas Fijas: <span id="titulo-cliente-fijo"></span></h3>
+                    <span onclick="document.getElementById('modal-tarifas-fijas').style.display='none'" style="cursor:pointer; font-size:24px;">&times;</span>
+                </div>
 
+                <div style="background: #f8f9fa; padding: 15px; margin-top: 15px; border-radius: 8px; display: grid; grid-template-columns: 2fr 2fr 1fr auto; gap: 10px; align-items: end;">
+                    <div>
+                        <label style="font-size:12px; font-weight:bold;">Origen (Clave)</label>
+                        <input type="text" id="tf-origen" placeholder="Ej: Rosario" style="width:100%; padding:8px;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px; font-weight:bold;">Destino (Clave)</label>
+                        <input type="text" id="tf-destino" placeholder="Ej: Ezeiza" style="width:100%; padding:8px;">
+                    </div>
+                    <div>
+                        <label style="font-size:12px; font-weight:bold;">Precio ($)</label>
+                        <input type="number" id="tf-precio" placeholder="0.00" style="width:100%; padding:8px;">
+                    </div>
+                    <button onclick="window.agregarTarifaFija()" style="background:#28a745; color:white; border:none; padding:10px; border-radius:4px; cursor:pointer;">➕ Agregar</button>
+                </div>
+
+                <div class="table-wrapper" style="margin-top: 20px; max-height: 300px; overflow-y: auto;">
+                    <table id="tabla-tarifas-fijas">
+                        <thead>
+                            <tr>
+                                <th>Origen</th>
+                                <th>Destino</th>
+                                <th>Precio Pactado</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="body-tarifas-fijas"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     <div id="modal-param-chofer" class="modal">
         <div class="modal-content" style="max-width: 400px;">
             <h3>Configurar Informe Chofer</h3>

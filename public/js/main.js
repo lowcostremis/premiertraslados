@@ -5,6 +5,8 @@ import { openTab, showReservasTab, openAdminTab } from './tabs.js';
 import { initHistorial, cargarHistorial, poblarFiltroClientes } from './historial.js';
 import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
+import { initFacturacion } from './facturas.js';
+
 
 // 1. IMPORTAMOS LAS NUEVAS FUNCIONES DE MAPA (RUTAS Y AUTOCOMPLETE)
 import { 
@@ -88,6 +90,7 @@ auth.onAuthStateChanged(user => {
 });
 
 
+
 document.getElementById('login-btn').addEventListener('click', () => {
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
@@ -129,12 +132,15 @@ document.getElementById('btn-confirmar-lote')?.addEventListener('click', async (
 function loadAuxData() {
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
+        const factClienteSelect = document.getElementById('fact-cliente-select');
         caches.clientes = {};
         if (clienteSelect) clienteSelect.innerHTML = '<option value="null">-- Seleccionar Cliente --</option>';
+        if (factClienteSelect) factClienteSelect.innerHTML = '<option value="">Seleccionar Cliente...</option>'
         snapshot.forEach(doc => {
             const data = doc.data();
             caches.clientes[doc.id] = data;
             if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
+            if (factClienteSelect) factClienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
         });
                
         actualizarFiltrosDeMoviles();     
@@ -349,7 +355,8 @@ function initApp() {
             }
         });
     }
-    
+
+    initFacturacion();
 
     // --- LÓGICA MULTI-ORIGEN CONECTADA AL MAPA ---
     function initMultiOrigenLogic() {
@@ -503,8 +510,22 @@ function initApp() {
         limpiarSeleccion,
         confirmarReservaImportada,
         generarInformeProductividad,
-        actualizarMarcadorMapa
+        
+        mostrarSubTabFact: (tipo, e) => {
+            document.querySelectorAll('.fact-section').forEach(s => s.style.display = 'none');
+            document.querySelectorAll('.sub-tab-fact').forEach(b => b.classList.remove('active'));
+            
+            if (e && e.currentTarget) e.currentTarget.classList.add('active');
+
+            if (tipo === 'generar') {
+                document.getElementById('sub-fact-generar').style.display = 'block';
+            } else {
+                document.getElementById('sub-fact-emitidas').style.display = 'block';
+                window.app.cargarFacturasEmitidas();
+            }
+        },
     }
+        
     
     window.openTab = (e, n) => openTab(e, n, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
     window.showReservasTab = showReservasTab;
@@ -616,8 +637,9 @@ function actualizarFiltrosDeMoviles() {
             }
         });
         repChoferSelect.innerHTML = optsChofer;
-        repChoferSelect.value = valorActualChofer; // Restaurar selección
-    }
+        repChoferSelect.value = valorActualChofer; 
+        }
+    
 }
 
 // Función para mostrar/ocultar el panel de confirmación masiva
@@ -627,17 +649,9 @@ window.actualizarPanelLote = function() {
     const contador = document.getElementById('contador-check-revision');
     
     if (checkboxes.length > 0) {
-        panel.style.display = 'inline-flex'; // O 'flex' según tu CSS
+        panel.style.display = 'inline-flex'; 
         if(contador) contador.textContent = checkboxes.length;
     } else {
         panel.style.display = 'none';
     }
-}
-
-// Y asegúrate que el listener existente llame a esta función:
-// Busca esto en main.js y asegúrate que existe:
-document.getElementById('tabla-importadas')?.addEventListener('change', (e) => {
-    if (e.target.classList.contains('check-reserva-revision')) {
-        window.actualizarPanelLote();
-    }
-});
+};
