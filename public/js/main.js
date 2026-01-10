@@ -1,14 +1,22 @@
-
-
 import { auth, db } from './firebase-config.js';
 import { openTab, showReservasTab, openAdminTab } from './tabs.js';
-import { initHistorial, cargarHistorial, poblarFiltroClientes } from './historial.js';
+
+// --- IMPORTACIÓN UNIFICADA: HISTORIAL ---
+import { 
+    initHistorial, 
+    cargarHistorial, 
+    poblarFiltroClientes,
+    abrirModalEditarHistorico, 
+    guardarEdicionHistorico,
+    recalcularDistanciaHistorico 
+} from './historial.js';
+
+// --- IMPORTACIÓN UNIFICADA: PASAJEROS, ADMIN Y FACTURAS ---
 import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
-import { initFacturacion } from './facturas.js';
+import { initFacturacion, cargarFacturasEmitidas, verFactura } from './facturas.js';
 
-
-// 1. IMPORTAMOS LAS NUEVAS FUNCIONES DE MAPA (RUTAS Y AUTOCOMPLETE)
+// --- IMPORTACIÓN UNIFICADA: MAPA ---
 import { 
     initMapa, 
     initMapInstance, 
@@ -25,6 +33,7 @@ import {
     actualizarMarcadorMapa    
 } from './mapa.js';
 
+// --- IMPORTACIÓN UNIFICADA: RESERVAS ---
 import { 
     asignarMultiplesReservas,
     listenToReservas,
@@ -510,7 +519,11 @@ function initApp() {
         limpiarSeleccion,
         confirmarReservaImportada,
         generarInformeProductividad,
-        
+        cargarHistorial,
+        abrirModalEditarHistorico,
+        guardarEdicionHistorico,
+        cargarFacturasEmitidas,        
+        verFactura,
         mostrarSubTabFact: (tipo, e) => {
             document.querySelectorAll('.fact-section').forEach(s => s.style.display = 'none');
             document.querySelectorAll('.sub-tab-fact').forEach(b => b.classList.remove('active'));

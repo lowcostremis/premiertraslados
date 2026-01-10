@@ -1000,7 +1000,7 @@ export async function generarInformeProductividad(fechaDesde, fechaHasta, caches
 }
 
 // FUNCIÓN AUXILIAR DE GOOGLE MAPS
-async function calcularKilometrosEntrePuntos(origen, destino) {
+export async function calcularKilometrosEntrePuntos(origen, destino) {
     if (!origen || !destino) return { distancia: 0, duracion: 0 };
 
     try {
@@ -1033,3 +1033,4 @@ async function calcularKilometrosEntrePuntos(origen, destino) {
         return { distancia: 0, duracion: 0 };
     }
 }
+

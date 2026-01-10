@@ -508,6 +508,65 @@
             </div>
         </main>
     </div>
+    <div id="modal-editar-historico" class="modal" style="z-index: 10000;">
+    <div class="modal-content" style="max-width: 600px;">
+        <span onclick="document.getElementById('modal-editar-historico').style.display='none'" class="close-btn">&times;</span>
+        <h3 style="color:#1877f2; border-bottom:1px solid #ddd; padding-bottom:10px;">✏️ Corregir Viaje Histórico</h3>
+        
+        <form id="form-editar-historico" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:15px;">
+            <input type="hidden" id="hist-id">
+            
+            <div style="grid-column: span 2;">
+                <label style="font-size:12px; font-weight:bold;">Cliente</label>
+                <select id="hist-cliente" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;"></select>
+            </div>
+
+            <div style="grid-column: span 2;">
+                <label style="font-size:12px; font-weight:bold;">Pasajero</label>
+                <input type="text" id="hist-pasajero" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            </div>
+
+            <div style="grid-column: span 2;">
+                <label style="font-size:12px; font-weight:bold;">Origen</label>
+                <input type="text" id="hist-origen" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            </div>
+
+            <div style="grid-column: span 2;">
+                <label style="font-size:12px; font-weight:bold;">Destino</label>
+                <input type="text" id="hist-destino" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            </div>
+
+            <div>
+                <label style="font-size:12px; font-weight:bold;">Distancia (KM)</label>
+                <input type="text" id="hist-distancia" placeholder="Ej: 15.5 km" style="flex: 1; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                <button type="button" onclick="window.app.recalcularDistanciaHistorico()" title="Recalcular con Google Maps" style="background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 0 10px; font-size: 16px;">
+                     🔄
+                </button>
+                </div>
+            </div>
+
+            <div>
+                <label style="font-size:12px; font-weight:bold;">Espera (Horas)</label>
+                <input type="number" id="hist-espera" step="0.1" placeholder="0" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+            </div>
+            
+             <div>
+                <label style="font-size:12px; font-weight:bold;">Peaje Manual ($)</label>
+                <input type="number" id="hist-peaje" step="0.01" placeholder="Automático" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
+                <small style="color:#666; font-size:10px;">Dejar vacío para cálculo automático</small>
+            </div>
+
+            <div style="grid-column: span 2;">
+                <label style="font-size:12px; font-weight:bold;">Observaciones / Log</label>
+                <textarea id="hist-obs" rows="2" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;"></textarea>
+            </div>
+
+            <div style="grid-column: span 2; margin-top:10px;">
+                <button type="button" onclick="window.app.guardarEdicionHistorico()" style="width:100%; background:#28a745; color:white; padding:12px; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">💾 Guardar Corrección</button>
+            </div>
+        </form>
+    </div>
+ </div>
     <div id="modal-tarifas-fijas" class="modal" style="z-index: 9999;">
             <div class="modal-content" style="max-width: 700px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ccc; padding-bottom:10px;">
@@ -592,7 +651,7 @@
 
     <div id="reserva-modal" class="modal">
         <div class="modal-content" style="width: 95%; max-width: 1250px;">
-            <span class="close-btn">&times;</span>
+            <span class="close-btn" onclick="document.getElementById('reserva-modal').style.display='none'">&times;</span>
             <h2 id="modal-title">Nueva Reserva</h2>
             <div class="form-map-container">
                 <form id="reserva-form">                

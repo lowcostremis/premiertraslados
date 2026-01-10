@@ -134,10 +134,18 @@ function calcularTotalesViaje(viaje, config) {
     }
 
     // 3. PEAJES
-    let montoPeaje = 0;
+    let montoPeaje = 0;   
     let tienePeaje = false;
+    
     if (config.paga_peaje === true) {
-        montoPeaje = obtenerValorPeaje(viaje.origen, viaje.destino);
+        // PRIORIDAD: Si hay peaje manual editado en histórico, usar ese.
+        if (viaje.peaje_manual !== undefined && viaje.peaje_manual !== null && !isNaN(viaje.peaje_manual)) {
+            montoPeaje = parseFloat(viaje.peaje_manual);
+        } else {
+            // Si no, calcular automático
+            montoPeaje = obtenerValorPeaje(viaje.origen, viaje.destino);
+        }
+        
         if (montoPeaje > 0) tienePeaje = true;
     }
 
@@ -236,7 +244,7 @@ export async function cargarFacturasEmitidas() {
                     <td>${f.fecha_emision}</td>
                     <td style="font-weight:bold;">$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                     <td class="acciones">
-                        <button class="btn-primary" onclick="alert('Funcionalidad de impresión en desarrollo para el ID: ${doc.id}')">Ver Detalle / Imprimir</button>
+                        <button class="btn-primary" onclick="window.app.verFactura('${doc.id}')">🖨️ Ver Detalle / Imprimir</button>
                     </td>
                 </tr>`;
         });
@@ -246,5 +254,143 @@ export async function cargarFacturasEmitidas() {
     } catch (error) {
         console.error("Error al cargar emitidas:", error);
         container.innerHTML = '<p style="color:red;">Error al conectar con el historial de facturas.</p>';
+    }
+}
+
+// --- NUEVA FUNCIÓN PARA GENERAR EL PDF/VISTA DE IMPRESIÓN ---
+
+export async function verFactura(facturaId) {
+    try {
+        const doc = await db.collection('facturas').doc(facturaId).get();
+        if (!doc.exists) return alert("Error: La factura no existe.");
+        
+        const f = doc.data();
+        const items = f.items || [];
+
+        // Calculamos totales auxiliares para el reporte
+        const totalKM = items.reduce((sum, item) => sum + (parseFloat(item.distancia) || 0), 0);
+        const totalEsperas = items.reduce((sum, item) => sum + (item.espera || 0), 0);
+        const totalPeajes = items.reduce((sum, item) => sum + (item.montoPeaje || 0), 0);
+
+        // Diseñamos el HTML de la factura con MÁS DETALLES
+        let htmlContent = `
+        <html>
+        <head>
+            <title>Factura - ${f.cliente_nombre}</title>
+            <style>
+                body { font-family: 'Helvetica', sans-serif; padding: 20px; color: #333; }
+                .header { display: flex; justify-content: space-between; border-bottom: 2px solid #6f42c1; padding-bottom: 10px; margin-bottom: 20px; }
+                .logo { font-size: 22px; font-weight: bold; color: #6f42c1; }
+                .info-factura { text-align: right; font-size: 12px; }
+                .cliente-box { background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
+                
+                /* Ajustamos la tabla para que entren las nuevas columnas */
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }
+                th { background: #6f42c1; color: white; padding: 6px; text-align: left; }
+                td { border-bottom: 1px solid #ddd; padding: 5px; vertical-align: middle; }
+                
+                .total-row { font-size: 14px; font-weight: bold; background: #eef2ff; }
+                .text-right { text-align: right; }
+                .footer { margin-top: 30px; font-size: 10px; color: #777; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }
+                
+                /* Colores para estados */
+                .estado-negativo { color: red; font-weight: bold; }
+                .estado-finalizado { color: green; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div class="logo">Premier Traslados</div>
+                <div class="info-factura">
+                    <strong>Liquidación de Servicios</strong><br>
+                    Fecha Emisión: ${f.fecha_emision}<br>
+                    Período: ${f.periodo.desde} al ${f.periodo.hasta}<br>
+                    ID Ref: ${doc.id.slice(0, 8)}...
+                </div>
+            </div>
+
+            <div class="cliente-box">
+                <strong>Cliente:</strong> ${f.cliente_nombre}<br>
+            </div>
+
+            <h3>Detalle de Viajes</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 70px;">Fecha</th>
+                        <th>Pasajero</th>
+                        <th>Siniestro</th> <th>Auth.</th>     <th>Ruta</th>
+                        <th>KM</th>
+                        <th>Estado</th>    <th class="text-right">Base</th>
+                        <th class="text-right">Espera</th>
+                        <th class="text-right">Peaje</th>
+                        <th class="text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        items.forEach(item => {
+            // Formateo de ruta corto
+            const rutaCorta = `${item.origen.split(',')[0]} ➔ ${item.destino.split(',')[0]}`;
+            
+            // Lógica de visualización del estado
+            let estadoRaw = (typeof item.estado === 'object' ? item.estado.principal : item.estado) || '';
+            let claseEstado = '';
+            if (estadoRaw === 'Negativo') claseEstado = 'estado-negativo';
+            if (estadoRaw === 'Finalizado') claseEstado = 'estado-finalizado';
+
+            htmlContent += `
+                <tr>
+                    <td>${item.fecha_turno}</td>
+                    <td>${item.nombre_pasajero}</td>
+                    <td>${item.siniestro || '-'}</td>       <td>${item.autorizacion || '-'}</td>    <td>${rutaCorta}</td>
+                    <td>${item.distancia}</td>
+                    <td class="${claseEstado}">${estadoRaw}</td> <td class="text-right">$ ${item.base.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    <td class="text-right">$ ${item.espera.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    <td class="text-right">$ ${item.montoPeaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    <td class="text-right" style="font-weight:bold;">$ ${item.totalViaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                </tr>
+            `;
+        });
+
+        // NOTA: El colspan ahora es 10 porque tenemos 11 columnas en total (11 - 1 del total = 10)
+        htmlContent += `
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="10" class="text-right" style="padding-top: 15px;"><strong>Subtotal Peajes:</strong></td>
+                        <td class="text-right" style="padding-top: 15px;">$ ${totalPeajes.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="10" class="text-right"><strong>Subtotal Esperas:</strong></td>
+                        <td class="text-right">$ ${totalEsperas.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                    <tr class="total-row">
+                        <td colspan="10" class="text-right" style="padding: 10px;">TOTAL FINAL:</td>
+                        <td class="text-right" style="padding: 10px; color: #1e3a8a;">$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            <div class="footer">
+                Documento generado electrónicamente por Sistema Premier Traslados - ${new Date().toLocaleString()}
+            </div>
+
+            <script>
+                window.onload = function() { window.print(); }
+            </script>
+        </body>
+        </html>
+        `;
+
+        // Abrir ventana y escribir el contenido
+        const ventana = window.open('', '_blank', 'width=1100,height=700');
+        ventana.document.write(htmlContent);
+        ventana.document.close();
+
+    } catch (e) {
+        console.error(e);
+        alert("Error al generar la impresión.");
     }
 }
