@@ -310,8 +310,14 @@ export async function handleSaveReserva(e, caches) {
     
     let coords = (typeof getModalMarkerCoords === 'function') ? getModalMarkerCoords() : { origen: null, destino: null };
 
+    const clienteIdSel = f.cliente.value;
+    const nombreClienteTexto = (caches.clientes && caches.clientes[clienteIdSel]) 
+                            ? caches.clientes[clienteIdSel].nombre 
+                            : "Cliente Desconocido";
+
     const datosBase = {
         cliente: f.cliente.value,
+        cliente_nombre: nombreClienteTexto,
         siniestro: f.siniestro.value,
         autorizacion: f.autorizacion.value,
         dni_pasajero: f.dni_pasajero.value.trim(),
@@ -339,7 +345,7 @@ export async function handleSaveReserva(e, caches) {
 
         let reservaGuardadaId = rId;
 
-        // --- LÓGICA DE TRANSACCIÓN PARA EDITAR ---
+        
         if (rId) {
             const docRef = db.collection('reservas').doc(rId);
             await db.runTransaction(async (transaction) => {
@@ -352,7 +358,7 @@ export async function handleSaveReserva(e, caches) {
                 transaction.update(docRef, { ...datosBase, log: nuevoLog });
             });
         } else {
-            // --- CREACIÓN SIMPLE ---
+            
             const dNueva = {
                 ...datosBase,
                 log: `✅ Creado por: ${operador}, via manual, (${ahora})`,
@@ -363,7 +369,7 @@ export async function handleSaveReserva(e, caches) {
             reservaGuardadaId = nuevaRef.id;
         }
 
-        // 2. Acciones Post-Guardado (Fuera de la transacción por performance)
+        
         if (f.asignar_movil.value && reservaGuardadaId) {
             await asignarMovil(reservaGuardadaId, f.asignar_movil.value, caches);
         }
@@ -407,6 +413,10 @@ export async function handleConfirmarDesdeModal(e, caches) {
         btn.disabled = true; btn.textContent = 'Procesando...';
         const inputsOrigen = document.querySelectorAll('.origen-input');
         let origenes = []; inputsOrigen.forEach(i => { if(i.value.trim()) origenes.push(i.value.trim()); });
+        const clienteId = f.cliente.value;
+        const nombreClienteTexto = (caches.clientes && caches.clientes[clienteId]) 
+                                    ? caches.clientes[clienteId].nombre 
+                                    : "Cliente Desconocido";
         
         const ref = db.collection('reservas').doc(rId);
         await db.runTransaction(async (t) => {
@@ -415,6 +425,7 @@ export async function handleConfirmarDesdeModal(e, caches) {
             
             const d = {
                 cliente: f.cliente.value,
+                cliente_nombre: nombreClienteTexto,
                 siniestro: f.siniestro.value,
                 autorizacion: f.autorizacion.value,
                 dni_pasajero: f.dni_pasajero.value,
@@ -518,12 +529,12 @@ export async function confirmarReservaImportada(reservaId) {
             const doc = await t.get(ref);
             if (!doc.exists) return;
 
-            // --- AGREGAR ESTA VALIDACIÓN ---
+            
             const data = doc.data();
             if (data.cliente === "null" || !data.cliente) {
                 throw new Error("Esta reserva no tiene un cliente asignado. Edítala para asignar uno antes de confirmar.");
             }
-            // -------------------------------
+            
 
             const logActual = data.log || '';
             const operador = window.currentUserEmail || 'Operador';
@@ -536,7 +547,7 @@ export async function confirmarReservaImportada(reservaId) {
         });
     } catch (e) { 
         console.error("Error confirmando:", e);
-        alert(e.message); // Mostrará el error del cliente faltante
+        alert(e.message); 
     }
 }
 
@@ -562,7 +573,7 @@ export async function asignarMovil(id, movilId, caches) {
         b.update(ref, { 
             movil_asignado_id: movilId, 
             chofer_asignado_id: chofer.id, 
-            // ACTUALIZAMOS EL LOG CON NOMBRE Y NÚMERO
+            
             log: logActual + `\n🚖 ${esReasig} por: ${operador} (Móvil ${numMovil} - ${chofer.nombre}) (${ahora})`,
             estado: { principal: 'Asignado', detalle: 'Enviada', actualizado_en: new Date() } 
         });
@@ -590,7 +601,7 @@ export async function changeReservaState(id, st, caches) {
                 (doc.data().log||'') + `\n${icono} ${st} por: ${window.currentUserEmail} (${new Date().toLocaleString()})`
             );
         } else {
-            // Este bloque queda por seguridad para otros estados futuros que no requieran archivar
+            
             await ref.update({ 
                 "estado.principal": st, 
                 "estado.actualizado_en": new Date(), 
@@ -662,7 +673,7 @@ export async function asignarMultiplesReservas(ids, mId, caches) {
                 if (!docSnap.exists) return;
 
                 const logPrevio = docSnap.data().log || '';
-                // LOG CORREGIDO: SE VE EL MÓVIL Y EL NOMBRE DEL CHOFER
+                
                 const nuevoLog = logPrevio + `\n🚖 Asignado por: ${operador} (Móvil ${numMovil} - ${ch.nombre}) (${ahora})`;
 
                 transaction.update(ref, { 
@@ -731,7 +742,7 @@ export async function manejarImportacionPDF(event) {
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
-            // CORRECCIÓN: Usar 'functions' directo
+            
             const res = await functions.httpsCallable('interpretarPDFIA')({ pdfBase64: e.target.result.split(',')[1], fechaSeleccionada: fecha });
             if(res.data.reservas) await guardarReservasEnLote(res.data.reservas);
             ocultarProgreso();
@@ -804,8 +815,8 @@ export async function ejecutarAccionMasiva(accion, ids) {
                     });
                 }
 
-                batch.set(histRef, dataArchivada); // Copiar a historico
-                batch.delete(ref);                 // Borrar de reservas
+                batch.set(histRef, dataArchivada); 
+                batch.delete(ref);                 
             }
         });
 
@@ -916,7 +927,7 @@ export async function generarInformeProductividad(fechaDesde, fechaHasta, caches
                     const reparacion = await calcularKilometrosEntrePuntos(v.origen, v.destino);
                     distOcupado = reparacion.distancia;
                     dMin = reparacion.duracion;
-                    v.distancia = distOcupado.toFixed(1) + " km"; // Relleno visual
+                    v.distancia = distOcupado.toFixed(1) + " km"; 
                 }
 
                 dia.kmOcupado += distOcupado;
