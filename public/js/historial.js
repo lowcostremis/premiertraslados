@@ -170,44 +170,52 @@ function mostrarDatosHistorialEnTabla(documentos) {
 
         const filaHTML = `
             <tr>
-                <td colspan="10">
-                    <div class="historial-card" style="margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                        
-                        <div class="card-header" style="background: #f8f9fa; padding: 10px; border-bottom: 1px solid #eee;">
-                            
-                            <div style="font-size: 11px; color: #666; margin-bottom: 5px; display: flex; gap: 15px;">
-                                <span><strong>Aut:</strong> ${viaje.autorizacion || '---'}</span>
-                                <span><strong>Sin:</strong> ${viaje.siniestro || '---'}</span>
-                            </div>
-
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div style="font-size: 13px;">📅 ${viaje.fecha_turno || 'S/F'} 🕒 ${viaje.hora_turno || '--:--'}</div>
-                                <div style="font-weight: bold; color: #333; font-size: 14px;">👤 ${viaje.nombre_pasajero || 'N/A'}</div>
-                                
-                                <div style="display: flex; gap: 10px; align-items: center;">
-                                    <button onclick="window.app.abrirModalEditarHistorico('${id}')" 
-                                            style="background: #ffc107; color: black; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight:bold;">
-                                        ✏️ Editar
-                                    </button>
-                                    <button onclick="alert(\`${logLimpio}\`)" 
-                                            style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">
-                                        📜 Log
-                                    </button>
-                                    <span style="font-weight: bold; color: ${colorEstado}; font-size: 12px;">${estadoStr}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="card-body" style="padding: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 13px;">
-                            <div><strong>Cliente:</strong> ${clienteObj.nombre}</div>
-                            <div><strong>Chofer:</strong> ${choferObj.nombre}</div>
-                            <div><strong>KM:</strong> ${viaje.distancia || '--'}</div>
-                            <div><strong>Espera:</strong> ${viaje.espera_total || '0'} hs</div>
-                        </div>
-                        <div style="padding: 10px; font-size: 12px; border-top: 1px dashed #eee; color: #555; background: #fffcf5;">
-                            📍 ${viaje.origen || 'N/A'} <br>
-                            🏁 ${viaje.destino || 'N/A'}
-                        </div>
+                <td style="font-size: 12px; vertical-align: middle;">${viaje.autorizacion || '---'}</td>
+                
+                <td style="font-size: 12px; vertical-align: middle;">${viaje.siniestro || '---'}</td>
+                
+                <td style="vertical-align: middle;">${viaje.fecha_turno || '--/--'}</td>
+                
+                <td style="vertical-align: middle;">${viaje.hora_turno || '--:--'}</td>
+                
+                <td style="vertical-align: middle;">
+                    <div style="font-weight:bold; font-size: 13px;">${viaje.nombre_pasajero || 'N/A'}</div>
+                    <div style="font-size: 11px; color: #1877f2; margin-top:2px;">🏢 ${clienteObj.nombre || 'Sin cliente'}</div>
+                </td>
+                
+                <td style="font-size: 11px; vertical-align: middle; max-width: 150px; overflow:hidden; text-overflow:ellipsis;" title="${viaje.origen}">
+                    ${viaje.origen || 'N/A'}
+                </td>
+                
+                <td style="font-size: 11px; vertical-align: middle; max-width: 150px; overflow:hidden; text-overflow:ellipsis;" title="${viaje.destino}">
+                    ${viaje.destino || 'N/A'}
+                </td>
+                
+                <td style="text-align: center; vertical-align: middle;">
+                    <div style="font-weight:bold;">${viaje.distancia || '--'}</div>
+                    ${viaje.espera_total && viaje.espera_total != '0' 
+                        ? `<div style="font-size: 10px; color: #d63384; margin-top:2px;">⏳ ${viaje.espera_total}hs</div>` 
+                        : ''}
+                </td>
+                
+                <td style="font-size: 12px; vertical-align: middle;">${choferObj.nombre}</td>
+                
+                <td style="text-align: center; vertical-align: middle;">
+                    <span style="font-size: 10px; font-weight: bold; color: ${colorEstado}; display:block; margin-bottom:5px;">
+                        ${estadoStr}
+                    </span>
+                    
+                    <div style="display: flex; gap: 5px; justify-content: center;">
+                        <button onclick="window.app.abrirModalEditarHistorico('${id}')" 
+                                title="Editar"
+                                style="background: #ffc107; color: black; border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer;">
+                            ✏️
+                        </button>
+                        <button onclick="alert(\`${logLimpio}\`)" 
+                                title="Ver Log"
+                                style="background: #6c757d; color: white; border: none; padding: 5px 8px; border-radius: 4px; cursor: pointer;">
+                            📜
+                        </button>
                     </div>
                 </td>
             </tr>`;
@@ -258,36 +266,38 @@ export async function abrirModalEditarHistorico(id) {
 }
 // 3. NUEVA FUNCIÓN: RECALCULAR
 export async function recalcularDistanciaHistorico() {
+    // Obtenemos los valores de los inputs del modal
     const origen = document.getElementById('hist-origen').value;
     const destino = document.getElementById('hist-destino').value;
     const inputDistancia = document.getElementById('hist-distancia');
 
+    // Validación básica
     if (!origen || !destino) {
-        return alert("Por favor, completá Origen y Destino para calcular.");
+        return alert("Por favor, completá los campos Origen y Destino para poder calcular.");
     }
 
-    // Feedback visual de carga
+    // Feedback visual para el usuario
     const valorOriginal = inputDistancia.value;
     inputDistancia.value = "Calculando...";
     inputDistancia.disabled = true;
 
     try {
-        // Usamos la función que ya tenés en reservas
+        // Llamamos a la función corregida de reservas.js
         const resultado = await calcularKilometrosEntrePuntos(origen, destino);
         
         if (resultado && resultado.distancia > 0) {
-            // ÉXITO: Ponemos el nuevo valor
+            // ¡ÉXITO! Actualizamos el input
             inputDistancia.value = resultado.distancia.toFixed(2) + " km";
         } else {
-            alert("Google Maps no pudo calcular la ruta entre estos puntos.");
-            inputDistancia.value = valorOriginal; // Restauramos si falla
+            alert("Google Maps no pudo encontrar una ruta entre estas direcciones. Verificá que estén bien escritas.");
+            inputDistancia.value = valorOriginal; 
         }
     } catch (e) {
         console.error(e);
-        alert("Error al conectar con Maps.");
+        alert("Ocurrió un error de conexión con el mapa.");
         inputDistancia.value = valorOriginal;
     } finally {
-        inputDistancia.disabled = false; // Rehabilitamos para edición manual
+        inputDistancia.disabled = false;
     }
 }
 

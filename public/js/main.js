@@ -522,6 +522,7 @@ function initApp() {
         cargarHistorial,
         abrirModalEditarHistorico,
         guardarEdicionHistorico,
+        recalcularDistanciaHistorico,
         cargarFacturasEmitidas,        
         verFactura,
         mostrarSubTabFact: (tipo, e) => {

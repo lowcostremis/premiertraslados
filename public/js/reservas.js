@@ -1015,7 +1015,13 @@ export async function calcularKilometrosEntrePuntos(origen, destino) {
     if (!origen || !destino) return { distancia: 0, duracion: 0 };
 
     try {
-        const service = new google.maps.DistanceMatrixService();
+        // --- CORRECCIÓN IMPORTANTE ---
+        // 1. Nos aseguramos de cargar la librería "routes" antes de usarla.
+        // Esto evita el error "google is not defined" o "DistanceMatrixService is not a constructor".
+        const { DistanceMatrixService } = await google.maps.importLibrary("routes");
+        
+        const service = new DistanceMatrixService();
+        
         const realizarConsulta = (o, d) => {
             return new Promise((resolve) => {
                 service.getDistanceMatrix({
@@ -1024,12 +1030,19 @@ export async function calcularKilometrosEntrePuntos(origen, destino) {
                     travelMode: 'DRIVING',
                 }, (res, status) => {
                     if (status === "OK") resolve(res);
-                    else resolve(null);
+                    else {
+                        console.error("Estado DistanceMatrix:", status);
+                        resolve(null);
+                    }
                 });
             });
         };
 
-        let response = await realizarConsulta(origen, destino);
+        // 2. Agregamos ", Argentina" si no lo tiene, para mejorar precisión
+        const origenFull = origen.toLowerCase().includes('argentina') ? origen : `${origen}, Argentina`;
+        const destinoFull = destino.toLowerCase().includes('argentina') ? destino : `${destino}, Argentina`;
+
+        let response = await realizarConsulta(origenFull, destinoFull);
         let elemento = response?.rows[0]?.elements[0];
 
         if (elemento && elemento.status === "OK") {
@@ -1038,10 +1051,11 @@ export async function calcularKilometrosEntrePuntos(origen, destino) {
                 duracion: Math.ceil(elemento.duration.value / 60)
             };
         }
+        
         return { distancia: 0, duracion: 0 };
+
     } catch (e) {
-        console.error("Error en Triple Plan (Maps):", e);
+        console.error("Error calculando distancia en Maps:", e);
         return { distancia: 0, duracion: 0 };
     }
 }
-
