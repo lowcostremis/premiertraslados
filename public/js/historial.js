@@ -172,21 +172,32 @@ function mostrarDatosHistorialEnTabla(documentos) {
             <tr>
                 <td colspan="10">
                     <div class="historial-card" style="margin-bottom: 10px; border: 1px solid #ddd; border-radius: 8px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                        <div class="card-header" style="background: #f8f9fa; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee;">
-                            <div style="font-size: 13px;">📅 ${viaje.fecha_turno || 'S/F'} 🕒 ${viaje.hora_turno || '--:--'}</div>
-                            <div style="font-weight: bold; color: #333;">👤 ${viaje.nombre_pasajero || 'N/A'}</div>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <button onclick="window.app.abrirModalEditarHistorico('${id}')" 
-                                        style="background: #ffc107; color: black; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight:bold;">
-                                    ✏️ Editar
-                                </button>
-                                <button onclick="alert(\`${logLimpio}\`)" 
-                                        style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">
-                                    📜 Log
-                                </button>
-                                <span style="font-weight: bold; color: ${colorEstado}; font-size: 12px;">${estadoStr}</span>
+                        
+                        <div class="card-header" style="background: #f8f9fa; padding: 10px; border-bottom: 1px solid #eee;">
+                            
+                            <div style="font-size: 11px; color: #666; margin-bottom: 5px; display: flex; gap: 15px;">
+                                <span><strong>Aut:</strong> ${viaje.autorizacion || '---'}</span>
+                                <span><strong>Sin:</strong> ${viaje.siniestro || '---'}</span>
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-size: 13px;">📅 ${viaje.fecha_turno || 'S/F'} 🕒 ${viaje.hora_turno || '--:--'}</div>
+                                <div style="font-weight: bold; color: #333; font-size: 14px;">👤 ${viaje.nombre_pasajero || 'N/A'}</div>
+                                
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <button onclick="window.app.abrirModalEditarHistorico('${id}')" 
+                                            style="background: #ffc107; color: black; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight:bold;">
+                                        ✏️ Editar
+                                    </button>
+                                    <button onclick="alert(\`${logLimpio}\`)" 
+                                            style="background: #6c757d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                                        📜 Log
+                                    </button>
+                                    <span style="font-weight: bold; color: ${colorEstado}; font-size: 12px;">${estadoStr}</span>
+                                </div>
                             </div>
                         </div>
+
                         <div class="card-body" style="padding: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 13px;">
                             <div><strong>Cliente:</strong> ${clienteObj.nombre}</div>
                             <div><strong>Chofer:</strong> ${choferObj.nombre}</div>
@@ -200,6 +211,7 @@ function mostrarDatosHistorialEnTabla(documentos) {
                     </div>
                 </td>
             </tr>`;
+        
         historialBody.innerHTML += filaHTML;
     });
 }
