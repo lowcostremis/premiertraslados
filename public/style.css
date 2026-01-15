@@ -641,3 +641,8 @@ td button, td select {
     cursor: pointer;
     font-size: 13px;
 }
+
+.estado-debitado { 
+    background-color: #6f42c1 !important; /* Púrpura (Bootstrap indigo) */
+    color: white;
+}

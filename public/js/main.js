@@ -142,14 +142,21 @@ function loadAuxData() {
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         const clienteSelect = document.getElementById('cliente');
         const factClienteSelect = document.getElementById('fact-cliente-select');
+        const importClienteSelect = document.getElementById('select-cliente-importacion'); // <--- NUEVO
+
         caches.clientes = {};
         if (clienteSelect) clienteSelect.innerHTML = '<option value="null">-- Seleccionar Cliente --</option>';
-        if (factClienteSelect) factClienteSelect.innerHTML = '<option value="">Seleccionar Cliente...</option>'
+        if (factClienteSelect) factClienteSelect.innerHTML = '<option value="">Seleccionar Cliente...</option>';
+        // Limpiamos el select de importación pero dejamos la opción por defecto
+        if (importClienteSelect) importClienteSelect.innerHTML = '<option value="">📂 Elegir Cliente para Importar...</option>'; // <--- NUEVO
+
         snapshot.forEach(doc => {
             const data = doc.data();
             caches.clientes[doc.id] = data;
             if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
             if (factClienteSelect) factClienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
+            // Agregamos al select de importación
+            if (importClienteSelect) importClienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`; // <--- NUEVO
         });
                
         actualizarFiltrosDeMoviles();     
@@ -353,18 +360,49 @@ function initApp() {
     const btnImportar = document.getElementById('btn-importar-excel');
     const inputExcel = document.getElementById('input-excel');
 
-    if (btnImportar && inputExcel) {
-        btnImportar.addEventListener('click', () => inputExcel.click());
-        inputExcel.addEventListener('change', async (e) => {
+   if (btnImportar && inputExcel) {
+    btnImportar.addEventListener('click', () => {
+        // VALIDACIÓN DE SEGURIDAD
+        const clienteId = document.getElementById('select-cliente-importacion').value;
+        if (!clienteId) return alert("⚠️ ATENCIÓN: Primero seleccioná el CLIENTE en el menú desplegable al lado del botón.");
+        
+        inputExcel.click(); // Recién ahora abrimos el archivo
+    });
+
+    inputExcel.addEventListener('change', async (e) => {
+        if (e.target.files.length > 0) {
+            try {
+                const clienteId = document.getElementById('select-cliente-importacion').value; // Capturamos el ID
+                const { manejarImportacionExcel } = await import('./reservas.js');
+                // Pasamos el clienteId como segundo parámetro
+                manejarImportacionExcel(e, clienteId); 
+            } catch (err) { alert("Error al cargar módulo importación."); }
+        }
+    });
+}
+
+// --- LÓGICA PDF ---
+    const btnImportarPDF = document.getElementById('btn-importar-pdf');
+    const inputPDF = document.getElementById('input-pdf');
+    if (btnImportarPDF && inputPDF) {
+        btnImportarPDF.addEventListener('click', () => {
+            // VALIDACIÓN DE SEGURIDAD
+            const clienteId = document.getElementById('select-cliente-importacion').value;
+            if (!clienteId) return alert("⚠️ ATENCIÓN: Primero seleccioná el CLIENTE en el menú desplegable al lado del botón.");
+            
+            inputPDF.click();
+        });
+
+        inputPDF.addEventListener('change', async (e) => {
             if (e.target.files.length > 0) {
-                try {
-                    const { manejarImportacionExcel } = await import('./reservas.js');
-                    manejarImportacionExcel(e);
-                } catch (err) { alert("Error al cargar módulo importación."); }
+                const clienteId = document.getElementById('select-cliente-importacion').value; // Capturamos el ID
+                const { manejarImportacionPDF } = await import('./reservas.js');
+                // Pasamos el clienteId como segundo parámetro
+                manejarImportacionPDF(e, clienteId);
             }
         });
     }
-
+}
     initFacturacion();
 
     // --- LÓGICA MULTI-ORIGEN CONECTADA AL MAPA ---
@@ -571,7 +609,7 @@ function initApp() {
     });
 
     openTab(null, 'Reservas');
-};
+
 
 
 window.printReport = () => {

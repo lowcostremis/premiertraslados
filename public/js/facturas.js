@@ -1,23 +1,15 @@
 import { db } from './firebase-config.js';
 import { obtenerValorPeaje } from './tarifas.js';
 
-let reservasEnPrevia = []; // Almacena los viajes calculados temporalmente antes de emitir
+let reservasEnPrevia = []; 
 
 export function initFacturacion() {
     const btnBuscar = document.getElementById('btn-buscar-facturar');
     const btnEmitir = document.getElementById('btn-emitir-factura');
 
-    if (btnBuscar) {
-        btnBuscar.onclick = () => buscarReservasParaFacturar();
-    }
-
-    if (btnEmitir) {
-        btnEmitir.onclick = () => emitirFactura();
-    }
-    
-    
+    if (btnBuscar) btnBuscar.onclick = () => buscarReservasParaFacturar();
+    if (btnEmitir) btnEmitir.onclick = () => emitirFactura();
 }
-
 
 async function buscarReservasParaFacturar() {
     const clienteId = document.getElementById('fact-cliente-select').value;
@@ -33,7 +25,6 @@ async function buscarReservasParaFacturar() {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Calculando liquidación...</td></tr>';
 
     try {
-        // 1. Obtener configuración del cliente desde el caché global
         const clienteConfig = window.appCaches.clientes[clienteId];
         
         if (!clienteConfig) {
@@ -41,7 +32,6 @@ async function buscarReservasParaFacturar() {
             return;
         }
 
-        // 2. Traer viajes del histórico filtrados por cliente y fecha
         const snapshot = await db.collection('historico')
             .where('cliente', '==', clienteId)
             .where('fecha_turno', '>=', desde)
@@ -49,7 +39,7 @@ async function buscarReservasParaFacturar() {
             .get();
 
         if (snapshot.empty) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">No hay viajes finalizados para facturar en este período.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">No hay viajes para facturar en este período.</td></tr>';
             resumenCard.style.display = 'none';
             return;
         }
@@ -60,10 +50,35 @@ async function buscarReservasParaFacturar() {
 
         snapshot.forEach(doc => {
             const viaje = doc.data();
+            // Lógica central de precios
             const calculo = calcularTotalesViaje(viaje, clienteConfig);
             
+            // Solo sumamos al total el precio EFECTIVO (que puede ser 0)
             acumuladoFinal += calculo.totalViaje;
+            
             reservasEnPrevia.push({ id: doc.id, ...viaje, ...calculo });
+
+            // --- LÓGICA VISUAL PARA LA TABLA ---
+            let celdaTotal = '';
+            
+            // Si el precio real es 0 pero teóricamente valía algo (Anulado, Debitado, o Negativo sin cargo)
+            if (calculo.totalViaje === 0 && calculo.totalTeorico > 0) {
+                const motivo = calculo.estadoNormalizado === 'Negativo' ? 'Negativo' : 
+                               calculo.estadoNormalizado === 'Debitado' ? 'Debitado' : 'Anulado';
+                
+                celdaTotal = `
+                    <div style="font-size: 11px; color: #999; text-decoration: line-through;">
+                        $ ${calculo.totalTeorico.toLocaleString('es-AR', {minimumFractionDigits: 2})}
+                    </div>
+                    <div style="color: #dc3545; font-weight: bold;">
+                        $ 0,00 <span style="font-size: 10px;">(${motivo})</span>
+                    </div>
+                `;
+            } else {
+                // Viaje normal o Negativo cobrado
+                const color = calculo.estadoNormalizado === 'Negativo' ? '#dc3545' : '#1e3a8a'; // Rojo si es negativo cobrado
+                celdaTotal = `<span style="font-weight:bold; color: ${color};">$ ${calculo.totalViaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}</span>`;
+            }
 
             html += `
                 <tr>
@@ -74,13 +89,12 @@ async function buscarReservasParaFacturar() {
                     <td>$ ${calculo.base.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                     <td>$ ${calculo.espera.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                     <td>${calculo.tienePeaje ? '✅ SI ($' + calculo.montoPeaje + ')' : 'NO'}</td>
-                    <td style="font-weight:bold; color: #1e3a8a;">$ ${calculo.totalViaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    <td style="vertical-align: middle;">${celdaTotal}</td>
                 </tr>`;
         });
 
         tbody.innerHTML = html;
         
-        // Actualizar el resumen visual
         const totalDisplay = document.getElementById('fact-total-final');
         if (totalDisplay) totalDisplay.textContent = `$ ${acumuladoFinal.toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
         resumenCard.style.display = 'block';
@@ -91,16 +105,15 @@ async function buscarReservasParaFacturar() {
     }
 }
 
-
 function calcularTotalesViaje(viaje, config) {
     const km = parseFloat(viaje.distancia?.replace(/[^0-9.]/g, '')) || 0;
     let costoBase = 0;
     let esTarifaFija = false;
     const costoBajada = parseFloat(config.bajada_bandera) || 0;
 
+    // 1. Detección de Tarifa Fija
     if (config.tarifas_fijas && config.tarifas_fijas.length > 0) {
-        
-        const normalizar = (str) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const normalizar = (str) => (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         const origenViaje = normalizar(viaje.origen);
         const destinoViaje = normalizar(viaje.destino);
 
@@ -114,42 +127,36 @@ function calcularTotalesViaje(viaje, config) {
         if (tarifaEncontrada) {
             costoBase = parseFloat(tarifaEncontrada.precio);
             esTarifaFija = true;
-            
         }
     }
 
-    // 2. SI NO HAY FIJA, CALCULAR POR KM + BAJADA (Prioridad 2)
+    // 2. Si no es fija, calcular por KM
     if (!esTarifaFija) {
         const umbralKm = (config.km_minimo !== undefined && config.km_minimo !== null) ? parseFloat(config.km_minimo) : 25;
-        
         let subtotalDistancia = 0;
+        
         if (km < umbralKm) {
             subtotalDistancia = parseFloat(config.precio_minimo || 0);
         } else {
             subtotalDistancia = km * parseFloat(config.precio_km || 0);
         }
-
-        // Aquí sumamos la bajada de bandera al costo de movimiento
         costoBase = subtotalDistancia + costoBajada;
     }
 
-    // 3. PEAJES
+    // 3. Peajes (Cálculo siempre, luego decidimos si se cobra)
     let montoPeaje = 0;   
     let tienePeaje = false;
     
     if (config.paga_peaje === true) {
-        // PRIORIDAD: Si hay peaje manual editado en histórico, usar ese.
         if (viaje.peaje_manual !== undefined && viaje.peaje_manual !== null && !isNaN(viaje.peaje_manual)) {
             montoPeaje = parseFloat(viaje.peaje_manual);
         } else {
-            // Si no, calcular automático
             montoPeaje = obtenerValorPeaje(viaje.origen, viaje.destino);
         }
-        
         if (montoPeaje > 0) tienePeaje = true;
     }
 
-    // 4. ESPERAS
+    // 4. Esperas (Cálculo siempre)
     let costoEspera = 0;
     const esperaHoras = parseFloat(viaje.espera_total) || 0; 
     const esperaMins = esperaHoras * 60;
@@ -158,20 +165,31 @@ function calcularTotalesViaje(viaje, config) {
     if (minsACobrar > 0) {
         const fraccion = parseFloat(config.espera_fraccion) || 15;
         const bloques = Math.ceil(minsACobrar / fraccion);
-        
-        // AQUÍ ESTÁ EL CAMBIO CLAVE:
         const valorHora = parseFloat(config.espera_valor_hora) || 0;
-        const precioMinuto = valorHora / 60; // Dividimos la hora por 60 para obtener el precio del minuto
-
-        // Fórmula: Bloques * MinutosPorBloque * PrecioMinuto
+        const precioMinuto = valorHora / 60;
         costoEspera = bloques * fraccion * precioMinuto;
     }
 
-    if (viaje.estado === 'Negativo' && config.paga_negativos !== true) {
-        costoBase = 0;
-        costoEspera = 0;
-        montoPeaje = 0;
-        tienePeaje = false;
+    // --- NUEVA LÓGICA DE TOTALES ---
+    // Calculamos el total TEÓRICO (lo que valdría el viaje si fuera normal)
+    const totalTeorico = costoBase + costoEspera + montoPeaje;
+    
+    // Obtenemos el estado limpio
+    const estadoRaw = (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || '';
+    const estadoNormalizado = estadoRaw.charAt(0).toUpperCase() + estadoRaw.slice(1).toLowerCase(); // Ej: "Anulado"
+
+    let precioEfectivo = totalTeorico;
+
+    // REGLA 1: Anulado o Debitado => Se muestra pero NO se cobra ($0)
+    if (estadoNormalizado === 'Anulado' || estadoNormalizado === 'Debitado') {
+        precioEfectivo = 0;
+    }
+    // REGLA 2: Negativo => Depende de config.paga_negativos
+    else if (estadoNormalizado === 'Negativo') {
+        if (config.paga_negativos !== true) { // Si NO paga negativos, es $0
+            precioEfectivo = 0;
+        }
+        // Si config.paga_negativos es true, precioEfectivo sigue siendo totalTeorico
     }
 
     return {
@@ -180,7 +198,9 @@ function calcularTotalesViaje(viaje, config) {
         montoPeaje: montoPeaje,
         tienePeaje: tienePeaje,
         esFija: esTarifaFija,
-        totalViaje: costoBase + costoEspera + montoPeaje
+        totalTeorico: totalTeorico, // Para mostrar lo que hubiera salido
+        totalViaje: precioEfectivo, // Lo que realmente suma a la factura
+        estadoNormalizado: estadoNormalizado // Para usar en la UI
     };
 }
 
@@ -207,7 +227,6 @@ async function emitirFactura() {
         await db.collection('facturas').add(factura);
         alert("Factura guardada con éxito en el Historial Administrativo.");
         
-        // Limpiar vista
         reservasEnPrevia = [];
         document.querySelector('#tabla-previa-factura tbody').innerHTML = '';
         document.getElementById('resumen-factura-card').style.display = 'none';
@@ -218,16 +237,13 @@ async function emitirFactura() {
     }
 }
 
-
 export async function cargarFacturasEmitidas() {
     const container = document.getElementById('lista-facturas-emitidas');
     if (!container) return;
-
     container.innerHTML = '<p style="text-align:center;">Cargando historial...</p>';
 
     try {
         const snapshot = await db.collection('facturas').orderBy('fecha_emision', 'desc').limit(50).get();
-        
         if (snapshot.empty) {
             container.innerHTML = '<p>No se registran facturas emitidas anteriormente.</p>';
             return;
@@ -244,11 +260,10 @@ export async function cargarFacturasEmitidas() {
                     <td>${f.fecha_emision}</td>
                     <td style="font-weight:bold;">$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                     <td class="acciones">
-                        <button class="btn-primary" onclick="window.app.verFactura('${doc.id}')">🖨️ Ver Detalle / Imprimir</button>
+                        <button class="btn-primary" onclick="window.app.verFactura('${doc.id}')">🖨️ Ver Detalle</button>
                     </td>
                 </tr>`;
         });
-
         html += '</tbody></table></div>';
         container.innerHTML = html;
     } catch (error) {
@@ -257,8 +272,6 @@ export async function cargarFacturasEmitidas() {
     }
 }
 
-// --- NUEVA FUNCIÓN PARA GENERAR EL PDF/VISTA DE IMPRESIÓN ---
-
 export async function verFactura(facturaId) {
     try {
         const doc = await db.collection('facturas').doc(facturaId).get();
@@ -266,13 +279,12 @@ export async function verFactura(facturaId) {
         
         const f = doc.data();
         const items = f.items || [];
-
-        // Calculamos totales auxiliares para el reporte
-        const totalKM = items.reduce((sum, item) => sum + (parseFloat(item.distancia) || 0), 0);
+        
+        // Recalculamos totales AUXILIARES para el pie de página (solo items cobrados)
+        // Opcional: Si quieres mostrar totales teóricos, cambia r.totalViaje por r.totalTeorico
         const totalEsperas = items.reduce((sum, item) => sum + (item.espera || 0), 0);
         const totalPeajes = items.reduce((sum, item) => sum + (item.montoPeaje || 0), 0);
 
-        // Diseñamos el HTML de la factura con MÁS DETALLES
         let htmlContent = `
         <html>
         <head>
@@ -283,19 +295,14 @@ export async function verFactura(facturaId) {
                 .logo { font-size: 22px; font-weight: bold; color: #6f42c1; }
                 .info-factura { text-align: right; font-size: 12px; }
                 .cliente-box { background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; }
-                
-                /* Ajustamos la tabla para que entren las nuevas columnas */
                 table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }
                 th { background: #6f42c1; color: white; padding: 6px; text-align: left; }
                 td { border-bottom: 1px solid #ddd; padding: 5px; vertical-align: middle; }
-                
                 .total-row { font-size: 14px; font-weight: bold; background: #eef2ff; }
                 .text-right { text-align: right; }
                 .footer { margin-top: 30px; font-size: 10px; color: #777; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }
-                
-                /* Colores para estados */
-                .estado-negativo { color: red; font-weight: bold; }
-                .estado-finalizado { color: green; }
+                .estado-negativo { color: #dc3545; font-weight: bold; }
+                .estado-neutro { color: #6c757d; font-style: italic; }
             </style>
         </head>
         <body>
@@ -331,14 +338,19 @@ export async function verFactura(facturaId) {
         `;
 
         items.forEach(item => {
-            // Formateo de ruta corto
             const rutaCorta = `${item.origen.split(',')[0]} ➔ ${item.destino.split(',')[0]}`;
+            const est = item.estadoNormalizado || (typeof item.estado === 'object' ? item.estado.principal : item.estado);
             
-            // Lógica de visualización del estado
-            let estadoRaw = (typeof item.estado === 'object' ? item.estado.principal : item.estado) || '';
             let claseEstado = '';
-            if (estadoRaw === 'Negativo') claseEstado = 'estado-negativo';
-            if (estadoRaw === 'Finalizado') claseEstado = 'estado-finalizado';
+            let textoTotal = `$ ${item.totalViaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
+
+            // Si vale 0 pero teóricamente valía más, mostramos la diferencia visual
+            if (item.totalViaje === 0 && item.totalTeorico > 0) {
+                claseEstado = 'estado-neutro'; // Gris para anulados/debitados
+                textoTotal = `<span style="text-decoration:line-through; font-size:9px;">$${item.totalTeorico}</span><br>$ 0.00`;
+                
+                if (est === 'Negativo') claseEstado = 'estado-negativo'; // Rojo para negativos no cobrados
+            }
 
             htmlContent += `
                 <tr>
@@ -346,28 +358,20 @@ export async function verFactura(facturaId) {
                     <td>${item.nombre_pasajero}</td>
                     <td>${item.siniestro || '-'}</td>       <td>${item.autorizacion || '-'}</td>    <td>${rutaCorta}</td>
                     <td>${item.distancia}</td>
-                    <td class="${claseEstado}">${estadoRaw}</td> <td class="text-right">$ ${item.base.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    <td class="${claseEstado}">${est}</td> 
+                    <td class="text-right">$ ${item.base.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                     <td class="text-right">$ ${item.espera.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                     <td class="text-right">$ ${item.montoPeaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
-                    <td class="text-right" style="font-weight:bold;">$ ${item.totalViaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    <td class="text-right" style="font-weight:bold;">${textoTotal}</td>
                 </tr>
             `;
         });
 
-        // NOTA: El colspan ahora es 10 porque tenemos 11 columnas en total (11 - 1 del total = 10)
         htmlContent += `
                 </tbody>
                 <tfoot>
-                    <tr>
-                        <td colspan="10" class="text-right" style="padding-top: 15px;"><strong>Subtotal Peajes:</strong></td>
-                        <td class="text-right" style="padding-top: 15px;">$ ${totalPeajes.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="10" class="text-right"><strong>Subtotal Esperas:</strong></td>
-                        <td class="text-right">$ ${totalEsperas.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
-                    </tr>
                     <tr class="total-row">
-                        <td colspan="10" class="text-right" style="padding: 10px;">TOTAL FINAL:</td>
+                        <td colspan="10" class="text-right" style="padding: 10px;">TOTAL LIQUIDACIÓN:</td>
                         <td class="text-right" style="padding: 10px; color: #1e3a8a;">$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                     </tr>
                 </tfoot>
@@ -377,14 +381,11 @@ export async function verFactura(facturaId) {
                 Documento generado electrónicamente por Sistema Premier Traslados - ${new Date().toLocaleString()}
             </div>
 
-            <script>
-                window.onload = function() { window.print(); }
-            </script>
+            <script>window.onload = function() { window.print(); }</script>
         </body>
         </html>
         `;
 
-        // Abrir ventana y escribir el contenido
         const ventana = window.open('', '_blank', 'width=1100,height=700');
         ventana.document.write(htmlContent);
         ventana.document.close();

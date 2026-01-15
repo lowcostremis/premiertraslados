@@ -180,11 +180,13 @@ function renderFilaReserva(tbody, reserva, caches) {
     if(isRev) {
         menuItems += `<hr><a style="color:green" onclick="window.app.confirmarReservaImportada('${reserva.id}')">Confirmar</a><a style="color:red" onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Descartar</a>`;
     } else if (isAsig) {
-        menuItems += `<a onclick="window.app.finalizarReserva('${reserva.id}')">Finalizar</a><a onclick="window.app.quitarAsignacion('${reserva.id}')">Quitar Móvil</a><a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
+        // AGREGADO: Opción 'Debitado'
+        menuItems += `<a onclick="window.app.finalizarReserva('${reserva.id}')">Finalizar</a><a onclick="window.app.quitarAsignacion('${reserva.id}')">Quitar Móvil</a><a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Debitado')">Debitado</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
     } else {
         let opts = caches.moviles.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('');
+        // AGREGADO: Opción 'Debitado'
         menuItems += `<select onchange="window.app.asignarMovil('${reserva.id}',this.value)"><option value="">Asignar...</option>${opts}</select>`;
-        menuItems += `<a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
+        menuItems += `<a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Debitado')">Debitado</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
     }
 
     let estHTML = `<strong>${e}</strong> <span onclick="alert(this.dataset.log)" data-log="${reserva.log || 'Sin registros'}" style="cursor:pointer; color:#1877f2; font-size:14px; font-weight:bold;">ⓘ</span><br><small>${det}</small>`;
@@ -585,14 +587,17 @@ export async function asignarMovil(id, movilId, caches) {
 
 export async function changeReservaState(id, st, caches) { 
     // 1. Verificamos si es uno de los estados de cancelación
-    if(['Anulado','Negativo'].includes(st) && confirm(`¿Marcar como ${st}?`)) {
+    if(['Anulado','Negativo', 'Debitado'].includes(st) && confirm(`¿Marcar como ${st}?`)) {
         const ref = db.collection('reservas').doc(id);
         const doc = await ref.get();
         
-        // 2. CORRECCIÓN: Si es Anulado O Negativo, lo mandamos al Histórico
-        if (st === 'Anulado' || st === 'Negativo') {
+        // 2. CORRECCIÓN: Si es Anulado, Negativo O Debitado, lo mandamos al Histórico
+        if (st === 'Anulado' || st === 'Negativo' || st === 'Debitado') {
+            
             // Diferenciamos el icono para el log
-            const icono = st === 'Anulado' ? '🚫' : '⛔'; 
+            let icono = '🚫';
+            if (st === 'Negativo') icono = '⛔';
+            if (st === 'Debitado') icono = '💲'; // Icono para Debitado
             
             await moverReservaAHistorico(
                 id, 
@@ -708,7 +713,7 @@ async function moverReservaAHistorico(id, st, caches, logFinal = '') {
     });
 }
 
-export async function manejarImportacionExcel(event) {
+export async function manejarImportacionExcel(event, clienteIdForzado) { // <--- Recibe clienteIdForzado
     const file = event.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -716,59 +721,98 @@ export async function manejarImportacionExcel(event) {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
             const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            let fecha = prompt("Fecha (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+            
+            // Usamos fecha de hoy por defecto si el usuario cancela, o pedimos prompt
+            let fecha = prompt("Fecha del servicio (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
             if (!fecha) return;
+            
             actualizarProgreso(`Analizando ${jsonData.length} filas...`, 5);
             const BATCH_SIZE = 15;
             let todasLasReservas = [];
+            
             for (let i = 0; i < jsonData.length; i += BATCH_SIZE) {
                 const lote = jsonData.slice(i, i + BATCH_SIZE);
-                // CORRECCIÓN: Usar 'functions' directo
                 const res = await functions.httpsCallable('interpretarExcelIA')({ datosCrudos: lote, fechaSeleccionada: fecha });
                 if (res.data.reservas) todasLasReservas = [...todasLasReservas, ...res.data.reservas];
             }
-            if (todasLasReservas.length > 0) await guardarReservasEnLote(todasLasReservas);
+            
+            if (todasLasReservas.length > 0) {
+                // Pasamos el ID forzado a la función de guardado
+                await guardarReservasEnLote(todasLasReservas, clienteIdForzado); 
+            }
             ocultarProgreso();
+            // Limpiamos el input para permitir subir el mismo archivo si hubo error
+            document.getElementById('input-excel').value = ''; 
+
         } catch (error) { alert(error.message); ocultarProgreso(); }
     };
     reader.readAsArrayBuffer(file);
 }
 
-export async function manejarImportacionPDF(event) {
+export async function manejarImportacionPDF(event, clienteIdForzado) { // <--- Recibe clienteIdForzado
     const file = event.target.files[0]; if(!file) return;
-    const fecha = prompt("Fecha (YYYY-MM-DD):", new Date().toISOString().split('T')[0]); 
+    const fecha = prompt("Fecha del servicio (YYYY-MM-DD):", new Date().toISOString().split('T')[0]); 
     if(!fecha) return;
+    
     actualizarProgreso("Analizando PDF...", 20);
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
-            
             const res = await functions.httpsCallable('interpretarPDFIA')({ pdfBase64: e.target.result.split(',')[1], fechaSeleccionada: fecha });
-            if(res.data.reservas) await guardarReservasEnLote(res.data.reservas);
+            if(res.data.reservas) {
+                // Pasamos el ID forzado a la función de guardado
+                await guardarReservasEnLote(res.data.reservas, clienteIdForzado);
+            }
             ocultarProgreso();
+            document.getElementById('input-pdf').value = ''; 
         } catch(err) { alert(err.message); ocultarProgreso(); }
     };
     reader.readAsDataURL(file);
 }
 
-async function guardarReservasEnLote(list) {
+async function guardarReservasEnLote(list, clienteIdForzado) { // <--- Recibe clienteIdForzado
     const batchLimit = 400; 
-    const clientsCache = window.appCaches.clientes || {};
     const operador = window.currentUserEmail || 'Sistema';
     const ahora = new Date().toLocaleString('es-AR');
     let batch = db.batch(), count = 0;
+
+    // Buscamos el nombre del cliente para el log (solo visual)
+    const nombreCliente = (window.appCaches.clientes && window.appCaches.clientes[clienteIdForzado]) 
+                          ? window.appCaches.clientes[clienteIdForzado].nombre 
+                          : 'Cliente Seleccionado';
+
     for (let i = 0; i < list.length; i++) {
         const r = list[i];
-        let cId = Object.keys(clientsCache).find(k => clientsCache[k].nombre?.toUpperCase() === r.cliente?.toUpperCase()) || 'null';
+        
+        // AQUÍ ESTÁ LA SOLUCIÓN:
+        // Ya no buscamos en caché ni adivinamos. Usamos directamente lo que Javi seleccionó.
+        let cId = clienteIdForzado; 
+
         batch.set(db.collection('reservas').doc(), {
-            ...r, cliente: cId, log: `📥 Importado por: ${operador}, via IA, (${ahora})`,
+            ...r, 
+            cliente: cId, // <--- ID SEGURO
+            cliente_nombre: nombreCliente, // <--- Nombre visual
+            log: `📥 Importado por: ${operador} para ${nombreCliente}, via IA, (${ahora})`,
             estado: { principal: 'Revision', detalle: 'Importado IA', actualizado_en: new Date() },
-            creadoEn: new Date(), cantidad_pasajeros: String(r.cantidad_pasajeros || '1'), es_exclusivo: false
+            creadoEn: new Date(), 
+            cantidad_pasajeros: String(r.cantidad_pasajeros || '1'), 
+            es_exclusivo: false
         });
-        if (++count >= batchLimit || i === list.length - 1) { await batch.commit(); batch = db.batch(); count = 0; }
+
+        if (++count >= batchLimit || i === list.length - 1) { 
+            await batch.commit(); 
+            batch = db.batch(); 
+            count = 0; 
+        }
     }
-    actualizarProgreso("¡Finalizado!", 100); setTimeout(ocultarProgreso, 3000);
+    actualizarProgreso("¡Finalizado!", 100); 
+    setTimeout(() => {
+        ocultarProgreso();
+        // Disparamos clic en la pestaña para refrescar la vista
+        document.querySelector('button[data-tab="importadas"]')?.click();
+    }, 1500);
 }
+
 
 // --- ACCIONES MASIVAS (BORRAR O ANULAR) ---
 export async function ejecutarAccionMasiva(accion, ids) {

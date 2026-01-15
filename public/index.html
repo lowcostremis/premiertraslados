@@ -64,27 +64,30 @@
                     <button id="btn-nueva-reserva">Nueva Reserva</button>
                     <button id="btn-toggle-select-table" style="margin-left: 10px; background-color: #6c757d;">Activar Selección Múltiple</button>
                     
+                    <select id="select-cliente-importacion" style="margin-left: 15px; padding: 10px; border-radius: 5px; border: 2px solid #1877f2; font-weight: bold; max-width: 200px;">
+                        <option value="">📂 Elegir Cliente para Importar...</option>
+                    </select>
+
                     <input type="file" id="input-pdf" accept=".pdf" style="display: none;" />
-                    <button id="btn-importar-pdf" style="background-color: #fd7e14; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-left: 10px;">
+                    <input type="file" id="input-excel" accept=".xlsx, .xls" style="display: none;" />
+
+                    <button id="btn-importar-pdf" style="background-color: #fd7e14; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-left: 5px;">
                         📄 Importar PDF
                     </button>
 
-                    <div style="display: inline-flex; gap: 10px; align-items: center; margin-left: 10px;">
-                        <input type="file" id="input-excel" accept=".xlsx, .xls" style="display: none;" />
-                        <button id="btn-importar-excel" style="background-color: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                             📂 Importar Excel
-                        </button>
-                    </div>
+                    <button id="btn-importar-excel" style="background-color: #28a745; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-left: 5px;">
+                            📂 Importar Excel
+                    </button>
 
                     <button id="btn-importar-gmail" style="background-color: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; margin-left: 10px;">
                         ✉️ Importar Gmail
                     </button>
-    
+
                     <div class="search-container">
-                      <label for="busqueda-reservas" style="display:none">Buscar</label>
-                      <input type="text" id="busqueda-reservas" placeholder="Buscar pasajero, origen, destino...">
+                    <label for="busqueda-reservas" style="display:none">Buscar</label>
+                    <input type="text" id="busqueda-reservas" placeholder="Buscar pasajero, origen, destino...">
                     </div>
-                </div>  
+                </div>
 
                 <nav class="sub-nav">
                     <button class="sub-tab-btn" onclick="window.showReservasTab('importadas')" data-tab="importadas" style="color: #d63384; font-weight: bold;">Importadas (Revisión)</button>
@@ -553,6 +556,15 @@
                 <input type="number" id="hist-peaje" step="0.01" placeholder="Automático" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
                 <small style="color:#666; font-size:10px;">Dejar vacío para cálculo automático</small>
             </div>
+            <div style="grid-column: span 2;">
+                <label style="font-size:12px; font-weight:bold;">Estado del Viaje</label>
+                <select id="hist-estado" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; font-weight:bold;">
+                    <option value="Finalizado">Finalizado (Cobrar)</option>
+                    <option value="Debitado">Debitado (No Cobrar)</option>
+                    <option value="Anulado">Anulado (No Cobrar)</option>
+                    <option value="Negativo">Negativo (Según Cliente)</option>
+                </select>
+            </div>
 
             <div style="grid-column: span 2;">
                 <label style="font-size:12px; font-weight:bold;">Observaciones / Log</label>
@@ -562,6 +574,7 @@
             <div style="grid-column: span 2; margin-top:10px;">
                 <button type="button" onclick="window.app.guardarEdicionHistorico()" style="width:100%; background:#28a745; color:white; padding:12px; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">💾 Guardar Corrección</button>
             </div>
+            
         </form>
     </div>
  </div>
