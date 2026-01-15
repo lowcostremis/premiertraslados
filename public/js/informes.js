@@ -1,4 +1,3 @@
-
 import { db } from './firebase-config.js';
 
 // --- 1. EXPORTACIÓN A EXCEL ---
@@ -26,29 +25,24 @@ window.ejecutarReporteEmpresa = async () => {
 
     if (!empresaId || !desde || !hasta) return alert("Completa los filtros.");
 
-    // --- 1. VALIDACIÓN DE FECHAS (NUEVO) ---
     const fDesde = new Date(desde);
     const fHasta = new Date(hasta);
-    const diferenciaTiempo = fHasta - fDesde;
-    const diferenciaDias = diferenciaTiempo / (1000 * 3600 * 24);
+    const diferenciaDias = (fHasta - fDesde) / (1000 * 3600 * 24);
 
-    if (diferenciaDias > 62) { // 62 días = aprox 2 meses
-        alert(`⚠️ El rango de fechas es demasiado amplio (${Math.ceil(diferenciaDias)} días).\n\nPara evitar saturar el sistema, por favor selecciona un período máximo de 2 meses.`);
+    if (diferenciaDias > 62) {
+        alert(`⚠️ El rango de fechas es demasiado amplio (${Math.ceil(diferenciaDias)} días). Máximo 2 meses.`);
         return;
     }
-    // ---------------------------------------
 
-    // --- 2. MOSTRAR CARGANDO (NUEVO) ---
     const loadingContainer = document.getElementById('loading-bar-container');
     const loadingText = document.getElementById('loading-text');
     const loadingFill = document.getElementById('loading-bar-fill');
     
     if (loadingContainer) {
         loadingContainer.style.display = 'flex';
-        loadingFill.style.width = '30%'; // Avance inicial ficticio
+        loadingFill.style.width = '30%';
         loadingText.textContent = "Consultando base de datos...";
     }
-    // -----------------------------------
 
     try {
         const [snapReservas, snapHistorico] = await Promise.all([
@@ -56,10 +50,9 @@ window.ejecutarReporteEmpresa = async () => {
             db.collection('historico').where('cliente', '==', empresaId).where('fecha_turno', '>=', desde).where('fecha_turno', '<=', hasta).get()
         ]);
 
-        // Actualizamos barra
         if (loadingContainer) {
             loadingFill.style.width = '70%';
-            loadingText.textContent = "Procesando viajes y calculando totales...";
+            loadingText.textContent = "Procesando viajes...";
         }
 
         const todosLosViajes = [...snapReservas.docs, ...snapHistorico.docs];
@@ -69,7 +62,6 @@ window.ejecutarReporteEmpresa = async () => {
             return alert("Sin datos para este período.");
         }
 
-        // Permitimos un breve respiro al navegador para pintar la barra antes del bucle pesado
         await new Promise(r => setTimeout(r, 100));
 
         let dias = {};
@@ -101,7 +93,6 @@ window.ejecutarReporteEmpresa = async () => {
 
                 let km = parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
                 
-                // Cálculo asíncrono si falta distancia
                 if (km === 0 && (estado === 'FINALIZADO' || estado === 'ASIGNADO')) {
                     const rep = await calcularKilometrosEntrePuntos(v.origen, v.destino);
                     km = rep.distancia;
@@ -109,11 +100,8 @@ window.ejecutarReporteEmpresa = async () => {
 
                 if (estado !== 'ANULADO' && estado !== 'NEGATIVO') dia.kmOcupado += km;
                 
-                // CORRECCIÓN: Buscamos nro_autorizacion O autorizacion (y lo mismo con siniestro)
                 const auth = v.nro_autorizacion || v.autorizacion || '-';
                 const sin = v.nro_siniestro || v.siniestro || '-';
-                
-                // CORRECCIÓN: Color Rojo para Negativos
                 const colorEstado = (estado === 'ANULADO' || estado === 'NEGATIVO') ? 'red' : '#007bff';
 
                 html += `<tr style="border-bottom: 1px solid #eee;">
@@ -123,7 +111,6 @@ window.ejecutarReporteEmpresa = async () => {
             html += `</tbody></table><div style="text-align:right; font-weight:bold; padding:10px;">Total: ${dia.kmOcupado.toFixed(1)} km</div>`;
         }
         
-        // Finalizamos barra
         if (loadingContainer) {
             loadingFill.style.width = '100%';
             loadingText.textContent = "¡Listo!";
@@ -139,7 +126,7 @@ window.ejecutarReporteEmpresa = async () => {
     }
 };
 
-// --- 3. REPORTE DE CHOFER (Jornada Real) ---
+// --- 3. REPORTE DE CHOFER (Jornada Real - OPTIMIZADO) ---
 window.ejecutarReporteChofer = async () => {
     const desde = document.getElementById('rep-chofer-desde').value;
     const hasta = document.getElementById('rep-chofer-hasta').value;
@@ -153,8 +140,13 @@ window.ejecutarReporteChofer = async () => {
         ]);
 
         let datosChoferes = {};
-        [...snapR.docs, ...snapH.docs].forEach(doc => {
-            const v = doc.data();
+        // MODIFICACIÓN: Guardamos ID y Colección para poder actualizar el dato futuro
+        const todos = [
+            ...snapR.docs.map(d => ({...d.data(), id: d.id, coleccion: 'reservas'})), 
+            ...snapH.docs.map(d => ({...d.data(), id: d.id, coleccion: 'historico'}))
+        ];
+
+        todos.forEach(v => {
             const idCh = v.chofer_asignado_id || v.asignado_a;
             if (!idCh || (choferId && idCh !== choferId)) return;
             const fecha = v.fecha_turno || 'S/F';
@@ -174,14 +166,25 @@ window.ejecutarReporteChofer = async () => {
 
             for (const f of diasOrd) {
                 const dia = chofer.dias[f];
-                for (let v of dia.viajes) {
+                
+                // Ordenar por hora
+                dia.viajes.sort((a, b) => (a.hora_pickup || a.hora_turno || "00:00").localeCompare(b.hora_pickup || b.hora_turno || "00:00"));
+
+                // --- TABLA ---
+                html += `<table style="width:100%; border-collapse:collapse; font-size:10px;">
+                    <thead><tr style="background:#eee;">
+                        <th>Fecha</th><th>H. Turno</th><th>H. Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>KM Ocup.</th><th>KM Despl.</th><th>Hora Fin</th>
+                    </tr></thead><tbody>`;
+
+                for (let i = 0; i < dia.viajes.length; i++) {
+                    const v = dia.viajes[i];
                     const estado = (v.estado?.principal || 'FINALIZADO').toUpperCase();
                     let dMin = parseInt(v.duracion_estimada_minutos) || 0;
                     let dist = parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
 
+                    // Cálculo Hora Fin
                     const tiempoGracia = v.hora_pickup ? 30 : 15; 
                     const hBase = v.hora_pickup || v.hora_turno;
-
                     if (hBase && hBase !== "--") {
                         const [h, m] = hBase.split(':').map(Number);
                         const calc = new Date();
@@ -189,28 +192,38 @@ window.ejecutarReporteChofer = async () => {
                         v.h_fin = `${calc.getHours().toString().padStart(2,'0')}:${calc.getMinutes().toString().padStart(2,'0')}`;
                     } else v.h_fin = "--:--";
                     v.dist_n = dist;
+
                     if (estado !== 'ANULADO' && estado !== 'NEGATIVO') dia.kmOcupado += dist;
-                }
 
-                const viajesConHora = dia.viajes.filter(v => (v.hora_pickup || v.hora_turno) && v.hora_pickup !== '--');
-                viajesConHora.sort((a, b) => (a.hora_pickup || a.hora_turno || "00:00").localeCompare(b.hora_pickup || b.hora_turno || "00:00"));
-                const hIni = viajesConHora.length > 0 ? (viajesConHora[0].hora_pickup || viajesConHora[0].hora_turno) : null;
-                const hFinU = viajesConHora.length > 0 ? viajesConHora[viajesConHora.length - 1].h_fin : "--:--";
-
-                html += `<table style="width:100%; border-collapse:collapse; font-size:10px;">
-                    <thead><tr style="background:#eee;">
-                        <th>Fecha</th><th>H. Turno</th><th>H. Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>KM Ocup.</th><th>KM Despl.</th><th>Hora Fin</th>
-                    </tr></thead><tbody>`;
-
-                for (const [idx, v] of dia.viajes.entries()) {
-                    if (idx > 0) {
-                        const resV = await calcularKilometrosEntrePuntos(dia.viajes[idx-1].destino, v.origen);
-                        dia.kmVacio += resV.distancia;
-                        html += `<tr style="color:#777; font-style:italic;"><td>${f}</td><td>-</td><td>-</td><td>-</td><td>🚗 Desplazamiento</td><td>-</td><td>-</td><td>${resV.distancia.toFixed(2)}</td><td>-</td></tr>`;
+                    // --- LÓGICA DE AHORRO (KM VACÍO) ---
+                    let distanciaVacio = 0;
+                    if (i > 0) {
+                        // Verificamos si ya existe el dato guardado (AHORRO $$$)
+                        if (v.distancia_vacio_previa !== undefined && v.distancia_vacio_previa !== null) {
+                            distanciaVacio = parseFloat(v.distancia_vacio_previa);
+                        } else {
+                            // No existe, calculamos (COSTO $) y GUARDAMOS
+                            const resV = await calcularKilometrosEntrePuntos(dia.viajes[i-1].destino, v.origen);
+                            distanciaVacio = resV.distancia;
+                            
+                            // Guardado asíncrono (sin await para no bloquear UI demasiado)
+                            db.collection(v.coleccion).doc(v.id).update({
+                                distancia_vacio_previa: distanciaVacio
+                            }).catch(err => console.log("Error guardando optimización", err));
+                        }
+                        dia.kmVacio += distanciaVacio;
+                        
+                        // Fila de Desplazamiento
+                        html += `<tr style="color:#777; font-style:italic;"><td>${f}</td><td>-</td><td>-</td><td>-</td><td>🚗 Desplazamiento</td><td>-</td><td>-</td><td>${distanciaVacio.toFixed(2)}</td><td>-</td></tr>`;
                     }
+
+                    // Fila de Viaje
                     html += `<tr><td>${f}</td><td>${v.hora_turno}</td><td>${v.hora_pickup}</td><td>${v.nombre_pasajero}</td><td>${v.origen}</td><td>${v.destino}</td><td>${v.dist_n.toFixed(1)}</td><td>-</td><td>${v.h_fin}</td></tr>`;
                 }
 
+                // Cálculo Jornada
+                const hIni = dia.viajes.length > 0 ? (dia.viajes[0].hora_pickup || dia.viajes[0].hora_turno) : null;
+                const hFinU = dia.viajes.length > 0 ? dia.viajes[dia.viajes.length - 1].h_fin : "--:--";
                 let jText = "--:--";
                 if (hIni && hFinU !== "--:--") {
                     const [h1, m1] = hIni.split(':').map(Number);
@@ -219,6 +232,7 @@ window.ejecutarReporteChofer = async () => {
                     if (diff < 0) diff += 1440;
                     jText = `${Math.floor(diff/60)}h ${diff%60}m`;
                 }
+                
                 html += `</tbody></table><div style="background:#eef2ff; padding:10px; font-weight:bold;">KM Ocup: ${dia.kmOcupado.toFixed(1)} | KM Vacío: ${dia.kmVacio.toFixed(1)} | Jornada: ${jText}</div>`;
             }
         }
@@ -227,7 +241,7 @@ window.ejecutarReporteChofer = async () => {
     } catch (e) { console.error(e); }
 };
 
-// --- 4. RANKING DE CLIENTES (ACTUALIZADO CON TOTALES Y FINALIZADOS) ---
+// --- 4. RANKING DE CLIENTES ---
 window.ejecutarRankingClientes = async () => {
     const desde = document.getElementById('rep-kpi-desde').value;
     const hasta = document.getElementById('rep-kpi-hasta').value;
@@ -303,7 +317,7 @@ window.ejecutarRankingClientes = async () => {
     } catch (e) { console.error(e); }
 };
 
-// --- 5. RANKING DE CHOFERES (Con Barra de Carga) ---
+// --- 5. RANKING DE CHOFERES (CON AHORRO DE API GOOGLE) ---
 window.ejecutarRankingChoferes = async () => {
     const desde = document.getElementById('rep-kpi-desde').value;
     const hasta = document.getElementById('rep-kpi-hasta').value;
@@ -323,10 +337,14 @@ window.ejecutarRankingChoferes = async () => {
 
         let stats = {};
         let viajesPorChoferYDia = {};
-        const todos = [...snapR.docs, ...snapH.docs];
+        
+        // Unificamos y agregamos metadatos (ID y Colección) para poder actualizar
+        const todos = [
+            ...snapR.docs.map(d => ({...d.data(), id: d.id, coleccion: 'reservas'})), 
+            ...snapH.docs.map(d => ({...d.data(), id: d.id, coleccion: 'historico'}))
+        ];
 
-        todos.forEach(doc => {
-            const v = doc.data();
+        todos.forEach(v => {
             const idCh = v.chofer_asignado_id || v.asignado_a;
             if (!idCh) return;
             const fecha = v.fecha_turno || 'S/F';
@@ -355,11 +373,28 @@ window.ejecutarRankingChoferes = async () => {
             for (let i = 0; i < viajes.length; i++) {
                 const v = viajes[i];
                 const estado = (v.estado?.principal || 'FINALIZADO').toUpperCase();
+                
                 if (estado !== 'ANULADO' && estado !== 'NEGATIVO') {
                     stats[idCh].kmOcupado += parseFloat(v.distancia?.replace(/[^0-9.]/g, '')) || 0;
+                    
                     if (i > 0) {
-                        const resV = await calcularKilometrosEntrePuntos(viajes[i-1].destino, v.origen);
-                        stats[idCh].kmVacio += resV.distancia;
+                        let distanciaVacio = 0;
+                        // --- ESTRATEGIA DE AHORRO ---
+                        if (v.distancia_vacio_previa !== undefined && v.distancia_vacio_previa !== null) {
+                            // Dato ya existe: GRATIS
+                            distanciaVacio = parseFloat(v.distancia_vacio_previa);
+                        } else {
+                            // Dato no existe: PAGAMOS API y GUARDAMOS
+                            const resV = await calcularKilometrosEntrePuntos(viajes[i-1].destino, v.origen);
+                            distanciaVacio = resV.distancia;
+                            
+                            // Guardamos para que la próxima vez sea gratis
+                            db.collection(v.coleccion).doc(v.id).update({
+                                distancia_vacio_previa: distanciaVacio
+                            }).catch(e => console.log("Error guardando optimización:", e));
+                        }
+
+                        stats[idCh].kmVacio += distanciaVacio;
                     }
                 }
             }
@@ -367,7 +402,7 @@ window.ejecutarRankingChoferes = async () => {
             procesados++;
             const porc = Math.round((procesados / totalClaves) * 100);
             fill.style.width = porc + '%';
-            text.innerText = `Calculando: ${porc}% (${procesados} de ${totalClaves} días)`;
+            text.innerText = `Optimizando y Calculando: ${porc}% (${procesados} de ${totalClaves} días)`;
         }
 
         const ranking = Object.entries(stats).sort((a, b) => b[1].kmOcupado - a[1].kmOcupado);
@@ -400,6 +435,8 @@ window.ejecutarRankingChoferes = async () => {
 // --- 6. FUNCIÓN AUXILIAR MAPS ---
 async function calcularKilometrosEntrePuntos(origen, destino) {
     if (!origen || !destino) return { distancia: 0, duracion: 0 };
+    
+    // IMPORTANTE: Esta es la función que cobra dinero. Se llama solo si es necesario.
     const service = new google.maps.DistanceMatrixService();
     return new Promise(resolve => {
         service.getDistanceMatrix({ origins: [origen], destinations: [destino], travelMode: 'DRIVING' }, (res, status) => {

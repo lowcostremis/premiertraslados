@@ -9,7 +9,7 @@ const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const { Client } = require("@googlemaps/google-maps-services-js");
 const algoliasearch = require("algoliasearch");
-const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onDocumentWritten, onDocumentUpdated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const { google } = require("googleapis"); 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const XLSX = require("xlsx");
@@ -293,48 +293,70 @@ exports.gestionarRechazoDesdeApp = onCall(async (r) => {
 // ===================================================================================
 // 6. TRIGGERS NOTIFICACIONES
 // ===================================================================================
-exports.gestionarNotificacionesDeReservas = functions.firestore.document("reservas/{id}").onUpdate(async (change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
+exports.gestionarNotificacionesDeReservas = onDocumentUpdated("reservas/{id}", async (event) => {
+    // En v2, 'change' y 'context' se reemplazan por 'event'
+    const before = event.data.before.data();
+    const after = event.data.after.data();
+    const reservaId = event.params.id; // El ID viene aquí
+    
     let title = '', body = '', choferId = '';
 
     if (!before.chofer_asignado_id && after.chofer_asignado_id) {
-        choferId = after.chofer_asignado_id; title = '¡Nuevo Viaje!'; body = `Origen: ${after.origen}`;
+        choferId = after.chofer_asignado_id; 
+        title = '¡Nuevo Viaje!'; 
+        body = `Origen: ${after.origen}`;
     } else if (before.chofer_asignado_id && !after.chofer_asignado_id) {
-        choferId = before.chofer_asignado_id; title = 'Viaje Retirado'; body = 'El viaje ya no está asignado.';
+        choferId = before.chofer_asignado_id; 
+        title = 'Viaje Retirado'; 
+        body = 'El viaje ya no está asignado.';
     } else if (after.chofer_asignado_id && (after.origen !== before.origen || after.fecha_turno !== before.fecha_turno)) {
-        choferId = after.chofer_asignado_id; title = 'Reserva Actualizada'; body = 'Detalles modificados.';
+        choferId = after.chofer_asignado_id; 
+        title = 'Reserva Actualizada'; 
+        body = 'Detalles modificados.';
     }
 
     if (title && choferId) {
-        const ch = await db.collection('choferes').doc(choferId).get();
-        if (ch.exists && ch.data().fcm_token) {
-            await admin.messaging().send({
-                token: ch.data().fcm_token,
-                notification: { title, body },
-                android: { notification: { channel_id: 'high_importance_channel' } },
-                apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
-                data: { title, body, reservaId: context.params.id, click_action: "FLUTTER_NOTIFICATION_CLICK", tipo: "actualizacion" }
-            });
+        try {
+            const ch = await db.collection('choferes').doc(choferId).get();
+            if (ch.exists && ch.data().fcm_token) {
+                await admin.messaging().send({
+                    token: ch.data().fcm_token,
+                    notification: { title, body },
+                    android: { notification: { channel_id: 'high_importance_channel' } },
+                    apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
+                    // En v2 data debe ser string key-value, reservationId es reservaId
+                    data: { title, body, reservaId: reservaId, click_action: "FLUTTER_NOTIFICATION_CLICK", tipo: "actualizacion" }
+                });
+            }
+        } catch (error) {
+            console.error("Error enviando notificación:", error);
         }
     }
 });
 
-exports.notificarCancelacionDeReserva = functions.firestore.document('reservas/{id}').onDelete(async (snap, context) => {
-    const hist = await db.collection('historico').doc(context.params.id).get();
+exports.notificarCancelacionDeReserva = onDocumentDeleted("reservas/{id}", async (event) => {
+    const reservaId = event.params.id;
+    
+    // Verificamos si existe en histórico para no notificar movimientos administrativos
+    const hist = await db.collection('historico').doc(reservaId).get();
     if (hist.exists) return null; 
 
-    const d = snap.data();
-    if (d.chofer_asignado_id) {
-        const ch = await db.collection('choferes').doc(d.chofer_asignado_id).get();
-        if (ch.exists && ch.data().fcm_token) {
-            await admin.messaging().send({
-                token: ch.data().fcm_token,
-                notification: { title: 'Viaje Cancelado', body: `Cancelado: ${d.origen}` },
-                android: { notification: { channel_id: 'high_importance_channel' } },
-                apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
-                data: { title: 'Viaje Cancelado', body: `Cancelado: ${d.origen}`, reservaId: context.params.id, click_action: "FLUTTER_NOTIFICATION_CLICK", tipo: "cancelacion" }
-            });
+    const d = event.data.data(); // En onDelete, event.data es el snapshot del documento borrado
+    
+    if (d && d.chofer_asignado_id) {
+        try {
+            const ch = await db.collection('choferes').doc(d.chofer_asignado_id).get();
+            if (ch.exists && ch.data().fcm_token) {
+                await admin.messaging().send({
+                    token: ch.data().fcm_token,
+                    notification: { title: 'Viaje Cancelado', body: `Cancelado: ${d.origen}` },
+                    android: { notification: { channel_id: 'high_importance_channel' } },
+                    apns: { payload: { aps: { sound: 'reserva_sound.aiff' } } },
+                    data: { title: 'Viaje Cancelado', body: `Cancelado: ${d.origen}`, reservaId: reservaId, click_action: "FLUTTER_NOTIFICATION_CLICK", tipo: "cancelacion" }
+                });
+            }
+        } catch (error) {
+            console.error("Error al notificar cancelación:", error);
         }
     }
 });

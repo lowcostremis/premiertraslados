@@ -5,6 +5,19 @@ let map, mapaModal, directionsService, directionsRenderer, geocoder;
 let coordenadasInputs = new Map(); 
 let marcadoresReservas = {}, marcadoresChoferes = {}, infoWindowActiva = null;
 let mapContextMenu, mapContextMenuItems;
+let sessionToken = null;
+let autocompleteService = null;
+let placesService = null;
+
+// --- FUNCIÓN DEBOUNCE (Agregar en mapa.js) ---
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+    };
+}
 
 // VARIABLES DE ESTADO PARA FILTROS
 let filtroMapaActual = 'Todos'; 
@@ -158,9 +171,87 @@ function procesarResultadosRuta(response) {
 function crearMarcadorManual(posicion, etiqueta, titulo, color) { const marker = new google.maps.Marker({ position: posicion, map: mapaModal, icon: crearIconoDePin(color, etiqueta), title: titulo }); marcadoresRuta.push(marker); }
 
 export async function activarAutocomplete(inputElement) {
-    if (!inputElement) return; const { Autocomplete } = await google.maps.importLibrary("places");
-    const autocomplete = new Autocomplete(inputElement, { fields: ["formatted_address", "geometry"], componentRestrictions: { country: "ar" } });
-    autocomplete.addListener('place_changed', () => { const place = autocomplete.getPlace(); if (place && place.geometry) { coordenadasInputs.set(inputElement, place.geometry.location); calcularYMostrarRuta(); } });
+    if (!inputElement) return;
+
+    // 1. Inicializamos servicios (solo una vez)
+    if (!autocompleteService) {
+        const { AutocompleteService } = await google.maps.importLibrary("places");
+        autocompleteService = new AutocompleteService();
+    }
+    if (!placesService) {
+        const { PlacesService } = await google.maps.importLibrary("places");
+        const dummyDiv = document.createElement('div');
+        placesService = new PlacesService(map || dummyDiv);
+    }
+
+    // 2. Token de Sesión (El secreto del ahorro)
+    if (!sessionToken) {
+        const { AutocompleteSessionToken } = await google.maps.importLibrary("places");
+        sessionToken = new AutocompleteSessionToken();
+    }
+
+    // 3. UI de Sugerencias
+    let lista = document.createElement('ul');
+    lista.className = "autocomplete-results"; // Puedes darle estilos en CSS
+    lista.style.cssText = "position:absolute; background:white; list-style:none; padding:0; margin:0; border:1px solid #ccc; z-index:9999; width:100%; max-height:200px; overflow-y:auto; display:none; border-radius:4px; box-shadow:0 4px 6px rgba(0,0,0,0.1);";
+    
+    if(inputElement.parentNode) {
+        inputElement.parentNode.style.position = "relative";
+        inputElement.parentNode.appendChild(lista);
+    }
+
+    // 4. Escucha con Debounce (500ms de espera)
+    inputElement.addEventListener('input', debounce(async (e) => {
+        const valor = e.target.value;
+        if (valor.length < 3) { lista.style.display = 'none'; return; }
+
+        autocompleteService.getPlacePredictions({
+            input: valor,
+            sessionToken: sessionToken, // <--- AHORRO $$$
+            componentRestrictions: { country: 'ar' },
+            types: ['geocode', 'establishment']
+        }, (predictions, status) => {
+            lista.innerHTML = '';
+            if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
+                lista.style.display = 'block';
+                predictions.forEach(p => {
+                    const li = document.createElement('li');
+                    li.textContent = p.description;
+                    li.style.cssText = "padding:10px; cursor:pointer; border-bottom:1px solid #eee; font-size:13px;";
+                    li.onmouseover = () => li.style.background = "#f0f2f5";
+                    li.onmouseout = () => li.style.background = "white";
+                    
+                    li.onclick = () => {
+                        inputElement.value = p.description;
+                        lista.style.display = 'none';
+                        
+                        // Obtener detalles cerrando la sesión (1 cobro único)
+                        placesService.getDetails({
+                            placeId: p.place_id,
+                            fields: ['geometry', 'formatted_address'],
+                            sessionToken: sessionToken
+                        }, (place, statusDet) => {
+                            if (statusDet === google.maps.places.PlacesServiceStatus.OK && place.geometry) {
+                                coordenadasInputs.set(inputElement, place.geometry.location);
+                                if(window.app && window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta();
+                                else if(typeof calcularYMostrarRuta === 'function') calcularYMostrarRuta();
+
+                                // Generar NUEVO token para la próxima búsqueda
+                                const { AutocompleteSessionToken } = google.maps.places;
+                                sessionToken = new AutocompleteSessionToken();
+                            }
+                        });
+                    };
+                    lista.appendChild(li);
+                });
+            } else { lista.style.display = 'none'; }
+        });
+    }, 500)); 
+
+    // Cerrar al hacer click fuera
+    document.addEventListener('click', (e) => {
+        if (e.target !== inputElement && e.target !== lista) lista.style.display = 'none';
+    });
 }
 
 export async function openEditReservaModal(reservaId, caches, initMapaModalCallback) {
