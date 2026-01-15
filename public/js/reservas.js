@@ -376,12 +376,37 @@ export async function handleSaveReserva(e, caches) {
             await asignarMovil(reservaGuardadaId, f.asignar_movil.value, caches);
         }
 
-        if (datosBase.dni_pasajero && origenesArray.length > 0) {
-            await db.collection('pasajeros').doc(datosBase.dni_pasajero).set({
-                nombre_apellido: datosBase.nombre_pasajero,
-                telefono: datosBase.telefono_pasajero,
-                domicilios: db.app.firebase_.firestore.FieldValue.arrayUnion(origenesArray[0])  
-            }, { merge: true });
+        if (datosBase.dni_pasajero) {
+            const pRef = db.collection('pasajeros').doc(datosBase.dni_pasajero);
+            
+            try {
+                // 1. Leemos el pasajero primero para ver qué tiene
+                const pSnap = await pRef.get();
+                const pData = pSnap.exists ? pSnap.data() : {};
+                const domiciliosExistentes = pData.domicilios || [];
+
+                // 2. Preparamos datos básicos (Nombre y Tel siempre se actualizan)
+                let updateData = {
+                    nombre_apellido: datosBase.nombre_pasajero,
+                    telefono: datosBase.telefono_pasajero
+                };
+
+                // 3. LA REGLA DE ORO: 
+                // Solo guardamos el domicilio SI la lista está vacía.
+                // Si ya tiene algo (cargado por Admin o viaje anterior), NO lo tocamos.
+                if (origenesArray.length > 0) {
+                    if (domiciliosExistentes.length === 0) {
+                        // Está vacío, así que ESTE será su domicilio principal
+                        updateData.domicilios = [origenesArray[0]];
+                    }
+                    // ELSE: Ya tiene domicilio, así que no hacemos nada (no acumulamos).
+                }
+
+                await pRef.set(updateData, { merge: true });
+
+            } catch (errPas) {
+                console.error("Error actualizando pasajero (silencioso):", errPas);
+            }
         }
 
         document.getElementById('reserva-modal').style.display = 'none';

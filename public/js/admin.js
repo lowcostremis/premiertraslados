@@ -295,11 +295,23 @@ async function handleSavePasajero(e) {
     const f = e.target;
     const dni = f.dni.value.trim();
     if (!dni) { alert("DNI es obligatorio."); return; }
-    const d = { nombre_apellido: f.nombre_apellido.value, telefono: f.telefono.value, domicilios: firebase.firestore.FieldValue.arrayUnion(f.domicilio.value) };
+
+    // CAMBIO AQUI: En lugar de arrayUnion (sumar), creamos un array nuevo [valor].
+    // Esto borra la lista "interminable" anterior y deja solo este domicilio como definitivo.
+    const nuevoDomicilio = f.domicilio.value.trim();
+    
+    const d = { 
+        nombre_apellido: f.nombre_apellido.value, 
+        telefono: f.telefono.value, 
+        // Si puso algo, lo guardamos como ÚNICO domicilio. Si no, array vacío.
+        domicilios: nuevoDomicilio ? [nuevoDomicilio] : [] 
+    };
+
     try {
         const pRef = db.collection('pasajeros').doc(dni);
+        // Usamos set con merge: true para actualizar nombre/tel y pisar domicilios
         await pRef.set(d, { merge: true });
-        alert("Pasajero guardado.");
+        alert("Pasajero guardado (Domicilio actualizado y limpiado).");
         f.reset();
     } catch (error) {
         console.error("Error:", error);
