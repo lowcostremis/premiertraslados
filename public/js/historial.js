@@ -109,8 +109,20 @@ export function initHistorial(caches) {
 
 // 2. Cargar Historial con FILTROS REALES
 export async function cargarHistorial() {
-    if (!historialBody) return;
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Si la variable historialBody está vacía (bug de carga), la buscamos de nuevo manualmente.
+    if (!historialBody) {
+        historialBody = document.getElementById('body-historico');
+        // Si acabamos de encontrarla, reconectamos también los botones para prevenir otros errores
+        if (!btnAnterior) btnAnterior = document.getElementById('btn-anterior');
+        if (!btnSiguiente) btnSiguiente = document.getElementById('btn-siguiente');
+        if (!indicadorPagina) indicadorPagina = document.getElementById('indicador-pagina');
+    }
     
+    // Si AÚN ASÍ no existe (ej: estamos en otra pestaña), entonces sí salimos.
+    if (!historialBody) return console.warn("No se encontró la tabla de histórico (DOM no listo).");
+    // --- FIN DE LA CORRECCIÓN ---
+
     const clienteId = document.getElementById('filtro-cliente-historial')?.value;
     const fechaDesde = document.getElementById('fecha-desde-historial')?.value;
     const fechaHasta = document.getElementById('fecha-hasta-historial')?.value;
@@ -120,7 +132,6 @@ export async function cargarHistorial() {
         
         let query = db.collection('historico').orderBy('fecha_turno', 'desc');
 
-        // Aplicamos filtros de Firebase si existen
         if (clienteId) query = query.where('cliente', '==', clienteId);
         if (fechaDesde) query = query.where('fecha_turno', '>=', fechaDesde);
         if (fechaHasta) query = query.where('fecha_turno', '<=', fechaHasta);
@@ -142,7 +153,7 @@ export async function cargarHistorial() {
 
     } catch (error) {
         console.error("Error:", error);
-        historialBody.innerHTML = '<tr><td colspan="10" style="color:red;">Error de índice: Asegurate de crear el índice en Firebase.</td></tr>';
+        historialBody.innerHTML = '<tr><td colspan="10" style="color:red;">Error de índice o conexión.</td></tr>';
     }
 }
 
