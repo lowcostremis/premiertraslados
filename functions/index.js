@@ -12,6 +12,7 @@ const algoliasearch = require("algoliasearch");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { google } = require("googleapis"); 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const XLSX = require("xlsx");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -180,54 +181,72 @@ exports.listUsers = onCall(async () => {
     return { users: s.docs.map(d => ({ uid: d.id, ...d.data() })) };
 });
 
-exports.exportarHistorico = onCall(async (r) => {
+exports.exportarHistorico = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (r) => {
     const { fechaDesde, fechaHasta, clienteId } = r.data;
     
     if (!fechaDesde || !fechaHasta) {
         throw new HttpsError('invalid-argument', 'Fechas no proporcionadas.');
     }
 
-    const inicio = admin.firestore.Timestamp.fromDate(new Date(fechaDesde + 'T00:00:00Z'));
-    const fin = admin.firestore.Timestamp.fromDate(new Date(fechaHasta + 'T23:59:59Z'));
+    // Filtramos por 'fecha_turno' (la fecha real del viaje)
+    // Usamos string comparison que es rápido y compatible con tus datos actuales
+    let q = db.collection('historico')
+              .where('fecha_turno', '>=', fechaDesde)
+              .where('fecha_turno', '<=', fechaHasta);
     
-    let q = db.collection('historico').where('archivadoEn', '>=', inicio).where('archivadoEn', '<=', fin);
-    if (clienteId && clienteId !== "") q = q.where('cliente', '==', clienteId);
+    if (clienteId) {
+        q = q.where('cliente', '==', clienteId);
+    }
     
     const s = await q.get();
-    const registros = []; // <-- Cambiamos string por Array
 
-    s.forEach(d => {
-    const v = d.data();
-    const cliente = v.cliente_nombre || v.clienteNombre || 'N/A';
-    const chofer = v.chofer_nombre || v.choferNombre || 'N/A';
-    
-    // 1. Extraemos solo el número (ej: de "10.5 km" a 10.5)
-    const kmNumerico = parseFloat((v.distancia || "0").replace(/[^0-9.]/g, "")) || 0;
-
-    let estadoStr = 'N/A';
-    if (v.estado) {
-        estadoStr = (typeof v.estado === 'object' && v.estado.principal) ? v.estado.principal : v.estado;
+    if (s.empty) {
+        return { data: null, message: "No se encontraron viajes en este período." };
     }
 
-    registros.push({
-        "Fecha Turno": v.fecha_turno || 'N/A',
-        "Hora Turno": v.hora_turno || 'N/A',
-        "Hora PickUp": v.hora_pickup || 'N/A',
-        "Pasajero": v.nombre_pasajero || 'N/A',
-        "Cliente": cliente,
-        "Chofer": chofer,
-        "Origen": v.origen || 'N/A',
-        "Destino": v.destino || 'N/A',
-        "Distancia (KM)": kmNumerico, // <--- Enviamos el número puro
-        "Estado": estadoStr,
-        "Siniestro": v.siniestro || 'N/A',
-        "Autorizacion": v.autorizacion || 'N/A',
-        "Espera Total": v.espera_total || 0,
-        "Espera Sin Cargo": v.espera_sin_cargo || 0
+    const registros = [];
+
+    s.forEach(d => {
+        const v = d.data();
+        
+        // Limpieza de datos para el Excel
+        const estadoStr = (typeof v.estado === 'object' && v.estado.principal) ? v.estado.principal : (v.estado || 'N/A');
+        // Extraer solo el número de los KM
+        const kmNumerico = parseFloat((v.distancia || "0").replace(/[^0-9.]/g, "")) || 0;
+
+        registros.push({
+            "ID Reserva": d.id,
+            "Fecha Turno": v.fecha_turno || 'S/D',
+            "Hora Turno": v.hora_turno || 'S/D',
+            "Hora PickUp": v.hora_pickup || '-',
+            "Pasajero": v.nombre_pasajero || 'S/D',
+            "Cliente": v.cliente_nombre || 'S/D',
+            "Origen": v.origen || 'S/D',
+            "Destino": v.destino || 'S/D',
+            "Chofer": v.chofer_nombre || v.choferNombre || 'Sin Chofer',
+            "Móvil": v.movil_numero || '-',
+            "KM": kmNumerico,
+            "Peaje ($)": parseFloat(v.peaje_manual) || 0,
+            "Espera (hs)": parseFloat(v.espera_total) || 0,
+            "Estado": estadoStr,
+            "Usuario": v.creado_por || 'Sistema',
+            "Observaciones": v.observaciones || ''
+        });
     });
-});
-    
-    return { data: registros }; // <-- Devolvemos la lista
+
+    // Generamos el Excel AQUÍ en el servidor (más rápido y seguro)
+    const worksheet = XLSX.utils.json_to_sheet(registros);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Historial");
+
+    // Lo convertimos a un texto Base64 para enviarlo al navegador
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const base64String = excelBuffer.toString('base64');
+
+    return { 
+        data: base64String, 
+        count: registros.length
+    };
 });
 
 // ===================================================================================

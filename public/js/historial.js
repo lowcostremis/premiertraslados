@@ -49,13 +49,29 @@ export function initHistorial(caches) {
                 const exportarHistorico = functions.httpsCallable('exportarHistorico');
                 const result = await exportarHistorico({ fechaDesde, fechaHasta, clienteId });
     
+                // VERIFICAR SI RECIBIMOS EL ARCHIVO (BASE64)
                 if (result.data && result.data.data) {
-                    const ws = XLSX.utils.json_to_sheet(result.data.data);
-                    const wb = XLSX.utils.book_new();
-                    XLSX.utils.book_append_sheet(wb, ws, "Historial");
-                    XLSX.writeFile(wb, `historico_${fechaDesde}_al_${fechaHasta}.xlsx`);
+                    
+                    // Convertir Base64 a Blob (Archivo binario)
+                    const byteCharacters = atob(result.data.data);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+                    
+                    // Crear enlace invisible para descargar
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `Reporte_${fechaDesde}_al_${fechaHasta}.xlsx`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    alert(`✅ Se exportaron ${result.data.count} viajes correctamente.`);
                 } else {
-                    alert('No se encontraron datos para exportar.');
+                    alert(result.data.message || 'No se encontraron datos para exportar.');
                 }
             } catch (error) {
                 console.error("Error al exportar:", error);

@@ -668,38 +668,43 @@ window.abrirModalTarifasFijas = function(id, nombre, lista) {
 }
 
 
+// BUSCAR Y REEMPLAZAR ESTAS FUNCIONES:
+
 function resetearFormularioTarifas() {
     document.getElementById('tf-origen').value = '';
     document.getElementById('tf-destino').value = '';
     document.getElementById('tf-precio').value = '';
+    document.getElementById('tf-peaje').value = ''; // NUEVO: Resetear peaje
     
     const btn = document.querySelector('#modal-tarifas-fijas button[onclick*="window.agregarTarifaFija"]');
     if (btn) {
-        btn.textContent = '➕ Agregar';
-        btn.style.backgroundColor = '#28a745'; // Verde
+        btn.textContent = '➕';
+        btn.style.backgroundColor = '#28a745'; 
     }
     indiceEdicion = -1;
 }
 
-// Dibuja la tabla dentro del modal con botón de Editar y Borrar
 function renderizarTablaTarifas(lista) {
     const tbody = document.getElementById('body-tarifas-fijas');
     if (!tbody) return;
     tbody.innerHTML = '';
     
     if (!lista || lista.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:10px;">Sin tarifas fijas asignadas.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:10px;">Sin tarifas fijas asignadas.</td></tr>';
         return;
     }
 
     lista.forEach((item, index) => {
+        const peajeValor = parseFloat(item.peaje || 0); // Leemos el peaje (0 si no existe)
+        
         const row = `
             <tr>
                 <td>${item.origen}</td>
                 <td>${item.destino}</td>
                 <td style="font-weight:bold; color:#28a745;">$ ${parseFloat(item.precio).toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                <td style="font-weight:bold; color:#666;">$ ${peajeValor.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
                 <td>
-                    <button onclick="window.prepararEdicionTarifa(${index})" style="background:#ffc107; color:black; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-right:5px;" title="Editar Precio">✏️</button>
+                    <button onclick="window.prepararEdicionTarifa(${index})" style="background:#ffc107; color:black; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-right:5px;" title="Editar">✏️</button>
                     <button onclick="window.borrarTarifaFija(${index})" style="background:#dc3545; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;" title="Borrar">🗑️</button>
                 </td>
             </tr>
@@ -710,43 +715,39 @@ function renderizarTablaTarifas(lista) {
 
 window.prepararEdicionTarifa = async function(index) {
     try {
-        // Leemos la lista actual de la base de datos (o del DOM, pero mejor DB)
         const doc = await db.collection('clientes').doc(clienteIdEditandoTarifas).get();
         const lista = doc.data().tarifas_fijas || [];
         const item = lista[index];
 
         if (!item) return;
 
-        // Llenamos los inputs
         document.getElementById('tf-origen').value = item.origen;
         document.getElementById('tf-destino').value = item.destino;
         document.getElementById('tf-precio').value = item.precio;
+        document.getElementById('tf-peaje').value = item.peaje || 0; // Cargar peaje
 
-        // Cambiamos estado a "Editando"
         indiceEdicion = index;
         
-        // Cambiamos el botón visualmente
         const btn = document.querySelector('#modal-tarifas-fijas button[onclick*="window.agregarTarifaFija"]');
-        btn.textContent = '💾 Guardar Cambio';
-        btn.style.backgroundColor = '#007bff'; // Azul
-        document.getElementById('tf-precio').focus(); // Foco en el precio para editar rápido
+        btn.textContent = '💾';
+        btn.style.backgroundColor = '#007bff'; 
+        document.getElementById('tf-precio').focus(); 
 
-    } catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
 }
 
-// 2. Función Inteligente: Agrega O Edita según el estado
 window.agregarTarifaFija = async function() {
     const origenInput = document.getElementById('tf-origen');
     const destinoInput = document.getElementById('tf-destino');
     const precioInput = document.getElementById('tf-precio');
+    const peajeInput = document.getElementById('tf-peaje'); // NUEVO
 
     const origen = origenInput.value.trim();
     const destino = destinoInput.value.trim();
     const precio = parseFloat(precioInput.value);
+    const peaje = parseFloat(peajeInput.value) || 0; // NUEVO: Valor por defecto 0
 
-    if (!origen || !destino || !precio) {
+    if (!origen || !destino || isNaN(precio)) { // Validamos precio, peaje es opcional
         return alert("Por favor, completá Origen, Destino y Precio.");
     }
 
@@ -755,23 +756,16 @@ window.agregarTarifaFija = async function() {
         const docSnap = await docRef.get();
         let lista = docSnap.data().tarifas_fijas || [];
 
-        const nuevoItem = { origen, destino, precio };
+        const nuevoItem = { origen, destino, precio, peaje }; // Guardamos peaje
 
         if (indiceEdicion >= 0) {
-            // --- MODO EDICIÓN: Reemplazamos el item existente ---
             lista[indiceEdicion] = nuevoItem;
         } else {
-            // --- MODO CREACIÓN: Agregamos al final ---
             lista.push(nuevoItem);
         }
 
-        // Guardamos la lista completa actualizada
         await docRef.update({ tarifas_fijas: lista });
-        
-        // Reseteamos todo
         resetearFormularioTarifas();
-        
-        // Refrescamos la tabla visual
         renderizarTablaTarifas(lista);
         
     } catch (e) {
@@ -779,6 +773,8 @@ window.agregarTarifaFija = async function() {
         alert("Error al guardar tarifa: " + e.message);
     }
 }
+
+
 
 // 3. Función de Borrado (Actualizada para lista completa)
 window.borrarTarifaFija = async function(index) {

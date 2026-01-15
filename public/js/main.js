@@ -14,7 +14,7 @@ import {
 // --- IMPORTACIÓN UNIFICADA: PASAJEROS, ADMIN Y FACTURAS ---
 import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
-import { initFacturacion, cargarFacturasEmitidas, verFactura } from './facturas.js';
+import { initFacturacion, cargarFacturasEmitidas, verFactura, anularFactura } from './facturas.js';
 
 // --- IMPORTACIÓN UNIFICADA: MAPA ---
 import { 
@@ -563,6 +563,7 @@ function initApp() {
         recalcularDistanciaHistorico,
         cargarFacturasEmitidas,        
         verFactura,
+        anularFactura,
         mostrarSubTabFact: (tipo, e) => {
             document.querySelectorAll('.fact-section').forEach(s => s.style.display = 'none');
             document.querySelectorAll('.sub-tab-fact').forEach(b => b.classList.remove('active'));

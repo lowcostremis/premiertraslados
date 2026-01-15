@@ -579,43 +579,47 @@
     </div>
  </div>
     <div id="modal-tarifas-fijas" class="modal" style="z-index: 9999;">
-            <div class="modal-content" style="max-width: 700px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ccc; padding-bottom:10px;">
-                    <h3 style="margin:0; color:#1877f2;">Tarifas Fijas: <span id="titulo-cliente-fijo"></span></h3>
-                    <span onclick="document.getElementById('modal-tarifas-fijas').style.display='none'" style="cursor:pointer; font-size:24px;">&times;</span>
-                </div>
+        <div class="modal-content" style="max-width: 750px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ccc; padding-bottom:10px;">
+                <h3 style="margin:0; color:#1877f2;">Tarifas Fijas: <span id="titulo-cliente-fijo"></span></h3>
+                <span onclick="document.getElementById('modal-tarifas-fijas').style.display='none'" style="cursor:pointer; font-size:24px;">&times;</span>
+            </div>
 
-                <div style="background: #f8f9fa; padding: 15px; margin-top: 15px; border-radius: 8px; display: grid; grid-template-columns: 2fr 2fr 1fr auto; gap: 10px; align-items: end;">
-                    <div>
-                        <label style="font-size:12px; font-weight:bold;">Origen (Clave)</label>
-                        <input type="text" id="tf-origen" placeholder="Ej: Rosario" style="width:100%; padding:8px;">
-                    </div>
-                    <div>
-                        <label style="font-size:12px; font-weight:bold;">Destino (Clave)</label>
-                        <input type="text" id="tf-destino" placeholder="Ej: Ezeiza" style="width:100%; padding:8px;">
-                    </div>
-                    <div>
-                        <label style="font-size:12px; font-weight:bold;">Precio ($)</label>
-                        <input type="number" id="tf-precio" placeholder="0.00" style="width:100%; padding:8px;">
-                    </div>
-                    <button onclick="window.agregarTarifaFija()" style="background:#28a745; color:white; border:none; padding:10px; border-radius:4px; cursor:pointer;">➕ Agregar</button>
+            <div style="background: #f8f9fa; padding: 15px; margin-top: 15px; border-radius: 8px; display: grid; grid-template-columns: 2fr 2fr 1fr 1fr auto; gap: 10px; align-items: end;">
+                <div>
+                    <label style="font-size:12px; font-weight:bold;">Origen (Clave)</label>
+                    <input type="text" id="tf-origen" placeholder="Ej: Rosario" style="width:100%; padding:8px;">
                 </div>
+                <div>
+                    <label style="font-size:12px; font-weight:bold;">Destino (Clave)</label>
+                    <input type="text" id="tf-destino" placeholder="Ej: Ezeiza" style="width:100%; padding:8px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:bold;">Precio ($)</label>
+                    <input type="number" id="tf-precio" placeholder="0.00" style="width:100%; padding:8px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:bold;">Peaje ($)</label>
+                    <input type="number" id="tf-peaje" placeholder="0.00" style="width:100%; padding:8px;">
+                </div>
+                <button onclick="window.agregarTarifaFija()" style="background:#28a745; color:white; border:none; padding:10px; border-radius:4px; cursor:pointer;">➕</button>
+            </div>
 
-                <div class="table-wrapper" style="margin-top: 20px; max-height: 300px; overflow-y: auto;">
-                    <table id="tabla-tarifas-fijas">
-                        <thead>
-                            <tr>
-                                <th>Origen</th>
-                                <th>Destino</th>
-                                <th>Precio Pactado</th>
-                                <th>Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody id="body-tarifas-fijas"></tbody>
-                    </table>
-                </div>
+            <div class="table-wrapper" style="margin-top: 20px; max-height: 300px; overflow-y: auto;">
+                <table id="tabla-tarifas-fijas">
+                    <thead>
+                        <tr>
+                            <th>Origen</th>
+                            <th>Destino</th>
+                            <th>Precio Viaje</th>
+                            <th>Peaje Fijo</th> <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="body-tarifas-fijas"></tbody>
+                </table>
             </div>
         </div>
+    </div>
     <div id="modal-param-chofer" class="modal">
         <div class="modal-content" style="max-width: 400px;">
             <h3>Configurar Informe Chofer</h3>

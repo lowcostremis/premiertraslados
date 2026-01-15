@@ -50,18 +50,13 @@ async function buscarReservasParaFacturar() {
 
         snapshot.forEach(doc => {
             const viaje = doc.data();
-            // Lógica central de precios
             const calculo = calcularTotalesViaje(viaje, clienteConfig);
             
-            // Solo sumamos al total el precio EFECTIVO (que puede ser 0)
             acumuladoFinal += calculo.totalViaje;
             
             reservasEnPrevia.push({ id: doc.id, ...viaje, ...calculo });
 
-            // --- LÓGICA VISUAL PARA LA TABLA ---
             let celdaTotal = '';
-            
-            // Si el precio real es 0 pero teóricamente valía algo (Anulado, Debitado, o Negativo sin cargo)
             if (calculo.totalViaje === 0 && calculo.totalTeorico > 0) {
                 const motivo = calculo.estadoNormalizado === 'Negativo' ? 'Negativo' : 
                                calculo.estadoNormalizado === 'Debitado' ? 'Debitado' : 'Anulado';
@@ -75,8 +70,7 @@ async function buscarReservasParaFacturar() {
                     </div>
                 `;
             } else {
-                // Viaje normal o Negativo cobrado
-                const color = calculo.estadoNormalizado === 'Negativo' ? '#dc3545' : '#1e3a8a'; // Rojo si es negativo cobrado
+                const color = calculo.estadoNormalizado === 'Negativo' ? '#dc3545' : '#1e3a8a';
                 celdaTotal = `<span style="font-weight:bold; color: ${color};">$ ${calculo.totalViaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}</span>`;
             }
 
@@ -109,6 +103,7 @@ function calcularTotalesViaje(viaje, config) {
     const km = parseFloat(viaje.distancia?.replace(/[^0-9.]/g, '')) || 0;
     let costoBase = 0;
     let esTarifaFija = false;
+    let peajeFijoConfigurado = 0; // Variable para guardar el peaje de la ruta fija si existe
     const costoBajada = parseFloat(config.bajada_bandera) || 0;
 
     // 1. Detección de Tarifa Fija
@@ -126,6 +121,7 @@ function calcularTotalesViaje(viaje, config) {
 
         if (tarifaEncontrada) {
             costoBase = parseFloat(tarifaEncontrada.precio);
+            peajeFijoConfigurado = parseFloat(tarifaEncontrada.peaje || 0); // Capturamos el peaje fijo
             esTarifaFija = true;
         }
     }
@@ -143,16 +139,32 @@ function calcularTotalesViaje(viaje, config) {
         costoBase = subtotalDistancia + costoBajada;
     }
 
-    // 3. Peajes (Cálculo siempre, luego decidimos si se cobra)
+    // 3. Lógica de Peajes Mejorada
     let montoPeaje = 0;   
     let tienePeaje = false;
     
+    // Solo procesamos peajes si el cliente paga peajes
     if (config.paga_peaje === true) {
+        
+        // PRIORIDAD 1: Peaje Manual (El rey absoluta: lo que puso el operador en el viaje)
         if (viaje.peaje_manual !== undefined && viaje.peaje_manual !== null && !isNaN(viaje.peaje_manual)) {
             montoPeaje = parseFloat(viaje.peaje_manual);
-        } else {
+        }
+        
+        // PRIORIDAD 2: Peaje de Tarifa Fija (Si la ruta es fija, USAMOS SU DATO, sea cual sea)
+        else if (esTarifaFija) {
+            // CORRECCIÓN: Si es tarifa fija, usamos el peaje configurado (incluso si es 0).
+            // NUNCA dejamos que pase a la calculadora automática vieja.
+            montoPeaje = peajeFijoConfigurado; 
+        }
+        
+        // PRIORIDAD 3: Cálculo Automático Viejo (Solo para viajes normales por KM)
+        else {
+            // Solo llegamos aquí si NO es tarifa fija y NO hay manual.
+            // Aquí es donde salían los $4500 mágicos.
             montoPeaje = obtenerValorPeaje(viaje.origen, viaje.destino);
         }
+
         if (montoPeaje > 0) tienePeaje = true;
     }
 
@@ -171,25 +183,20 @@ function calcularTotalesViaje(viaje, config) {
     }
 
     // --- NUEVA LÓGICA DE TOTALES ---
-    // Calculamos el total TEÓRICO (lo que valdría el viaje si fuera normal)
     const totalTeorico = costoBase + costoEspera + montoPeaje;
     
-    // Obtenemos el estado limpio
     const estadoRaw = (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || '';
-    const estadoNormalizado = estadoRaw.charAt(0).toUpperCase() + estadoRaw.slice(1).toLowerCase(); // Ej: "Anulado"
+    const estadoNormalizado = estadoRaw.charAt(0).toUpperCase() + estadoRaw.slice(1).toLowerCase();
 
     let precioEfectivo = totalTeorico;
 
-    // REGLA 1: Anulado o Debitado => Se muestra pero NO se cobra ($0)
     if (estadoNormalizado === 'Anulado' || estadoNormalizado === 'Debitado') {
         precioEfectivo = 0;
     }
-    // REGLA 2: Negativo => Depende de config.paga_negativos
     else if (estadoNormalizado === 'Negativo') {
-        if (config.paga_negativos !== true) { // Si NO paga negativos, es $0
+        if (config.paga_negativos !== true) { 
             precioEfectivo = 0;
         }
-        // Si config.paga_negativos es true, precioEfectivo sigue siendo totalTeorico
     }
 
     return {
@@ -198,9 +205,9 @@ function calcularTotalesViaje(viaje, config) {
         montoPeaje: montoPeaje,
         tienePeaje: tienePeaje,
         esFija: esTarifaFija,
-        totalTeorico: totalTeorico, // Para mostrar lo que hubiera salido
-        totalViaje: precioEfectivo, // Lo que realmente suma a la factura
-        estadoNormalizado: estadoNormalizado // Para usar en la UI
+        totalTeorico: totalTeorico, 
+        totalViaje: precioEfectivo, 
+        estadoNormalizado: estadoNormalizado 
     };
 }
 
@@ -220,7 +227,9 @@ async function emitirFactura() {
         },
         items: reservasEnPrevia,
         total_final: reservasEnPrevia.reduce((sum, r) => sum + r.totalViaje, 0),
-        creado_por: window.currentUserEmail || 'Sistema'
+        estado: 'Emitida', // NUEVO: Estado de la factura
+        creado_por: window.currentUserEmail || 'Sistema',
+        creado_en: new Date()
     };
 
     try {
@@ -231,11 +240,52 @@ async function emitirFactura() {
         document.querySelector('#tabla-previa-factura tbody').innerHTML = '';
         document.getElementById('resumen-factura-card').style.display = 'none';
         
+        // Refrescar lista de emitidas
+        window.app.mostrarSubTabFact('emitidas');
+
     } catch (e) {
         console.error("Error al guardar factura:", e);
         alert("Error al intentar guardar la factura en la base de datos.");
     }
 }
+
+// --- NUEVA LÓGICA DE REFACTURACIÓN ---
+export async function anularFactura(facturaId, clienteId, fechaDesde, fechaHasta) {
+    const motivo = prompt("Por favor, ingrese el motivo de la anulación (Ej: 'Corrección de viaje', 'Error de fecha'):");
+    if (!motivo) return;
+
+    if (!confirm("⚠️ ATENCIÓN: Esta acción ANULARÁ la factura actual y te llevará a generar una nueva con los datos actualizados. ¿Continuar?")) return;
+
+    try {
+        const operador = window.currentUserEmail || 'Sistema';
+        await db.collection('facturas').doc(facturaId).update({
+            estado: 'Anulada',
+            anulada_por: operador,
+            motivo_anulacion: motivo,
+            anulada_en: new Date()
+        });
+
+        alert("Factura anulada correctamente. Redirigiendo para generar la nueva...");
+
+        // 1. Cambiar a la pestaña de generación
+        window.app.mostrarSubTabFact('generar');
+
+        // 2. Pre-cargar los datos
+        document.getElementById('fact-cliente-select').value = clienteId;
+        document.getElementById('fact-fecha-desde').value = fechaDesde;
+        document.getElementById('fact-fecha-hasta').value = fechaHasta;
+
+        // 3. Ejecutar la búsqueda automáticamente para traer los datos nuevos
+        setTimeout(() => {
+            buscarReservasParaFacturar();
+        }, 500);
+
+    } catch (e) {
+        console.error("Error al anular:", e);
+        alert("Error al anular la factura: " + e.message);
+    }
+}
+
 
 export async function cargarFacturasEmitidas() {
     const container = document.getElementById('lista-facturas-emitidas');
@@ -243,24 +293,51 @@ export async function cargarFacturasEmitidas() {
     container.innerHTML = '<p style="text-align:center;">Cargando historial...</p>';
 
     try {
-        const snapshot = await db.collection('facturas').orderBy('fecha_emision', 'desc').limit(50).get();
+        const snapshot = await db.collection('facturas').orderBy('creado_en', 'desc').limit(50).get();
         if (snapshot.empty) {
             container.innerHTML = '<p>No se registran facturas emitidas anteriormente.</p>';
             return;
         }
 
-        let html = '<div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Período</th><th>Emisión</th><th>Total Liquidado</th><th>Acciones</th></tr></thead><tbody>';
+        let html = '<div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Período</th><th>Emisión</th><th>Estado</th><th>Total</th><th>Acciones</th></tr></thead><tbody>';
 
         snapshot.forEach(doc => {
             const f = doc.data();
+            const esAnulada = f.estado === 'Anulada';
+            
+            // Estilos según estado
+            const estiloEstado = esAnulada 
+                ? 'background:#ffebee; color:#c62828; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold;' 
+                : 'background:#e8f5e9; color:#2e7d32; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold;';
+            
+            const estiloFila = esAnulada ? 'opacity: 0.6; background-color: #f9f9f9;' : '';
+            const textoTotal = esAnulada 
+                ? `<span style="text-decoration:line-through;">$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}</span>` 
+                : `$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
+
+            // Botones de acción
+            let botones = `<button class="btn-primary" onclick="window.app.verFactura('${doc.id}')" style="padding: 4px 8px; font-size: 11px;">🖨️ Ver</button>`;
+            
+            if (!esAnulada) {
+                // Botón REFACTURAR (Anular y Regenerar)
+                botones += ` <button onclick="window.app.anularFactura('${doc.id}', '${f.cliente_id}', '${f.periodo.desde}', '${f.periodo.hasta}')" 
+                             style="background-color: #ff9800; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left:5px;" 
+                             title="Anular esta factura y generar una nueva con datos corregidos">
+                             ♻️ Refacturar
+                             </button>`;
+            } else {
+                botones += ` <span style="font-size:10px; color:red; margin-left:5px;" title="${f.motivo_anulacion || ''}">(Anulada)</span>`;
+            }
+
             html += `
-                <tr>
+                <tr style="${estiloFila}">
                     <td>${f.cliente_nombre}</td>
-                    <td>${f.periodo.desde} al ${f.periodo.hasta}</td>
+                    <td>${f.periodo.desde} <br> ${f.periodo.hasta}</td>
                     <td>${f.fecha_emision}</td>
-                    <td style="font-weight:bold;">$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}</td>
+                    <td><span style="${estiloEstado}">${f.estado || 'Emitida'}</span></td>
+                    <td style="font-weight:bold;">${textoTotal}</td>
                     <td class="acciones">
-                        <button class="btn-primary" onclick="window.app.verFactura('${doc.id}')">🖨️ Ver Detalle</button>
+                        ${botones}
                     </td>
                 </tr>`;
         });
@@ -280,8 +357,11 @@ export async function verFactura(facturaId) {
         const f = doc.data();
         const items = f.items || [];
         
-        // Recalculamos totales AUXILIARES para el pie de página (solo items cobrados)
-        // Opcional: Si quieres mostrar totales teóricos, cambia r.totalViaje por r.totalTeorico
+        // Marca de agua si está anulada
+        const watermark = f.estado === 'Anulada' 
+            ? `<div style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%) rotate(-45deg); font-size:100px; color:rgba(255,0,0,0.1); font-weight:bold; z-index:9999; pointer-events:none;">ANULADA</div>` 
+            : '';
+
         const totalEsperas = items.reduce((sum, item) => sum + (item.espera || 0), 0);
         const totalPeajes = items.reduce((sum, item) => sum + (item.montoPeaje || 0), 0);
 
@@ -306,10 +386,12 @@ export async function verFactura(facturaId) {
             </style>
         </head>
         <body>
+            ${watermark}
             <div class="header">
                 <div class="logo">Premier Traslados</div>
                 <div class="info-factura">
                     <strong>Liquidación de Servicios</strong><br>
+                    Estado: <strong>${f.estado || 'Emitida'}</strong><br>
                     Fecha Emisión: ${f.fecha_emision}<br>
                     Período: ${f.periodo.desde} al ${f.periodo.hasta}<br>
                     ID Ref: ${doc.id.slice(0, 8)}...
@@ -344,12 +426,10 @@ export async function verFactura(facturaId) {
             let claseEstado = '';
             let textoTotal = `$ ${item.totalViaje.toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
 
-            // Si vale 0 pero teóricamente valía más, mostramos la diferencia visual
             if (item.totalViaje === 0 && item.totalTeorico > 0) {
-                claseEstado = 'estado-neutro'; // Gris para anulados/debitados
+                claseEstado = 'estado-neutro'; 
                 textoTotal = `<span style="text-decoration:line-through; font-size:9px;">$${item.totalTeorico}</span><br>$ 0.00`;
-                
-                if (est === 'Negativo') claseEstado = 'estado-negativo'; // Rojo para negativos no cobrados
+                if (est === 'Negativo') claseEstado = 'estado-negativo'; 
             }
 
             htmlContent += `
@@ -379,6 +459,7 @@ export async function verFactura(facturaId) {
 
             <div class="footer">
                 Documento generado electrónicamente por Sistema Premier Traslados - ${new Date().toLocaleString()}
+                ${f.estado === 'Anulada' ? `<br><strong style="color:red">DOCUMENTO ANULADO: ${f.motivo_anulacion || ''}</strong>` : ''}
             </div>
 
             <script>window.onload = function() { window.print(); }</script>

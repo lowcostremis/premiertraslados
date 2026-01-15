@@ -19,7 +19,8 @@
     "algoliasearch": "^4.23.3",
     "firebase-admin": "^12.1.1",
     "firebase-functions": "^5.0.1",
-    "googleapis": "^168.0.0"
+    "googleapis": "^168.0.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0"
