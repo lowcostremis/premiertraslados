@@ -1,7 +1,7 @@
 // js/reservas.js - VERSIÓN INTEGRAL: PRODUCCIÓN + AUDITORÍA COMPLETA (TRAZABILIDAD)
 import { db, functions, reservasSearchIndex } from './firebase-config.js';
 import { hideMapContextMenu, getModalMarkerCoords } from './mapa.js';
-
+import { PDFDocument } from 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
 
 document.addEventListener('DOMContentLoaded', () => {
      conectarSeleccionMultiple(); 
@@ -774,70 +774,128 @@ export async function manejarImportacionExcel(event, clienteIdForzado) { // <---
     reader.readAsArrayBuffer(file);
 }
 
-export async function manejarImportacionPDF(event, clienteIdForzado) { // <--- Recibe clienteIdForzado
-    const file = event.target.files[0]; if(!file) return;
-    const fecha = prompt("Fecha del servicio (YYYY-MM-DD):", new Date().toISOString().split('T')[0]); 
-    if(!fecha) return;
+// --- REEMPLAZAR LA FUNCIÓN manejarImportacionPDF EXISTENTE POR ESTA ---
+async function guardarReservasEnLote(reservas, clienteIdForzado) {
+    if (!reservas || reservas.length === 0) return;
     
-    actualizarProgreso("Analizando PDF...", 20);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const res = await functions.httpsCallable('interpretarPDFIA')({ pdfBase64: e.target.result.split(',')[1], fechaSeleccionada: fecha });
-            if(res.data.reservas) {
-                // Pasamos el ID forzado a la función de guardado
-                await guardarReservasEnLote(res.data.reservas, clienteIdForzado);
-            }
-            ocultarProgreso();
-            document.getElementById('input-pdf').value = ''; 
-        } catch(err) { alert(err.message); ocultarProgreso(); }
-    };
-    reader.readAsDataURL(file);
-}
-
-async function guardarReservasEnLote(list, clienteIdForzado) { // <--- Recibe clienteIdForzado
-    const batchLimit = 400; 
+    const batch = db.batch();
+    let count = 0;
     const operador = window.currentUserEmail || 'Sistema';
     const ahora = new Date().toLocaleString('es-AR');
-    let batch = db.batch(), count = 0;
 
-    // Buscamos el nombre del cliente para el log (solo visual)
-    const nombreCliente = (window.appCaches.clientes && window.appCaches.clientes[clienteIdForzado]) 
-                          ? window.appCaches.clientes[clienteIdForzado].nombre 
-                          : 'Cliente Seleccionado';
-
-    for (let i = 0; i < list.length; i++) {
-        const r = list[i];
-        
-        // AQUÍ ESTÁ LA SOLUCIÓN:
-        // Ya no buscamos en caché ni adivinamos. Usamos directamente lo que Javi seleccionó.
-        let cId = clienteIdForzado; 
-
-        batch.set(db.collection('reservas').doc(), {
-            ...r, 
-            cliente: cId, // <--- ID SEGURO
-            cliente_nombre: nombreCliente, // <--- Nombre visual
-            log: `📥 Importado por: ${operador} para ${nombreCliente}, via IA, (${ahora})`,
-            estado: { principal: 'Revision', detalle: 'Importado IA', actualizado_en: new Date() },
-            creadoEn: new Date(), 
-            cantidad_pasajeros: String(r.cantidad_pasajeros || '1'), 
-            es_exclusivo: false
-        });
-
-        if (++count >= batchLimit || i === list.length - 1) { 
-            await batch.commit(); 
-            batch = db.batch(); 
-            count = 0; 
-        }
+    // Obtenemos nombre del cliente si tenemos cache, sino genérico
+    let nombreCliente = "Cliente Importado";
+    if (clienteIdForzado && window.appCaches && window.appCaches.clientes && window.appCaches.clientes[clienteIdForzado]) {
+        nombreCliente = window.appCaches.clientes[clienteIdForzado].nombre;
     }
-    actualizarProgreso("¡Finalizado!", 100); 
-    setTimeout(() => {
-        ocultarProgreso();
-        // Disparamos clic en la pestaña para refrescar la vista
-        document.querySelector('button[data-tab="importadas"]')?.click();
-    }, 1500);
+
+    reservas.forEach(reserva => {
+        const docRef = db.collection('reservas').doc(); // ID automático
+        
+        // Forzamos el cliente seleccionado en el dropdown
+        if (clienteIdForzado) {
+            reserva.cliente = clienteIdForzado;
+            reserva.cliente_nombre = nombreCliente;
+        }
+
+        // Sanitización básica
+        const nuevaReserva = {
+            ...reserva,
+            origen_dato: 'PDF Importado',
+            creadoEn: new Date(), // Usar Date del cliente para evitar conflictos de timestamp en batch
+            estado: { 
+                principal: 'Revision', 
+                detalle: 'Esperando confirmación', 
+                actualizado_en: new Date() 
+            },
+            log: `📄 Importado desde PDF por ${operador} (${ahora})`
+        };
+
+        batch.set(docRef, nuevaReserva);
+        count++;
+    });
+
+    await batch.commit();
+    console.log(`Guardadas ${count} reservas correctamente.`);
 }
 
+export async function manejarImportacionPDF(event, clienteIdForzado) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const fecha = prompt("Fecha del servicio (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+    if (!fecha) {
+        document.getElementById('input-pdf').value = ''; // Limpiar input si cancela
+        return;
+    }
+
+    try {
+        actualizarProgreso("⏳ Preparando archivo...", 5);
+        
+        // 1. Cargar el PDF con la librería pdf-lib
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await PDFDocument.load(arrayBuffer);
+        const totalPaginas = pdfDoc.getPageCount();
+        const TAMANO_LOTE = 5; // Páginas por lote
+
+        let todasLasReservas = [];
+        let lotesProcesados = 0;
+        const totalLotes = Math.ceil(totalPaginas / TAMANO_LOTE);
+
+        // 2. Procesar por lotes
+        for (let i = 0; i < totalPaginas; i += TAMANO_LOTE) {
+            const paginaInicio = i + 1;
+            const paginaFin = Math.min(i + TAMANO_LOTE, totalPaginas);
+            
+            actualizarProgreso(`🔄 Analizando páginas ${paginaInicio} a ${paginaFin} (Lote ${lotesProcesados + 1}/${totalLotes})...`, 
+                10 + ((lotesProcesados / totalLotes) * 80));
+
+            // Crear un sub-PDF solo con estas páginas
+            const subPdf = await PDFDocument.create();
+            // Obtenemos los índices (0-based)
+            const indices = [];
+            for (let j = 0; j < TAMANO_LOTE && (i + j) < totalPaginas; j++) {
+                indices.push(i + j);
+            }
+            
+            const copiedPages = await subPdf.copyPages(pdfDoc, indices);
+            copiedPages.forEach(page => subPdf.addPage(page));
+            
+            // Convertir a Base64 para enviar a la Cloud Function
+            const subPdfBase64 = await subPdf.saveAsBase64();
+
+            // Llamada a la IA con el fragmento
+            const res = await functions.httpsCallable('interpretarPDFIA')({ 
+                pdfBase64: subPdfBase64, 
+                fechaSeleccionada: fecha 
+            });
+
+            if (res.data.reservas && Array.isArray(res.data.reservas)) {
+                todasLasReservas = [...todasLasReservas, ...res.data.reservas];
+            }
+            
+            lotesProcesados++;
+        }
+
+        // 3. Guardar todo junto
+        if (todasLasReservas.length > 0) {
+            actualizarProgreso("💾 Guardando todas las reservas...", 95);
+            await guardarReservasEnLote(todasLasReservas, clienteIdForzado);
+            actualizarProgreso("¡Finalizado!", 100);
+        } else {
+            alert("La IA no encontró reservas en ninguna página.");
+            ocultarProgreso();
+        }
+
+    } catch (err) {
+        console.error(err);
+        alert("Error en el procesamiento por lotes: " + err.message);
+        ocultarProgreso();
+    } finally {
+        document.getElementById('input-pdf').value = ''; 
+        setTimeout(ocultarProgreso, 2000);
+    }
+}
 
 // --- ACCIONES MASIVAS (BORRAR O ANULAR) ---
 export async function ejecutarAccionMasiva(accion, ids) {

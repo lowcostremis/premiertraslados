@@ -469,17 +469,7 @@ function initApp() {
         finally { btn.textContent = '✉️ Importar Gmail'; btn.disabled = false; }
     });
 
-    const btnImportarPDF = document.getElementById('btn-importar-pdf');
-    const inputPDF = document.getElementById('input-pdf');
-    if (btnImportarPDF && inputPDF) {
-        btnImportarPDF.addEventListener('click', () => inputPDF.click());
-        inputPDF.addEventListener('change', async (e) => {
-            if (e.target.files.length > 0) {
-                const { manejarImportacionPDF } = await import('./reservas.js');
-                manejarImportacionPDF(e);
-            }
-        });
-    }
+    
 
     document.getElementById('btn-nueva-reserva')?.addEventListener('click', () => {
         document.getElementById('reserva-form').reset();

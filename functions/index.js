@@ -13,6 +13,7 @@ const { onDocumentWritten, onDocumentUpdated, onDocumentDeleted } = require("fir
 const { google } = require("googleapis"); 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const XLSX = require("xlsx");
+const { PDFDocument } = require("pdf-lib");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -409,51 +410,111 @@ function parsearRespuestaGemini(textoCrudo) {
 }
 
 // PROMPT MAESTRO: Estandariza todo (Gmail, Excel, PDF)
+// --- PROMPT MAESTRO MEJORADO CON SOPORTE DE FRAGMENTACIÓN PDF ---
 async function analizarCorreoConGemini(asunto, cuerpo, adjuntos) {
-    const prompt = `
-        Actúa como operador logístico experto. Extrae datos de viajes y devuélvelos en JSON estricto.
-        
-        INPUT: 
-        - Contexto/Asunto: "${asunto}"
-        - Contenido: "${cuerpo.substring(0, 8000)}"
-        - Fecha de Hoy: ${new Date().toISOString().split('T')[0]}
+    console.log(`🤖 Analizando con IA: ${asunto}`);
 
-        REGLAS OBLIGATORIAS DE SALIDA:
-        1. Devuelve SOLAMENTE un objeto JSON con la estructura: { "reservas": [ ... ] }
-        2. Mapea los datos a estas claves EXACTAS (no uses nombres de columnas originales):
-           - "fecha_turno": Formato YYYY-MM-DD. Si no hay año, usa el actual.
-           - "hora_turno": Formato HH:MM (24hs).
-           - "hora_pickup": Formato HH:MM (24hs). Si no existe, usa la hora_turno.
-           - "nombre_pasajero": Nombre completo del pasajero.
-           - "telefono_pasajero": Solo números (ej: 341...).
-           - "origen": Dirección de partida completa (Calle, Número, Localidad). Si hay múltiples, únelos con " + ".
-           - "destino": Dirección de destino completa.
-           - "cliente": Nombre de la empresa, obra social o "PARTICULARES".
-           - "observaciones": Notas relevantes, acompañantes, tipo de vehículo solicitado.
-           - "siniestro": Número de siniestro (si aplica).
-           - "autorizacion": Número de autorización (si aplica).
-           - "cantidad_pasajeros": Número entero (default 1).
-           - "es_exclusivo": true/false (default false).
-           "- 'espera_total': Número (horas de espera si figuran en el documento)."
-           "- 'espera_sin_cargo': Número (horas sin cargo si figuran)."
-           "- 'duracion_estimada_minutos': Número entero (si el documento indica duración del viaje)."
-        
-        3. Limpieza:
-           - Si el teléfono tiene guiones, quítalos.
-           - Si la localidad no está explícita pero es obvia (ej: Rosario), agrégala.
-           - Ignora filas totalmente vacías o encabezados de tabla.
-    `;
-    
-    const model = new GoogleGenerativeAI(process.env.GEMINI_API_KEY).getGenerativeModel({ 
+    // Configuración del Modelo
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ 
         model: "gemini-2.0-flash",
         generationConfig: { responseMimeType: "application/json" }
     });
 
-    const parts = [prompt];
+    const PROMPT_BASE = `
+        Actúa como un experto en logística y auditoría de traslados médicos (ART). 
+        Tu misión es extraer datos de viajes y devolverlos en JSON estricto.
+        
+        INPUT: 
+        - Contexto: "${asunto}"
+        - Fecha Referencia: ${new Date().toISOString().split('T')[0]}
+
+        REGLAS DE EXTRACCIÓN (CRÍTICO):
+        1. **DNI**: Busca números de 7-8 dígitos cerca del nombre del pasajero.
+        2. **Siniestro**: Número de 7 dígitos (ej: 2940055). Vital.
+        3. **Autorización**: Formato numérico con barra (ej: 4786594/15).
+        4. **Observaciones**: Busca "Muletas", "Silla de ruedas", "Acompañante".
+        5. **REGLA DE ORO (Descarte)**: Si encuentras información relevante (teléfonos extra, notas médicas, horarios confusos, condiciones raras) y NO sabes en qué campo ponerla, AGRÉGALA AL CAMPO "observaciones". No descartes nada útil.
+
+        SALIDA JSON OBLIGATORIA:
+        { "reservas": [ 
+            {
+                "fecha_turno": "YYYY-MM-DD",
+                "hora_turno": "HH:MM",
+                "nombre_pasajero": "Texto",
+                "dni_pasajero": "Solo números",
+                "origen": "Dirección completa",
+                "destino": "Dirección completa",
+                "siniestro": "Texto",
+                "autorizacion": "Texto",
+                "observaciones": "Texto (Aquí va todo lo extra)"
+            } 
+        ] }
+    `;
+
+    // 1. ESTRATEGIA DE FRAGMENTACIÓN DE PDF (Backend)
+    // Si detectamos un PDF grande, lo dividimos y llamamos a la IA varias veces.
+    let todasLasReservas = [];
+    const archivoPDF = adjuntos ? adjuntos.find(a => a.inlineData.mimeType === 'application/pdf') : null;
+
+    if (archivoPDF) {
+        try {
+            // Convertimos base64 a Buffer y cargamos con pdf-lib
+            const pdfBuffer = Buffer.from(archivoPDF.inlineData.data, 'base64');
+            const pdfDoc = await PDFDocument.load(pdfBuffer);
+            const totalPaginas = pdfDoc.getPageCount();
+            
+            console.log(`📄 PDF detectado con ${totalPaginas} páginas.`);
+
+            if (totalPaginas > 5) {
+                console.log("✂️ PDF grande: Iniciando fragmentación en lotes de 5...");
+                const TAMANO_LOTE = 5;
+
+                for (let i = 0; i < totalPaginas; i += TAMANO_LOTE) {
+                    // Crear sub-documento
+                    const subPdf = await PDFDocument.create();
+                    const indices = [];
+                    for (let j = 0; j < TAMANO_LOTE && (i + j) < totalPaginas; j++) {
+                        indices.push(i + j);
+                    }
+                    const copiedPages = await subPdf.copyPages(pdfDoc, indices);
+                    copiedPages.forEach(page => subPdf.addPage(page));
+                    
+                    const subBase64 = await subPdf.saveAsBase64();
+                    
+                    // Llamar a Gemini con este fragmento
+                    const fragmentPart = { inlineData: { data: subBase64, mimeType: "application/pdf" } };
+                    const result = await model.generateContent([PROMPT_BASE, fragmentPart]);
+                    const jsonRes = parsearRespuestaGemini(result.response.text());
+                    
+                    if (jsonRes.reservas) {
+                        todasLasReservas = [...todasLasReservas, ...jsonRes.reservas];
+                    }
+                }
+                
+                // Retornamos el acumulado de todos los fragmentos
+                return { reservas: todasLasReservas };
+
+            } 
+            // Si es corto (<= 5 páginas), procesamos normal abajo...
+        } catch (e) {
+            console.error("⚠️ Error manipulando PDF en backend:", e);
+            // Si falla la fragmentación, intentamos procesarlo entero como fallback
+        }
+    }
+
+    // 2. PROCESAMIENTO ESTÁNDAR (Sin PDF o PDF corto)
+    const parts = [PROMPT_BASE];
+    if (cuerpo) parts.push(`Contenido Email: ${cuerpo.substring(0, 8000)}`);
     if (adjuntos && adjuntos.length > 0) parts.push(...adjuntos);
-    
-    const res = await model.generateContent(parts);
-    return parsearRespuestaGemini(res.response.text());
+
+    try {
+        const res = await model.generateContent(parts);
+        return parsearRespuestaGemini(res.response.text());
+    } catch (error) {
+        console.error("❌ Error Generando Contenido IA:", error);
+        return { reservas: [] }; 
+    }
 }
     
 // --- GMAIL MANUAL ---
