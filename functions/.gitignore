@@ -19,7 +19,7 @@ firebase-debug.log
 .vscode/
 .idea/
 
-# Archivos de configuración secretos (¡ESTO ES LO QUE PROTEGE TUS CLAVES!)
+# Archivos de configuración secretos (¡ESTO ES LO QUE PROTEGE TUS CLAVES!)#
 .env
 .runtimeconfig.json
 firebase-debug.log

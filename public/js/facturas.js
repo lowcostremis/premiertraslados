@@ -1,6 +1,26 @@
 import { db } from './firebase-config.js';
 import { obtenerValorPeaje } from './tarifas.js';
 
+function desglosarDireccion(str) {
+    if (!str) return { calle: '', nro: '', localidad: '' };
+    
+    // Separamos por la primera coma
+    const partes = str.split(',');
+    const calleNro = partes[0].trim();
+    const localidad = partes[1] ? partes[1].trim() : '';
+
+    // Buscamos si termina en números (la altura)
+    const match = calleNro.match(/(.*?)\s(\d+)$/);
+    
+    if (match) {
+        return { calle: match[1], nro: match[2], localidad };
+    }
+    // Si no hay número (ej: "Ruta 21"), va todo a calle
+    return { calle: calleNro, nro: '', localidad };
+}
+
+
+
 let reservasEnPrevia = []; 
 
 export function initFacturacion() {
@@ -9,7 +29,14 @@ export function initFacturacion() {
 
     if (btnBuscar) btnBuscar.onclick = () => buscarReservasParaFacturar();
     if (btnEmitir) btnEmitir.onclick = () => emitirFactura();
+
+    // Exponer las funciones al objeto global para que los onclick funcionen
+    window.app = window.app || {};
+    window.app.exportarExcelFactura = exportarExcelFactura;
+    window.app.verFactura = verFactura;
+    window.app.anularFactura = anularFactura;
 }
+
 
 async function buscarReservasParaFacturar() {
     const clienteId = document.getElementById('fact-cliente-select').value;
@@ -300,33 +327,29 @@ export async function cargarFacturasEmitidas() {
         }
 
         let html = '<div class="table-wrapper"><table><thead><tr><th>Cliente</th><th>Período</th><th>Emisión</th><th>Estado</th><th>Total</th><th>Acciones</th></tr></thead><tbody>';
-
         snapshot.forEach(doc => {
             const f = doc.data();
             const esAnulada = f.estado === 'Anulada';
             
-            // Estilos según estado
-            const estiloEstado = esAnulada 
-                ? 'background:#ffebee; color:#c62828; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold;' 
-                : 'background:#e8f5e9; color:#2e7d32; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold;';
+            // Definir variables de estilo
+            const estiloFila = esAnulada ? 'opacity: 0.6; background-color: #fff5f5;' : '';
+            const estiloEstado = esAnulada ? 'color: #dc3545; font-weight: bold;' : 'color: #28a745; font-weight: bold;';
+            const textoTotal = `$ ${(f.total_final || 0).toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
             
-            const estiloFila = esAnulada ? 'opacity: 0.6; background-color: #f9f9f9;' : '';
-            const textoTotal = esAnulada 
-                ? `<span style="text-decoration:line-through;">$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}</span>` 
-                : `$ ${f.total_final.toLocaleString('es-AR', {minimumFractionDigits: 2})}`;
+            // Definir botones
+            const btnExcel = `<button class="btn-acciones excel" onclick="window.app.exportarExcelFactura('${doc.id}')" style="background-color: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left:5px;">📊 Excel</button>`;
 
-            // Botones de acción
             let botones = `<button class="btn-primary" onclick="window.app.verFactura('${doc.id}')" style="padding: 4px 8px; font-size: 11px;">🖨️ Ver</button>`;
-            
+            botones += ` ${btnExcel}`;
+
+            // Lógica corregida (SIN LLAVE EXTRA)
             if (!esAnulada) {
-                // Botón REFACTURAR (Anular y Regenerar)
                 botones += ` <button onclick="window.app.anularFactura('${doc.id}', '${f.cliente_id}', '${f.periodo.desde}', '${f.periodo.hasta}')" 
-                             style="background-color: #ff9800; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left:5px;" 
-                             title="Anular esta factura y generar una nueva con datos corregidos">
+                             style="background-color: #ff9800; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left:5px;">
                              ♻️ Refacturar
                              </button>`;
             } else {
-                botones += ` <span style="font-size:10px; color:red; margin-left:5px;" title="${f.motivo_anulacion || ''}">(Anulada)</span>`;
+                botones += ` <span style="font-size:10px; color:red; margin-left:5px;">(Anulada)</span>`;
             }
 
             html += `
@@ -336,11 +359,10 @@ export async function cargarFacturasEmitidas() {
                     <td>${f.fecha_emision}</td>
                     <td><span style="${estiloEstado}">${f.estado || 'Emitida'}</span></td>
                     <td style="font-weight:bold;">${textoTotal}</td>
-                    <td class="acciones">
-                        ${botones}
-                    </td>
+                    <td class="acciones">${botones}</td>
                 </tr>`;
         });
+
         html += '</tbody></table></div>';
         container.innerHTML = html;
     } catch (error) {
@@ -476,3 +498,59 @@ export async function verFactura(facturaId) {
         alert("Error al generar la impresión.");
     }
 }
+
+export async function exportarExcelFactura(facturaId) {
+    try {
+        // CORRECCIÓN: La colección es 'facturas'
+        const doc = await db.collection('facturas').doc(facturaId).get();
+        if (!doc.exists) return alert("No se encontró la factura.");
+        const f = doc.data();
+
+        const dataExcel = f.items.map(item => {
+            const ori = desglosarDireccion(item.origen);
+            const des = desglosarDireccion(item.destino);
+            
+            // Comparamos localidades para clasificar
+            const esUrbano = ori.localidad.toLowerCase().trim() === des.localidad.toLowerCase().trim();
+            
+            return {
+                "N° de Autorización": item.autorizacion || '',
+                "Fecha del traslado": item.fecha_turno, // Corregido
+                "N° de Siniestro": item.siniestro || '',
+                "Apellido y Nombre Pasajero": item.nombre_pasajero, // Corregido
+                "Calle Origen Recorrido": ori.calle,
+                "N° Calle Origen Recorrido": ori.nro,
+                "Localidad Origen": ori.localidad,
+                "Calle Destino Recorrido": des.calle,
+                "N° Calle Destino Recorrido": des.nro,
+                "Localidad Destino": des.localidad,
+                "Importe Traslado Urbano ($)": esUrbano ? item.totalViaje : 0, // Corregido
+                "Importe Traslado Interurbano ($)": !esUrbano ? item.totalViaje : 0, // Corregido
+                "Importe Espera ($)": item.espera || 0,
+                "Gastos Varios en Pesos (peaje, estacionam.)": (item.montoPeaje || 0),
+                "Importe Total Traslado ($)": item.totalViaje, // Corregido
+                "Observaciones": item.observaciones || ''
+            };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(dataExcel);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Factura");
+        
+        XLSX.writeFile(wb, `Planilla_Marti_${f.cliente_nombre}_${facturaId.slice(0,5)}.xlsx`);
+        
+        
+        
+    
+
+    } catch (error) {
+        console.error("Error al exportar:", error);
+        alert("Error al generar el Excel.");
+    }
+}
+// --- AGREGAR ESTO AL FINAL DEL ARCHIVO PARA FORZAR LA EXPOSICIÓN GLOBAL ---
+window.app = window.app || {};
+window.app.exportarExcelFactura = exportarExcelFactura;
+window.app.verFactura = verFactura;
+window.app.anularFactura = anularFactura;
+console.log("✅ Funciones de facturación cargadas correctamente en window.app");

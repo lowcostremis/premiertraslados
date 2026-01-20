@@ -366,35 +366,71 @@ exports.notificarCancelacionDeReserva = onDocumentDeleted("reservas/{id}", async
 // 7. INTELIGENCIA ARTIFICIAL (MOTOR CENTRAL ESTANDARIZADO)
 // ===================================================================================
 
+// ===================================================================================
+// FUNCIONES AUXILIARES (Pega esto al final de index.js)
+// ===================================================================================
+
+// 1. Extraer texto limpio del cuerpo del correo
 function extractBody(payload) {
     if (!payload) return "";
-    let encodedBody = '';
-    if (payload.body && payload.body.data) encodedBody = payload.body.data;
-    else if (payload.parts) {
-        const part = payload.parts.find(p => p.mimeType === 'text/plain') || payload.parts.find(p => p.mimeType === 'text/html') || payload.parts[0];
-        if (part && part.body && part.body.data) encodedBody = part.body.data;
+    let body = "";
+    if (payload.body && payload.body.data) {
+        body = Buffer.from(payload.body.data, 'base64').toString('utf-8');
+    } else if (payload.parts) {
+        for (const part of payload.parts) {
+            if (part.mimeType === 'text/plain') {
+                if (part.body && part.body.data) {
+                    body += Buffer.from(part.body.data, 'base64').toString('utf-8');
+                }
+            } else if (part.mimeType === 'multipart/alternative') {
+                body += extractBody(part);
+            }
+        }
     }
-    return encodedBody ? Buffer.from(encodedBody, 'base64url').toString('utf-8') : "";
+    return body;
 }
 
-async function obtenerAdjuntos(gmail, messageId, payload) {
-    const adjuntos = [];
+// 2. Descargar adjuntos (PDF/Excel)
+async function obtenerAdjuntos(gmail, msgId, payload) {
+    let adjuntos = [];
     if (!payload.parts) return adjuntos;
-    const buscar = async (partes) => {
-        for (const p of partes) {
-            if (p.filename && p.body && p.body.attachmentId) {
-                if (p.mimeType === 'application/pdf' || p.mimeType.includes('spreadsheet') || p.mimeType.includes('excel') || p.mimeType.includes('csv')) {
+    
+    // Función recursiva para buscar adjuntos en partes anidadas
+    async function buscarEnPartes(partes) {
+        for (const part of partes) {
+            if (part.filename && part.body && part.body.attachmentId) {
+                const esPDF = part.mimeType === 'application/pdf';
+                const esExcel = part.mimeType.includes('sheet') || part.mimeType.includes('excel');
+                
+                if (esPDF || esExcel) {
                     try {
-                        const att = await gmail.users.messages.attachments.get({ userId: 'me', messageId, id: p.body.attachmentId });
-                        if (att.data.data) adjuntos.push({ inlineData: { data: att.data.data, mimeType: p.mimeType } });
-                        console.log(`📎 Adjunto: ${p.filename}`);
-                    } catch (e) { console.error(`Err adjunto ${p.filename}`, e); }
+                        const att = await gmail.users.messages.attachments.get({
+                            userId: 'me',
+                            messageId: msgId,
+                            id: part.body.attachmentId
+                        });
+                        
+                        if(att.data.data) {
+                            adjuntos.push({
+                                inlineData: {
+                                    data: att.data.data,
+                                    mimeType: part.mimeType
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Error bajando adjunto:", part.filename, e);
+                    }
                 }
             }
-            if (p.parts) await buscar(p.parts);
+            // Si tiene sub-partes, buscar ahí también
+            if (part.parts) {
+                await buscarEnPartes(part.parts);
+            }
         }
-    };
-    await buscar(payload.parts);
+    }
+
+    await buscarEnPartes(payload.parts);
     return adjuntos;
 }
 
@@ -433,8 +469,27 @@ async function analizarCorreoConGemini(asunto, cuerpo, adjuntos) {
         1. **DNI**: Busca números de 7-8 dígitos cerca del nombre del pasajero.
         2. **Siniestro**: Número de 7 dígitos (ej: 2940055). Vital.
         3. **Autorización**: Formato numérico con barra (ej: 4786594/15).
-        4. **Observaciones**: Busca "Muletas", "Silla de ruedas", "Acompañante".
-        5. **REGLA DE ORO (Descarte)**: Si encuentras información relevante (teléfonos extra, notas médicas, horarios confusos, condiciones raras) y NO sabes en qué campo ponerla, AGRÉGALA AL CAMPO "observaciones". No descartes nada útil.
+        
+        4. **Teléfono Principal**: 
+           - Busca el teléfono "oficial" del paciente (generalmente en encabezados o junto al DNI) y ponlo en 'telefono_pasajero'.
+        
+        5. **Observaciones (NO TOCAR CONTEXTO)**: 
+           - Busca palabras clave: "Muletas", "Bota", "Silla de ruedas", "FKT", "Fisiokinesio", "Solicita paciente".
+           - **REGLA DE PROTECCIÓN**: Si encuentras un número de teléfono AQUÍ mezclado con texto, **DÉJALO ESCRITO EN OBSERVACIONES**. No lo muevas ni lo borres.
+
+        6. **REGLA DE ORO (Descarte)**: Todo dato útil sobrante va a observaciones.
+
+        7. **Empresa/Cliente (DISTINCIÓN OBLIGATORIA)**: 
+           - Identifica la aseguradora y diferencia geográficamente:
+           - **CASO SAN NICOLAS**: Si detectas las siglas "SN", "S.N." o la mención "San Nicolas", el nombre DEBE ser:
+             * "Prevencion ART San Nicolas"
+             * "La Segunda San Nicolas"
+           - **CASO GENERAL**: Si NO existe ninguna mención a San Nicolas, usa el nombre estándar:
+             * "Prevencion ART"
+             * "La Segunda"
+           - Si el texto es ambiguo, prioriza el contexto del remitente o las direcciones de origen/destino para decidir.
+
+       
 
         SALIDA JSON OBLIGATORIA:
         { "reservas": [ 
@@ -443,11 +498,13 @@ async function analizarCorreoConGemini(asunto, cuerpo, adjuntos) {
                 "hora_turno": "HH:MM",
                 "nombre_pasajero": "Texto",
                 "dni_pasajero": "Solo números",
+                "telefono_pasajero": "Texto", 
                 "origen": "Dirección completa",
                 "destino": "Dirección completa",
                 "siniestro": "Texto",
                 "autorizacion": "Texto",
-                "observaciones": "Texto (Aquí va todo lo extra)"
+                "cliente_nombre_ia": "Nombre normalizado (ej: Prevencion ART San Nicolas)",
+                "observaciones": "Texto completo"
             } 
         ] }
     `;
@@ -516,94 +573,132 @@ async function analizarCorreoConGemini(asunto, cuerpo, adjuntos) {
         return { reservas: [] }; 
     }
 }
+
+
+// ===================================================================================
+// OPTIMIZACIÓN GMAIL: MOTOR UNIFICADO (REEMPLAZA A TUS 3 FUNCIONES ANTERIORES)
+// ===================================================================================
+
+// 1. Helper de Conexión (Para no repetir credenciales)
+function getGmailClient() {
+    const oauth2Client = new google.auth.OAuth2(
+        process.env.GMAIL_CLIENT_ID,
+        process.env.GMAIL_CLIENT_SECRET,
+        process.env.GMAIL_REDIRECT_URI
+    );
+    oauth2Client.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
+    return google.gmail({ version: 'v1', auth: oauth2Client });
+}
+
+// 2. Motor Lógico Central (Hace todo el trabajo sucio)
+
+async function procesarBandejaEntrada(origen) {
+    const gmail = getGmailClient();
     
-// --- GMAIL MANUAL ---
-exports.procesarReservasGmail = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (r) => {
-    if (!r.auth) throw new HttpsError('unauthenticated', 'Login.');
-    if (!process.env.GMAIL_CLIENT_ID) throw new HttpsError('internal', 'Credenciales.');
+    // 1. OBTENER LISTA DE CLIENTES REALES PARA COMPARAR
+    const clientesSnapshot = await db.collection('clientes').get();
+    const mapaClientes = {};
+    
+    clientesSnapshot.forEach(doc => {
+        const d = doc.data();
+        if (d.nombre) {
+            // Guardamos el nombre en minúsculas y sin espacios para un match perfecto
+            const nombreNormalizado = d.nombre.toLowerCase().trim();
+            mapaClientes[nombreNormalizado] = doc.id;
+        }
+    });
+    
+    const list = await gmail.users.messages.list({ 
+        userId: 'me', 
+        q: 'is:unread', 
+        maxResults: 10 
+    });
+    
+    const msgs = list.data.messages || [];
+    if (msgs.length === 0) return { procesados: 0, mensaje: "Sin correos nuevos." };
 
-    const auth = new google.auth.OAuth2(process.env.GMAIL_CLIENT_ID, process.env.GMAIL_CLIENT_SECRET, process.env.GMAIL_REDIRECT_URI);
-    auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
-    const gmail = google.gmail({ version: 'v1', auth });
+    let count = 0;
+    let batch = db.batch();
+    
+    const filtro = /R[eé]+s[eé]*r|V[ia]+je|P[eé]did|S[oó]lic|Aut[oó]ri|Traslad|RDT/i;
+    const negativo = /Alerta|Security|Google|Verificación/i;
 
-    try {
-        const list = await gmail.users.messages.list({ userId: 'me', q: 'is:unread' });
-        const msgs = list.data.messages || [];
-        if (msgs.length === 0) return { message: "Sin correos." };
-
-        let total = 0, batch = db.batch(), count = 0;
-        const filtro = /R[eé]+s[eé]*r|V[ia]+je|P[eé]did|S[oó]lic|Aut[oó]ri|Traslad|RDT/i;
-        const negativo = /Alerta|Security|Google|Verificación/i;
-
-        for (const m of msgs) {
+    for (const m of msgs) {
+        try {
             const d = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'full' });
             const subj = d.data.payload.headers.find(h => h.name === 'Subject')?.value || '';
-            
-            if (!filtro.test(subj) || negativo.test(subj)) continue;
+
+            if (!filtro.test(subj) || negativo.test(subj)) {
+                await gmail.users.messages.modify({ userId: 'me', id: m.id, requestBody: { removeLabelIds: ['UNREAD'] } });
+                continue;
+            }
 
             const body = extractBody(d.data.payload);
             const adjs = await obtenerAdjuntos(gmail, m.id, d.data.payload);
-            
+
             if (!body.trim() && adjs.length === 0) continue;
 
-            try {
-                const ia = await analizarCorreoConGemini(subj, body, adjs);
-                const list = ia.reservas || [];
-                for (const item of list) {
-                    batch.set(db.collection('reservas').doc(), { ...item, origen_dato: 'Gmail Manual', email_id: m.id, estado: { principal: 'Revision', detalle: `Importado: ${subj}`, actualizado_en: new Date() }, creadoEn: new Date() });
-                    total++; count++;
-                }
-                await gmail.users.messages.modify({ userId: 'me', id: m.id, requestBody: { removeLabelIds: ['UNREAD'] } });
-                if (count >= 400) { await batch.commit(); batch = db.batch(); count = 0; }
-            } catch (e) { console.error(`Error procesando email ${m.id}:`, e); }
+            const ia = await analizarCorreoConGemini(subj, body, adjs);
+            
+            if (ia.reservas && ia.reservas.length > 0) {
+                ia.reservas.forEach(res => {
+                    const docRef = db.collection('reservas').doc();
+                    
+                    // 2. LÓGICA DE MATCH (EL "CEREBRO")
+                    let clienteIdFinal = null;
+                    if (res.cliente_nombre_ia) {
+                        const buscado = res.cliente_nombre_ia.toLowerCase().trim();
+                        // Si el nombre normalizado que dio la IA coincide con uno de la DB, asignamos el ID
+                        if (mapaClientes[buscado]) {
+                            clienteIdFinal = mapaClientes[buscado];
+                        }
+                    }
+
+                    batch.set(docRef, {
+                        ...res,
+                        cliente: clienteIdFinal, // Aquí se guarda el ID de Firebase (ej: ABC123xyz)
+                        origen_dato: `Gmail (${origen})`,
+                        email_id: m.id,
+                        estado: { 
+                            principal: 'Revision', 
+                            detalle: `Importado: ${subj}`, 
+                            actualizado_en: new Date() 
+                        },
+                        creadoEn: new Date()
+                    });
+                    count++;
+                });
+            }
+
+            await gmail.users.messages.modify({ userId: 'me', id: m.id, requestBody: { removeLabelIds: ['UNREAD'] } });
+
+        } catch (e) {
+            console.error(`Error procesando mensaje ${m.id}:`, e);
         }
-        if (count > 0) await batch.commit();
-        return { message: `Procesados. Reservas: ${total}` };
-    } catch (e) { throw new HttpsError('internal', e.message); }
+    }
+
+    if (count > 0) await batch.commit();
+    return { procesados: count, mensaje: `Se importaron ${count} reservas con asignación automática.` };
+}
+
+// 3. Trigger MANUAL (Para tu botón en la web)
+// IMPORTANTE: Asegúrate de que tu botón en el frontend llame a 'escanearCorreosGmail'
+exports.escanearCorreosGmail = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
+    try {
+        console.log("👆 Escaneo Manual Iniciado...");
+        const resultado = await procesarBandejaEntrada("Manual");
+        return resultado;
+    } catch (error) {
+        console.error("Error Manual:", error);
+        throw new HttpsError('internal', error.message);
+    }
 });
 
-// --- GMAIL AUTOMÁTICO ---
+// 4. Trigger AUTOMÁTICO (Cada 15 min)
 exports.chequearCorreosCron = onSchedule("every 15 minutes", async (event) => {
     if (!process.env.GMAIL_CLIENT_ID) return;
-    console.log("⏰ Cron Gmail Multimodal...");
-    const auth = new google.auth.OAuth2(process.env.GMAIL_CLIENT_ID, process.env.GMAIL_CLIENT_SECRET, process.env.GMAIL_REDIRECT_URI);
-    auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN });
-    const gmail = google.gmail({ version: 'v1', auth });
-
-    try {
-        const list = await gmail.users.messages.list({ userId: 'me', q: 'is:unread' });
-        const msgs = list.data.messages || [];
-        if (msgs.length === 0) return;
-
-        let total = 0, batch = db.batch(), count = 0;
-        const filtro = /R[eé]+s[eé]*r|V[ia]+je|P[eé]did|S[oó]lic|Aut[oó]ri|Traslad|RDT/i;
-        const negativo = /Alerta|Security|Google|Verificación/i;
-
-        for (const m of msgs) {
-            const d = await gmail.users.messages.get({ userId: 'me', id: m.id, format: 'full' });
-            const subj = d.data.payload.headers.find(h => h.name === 'Subject')?.value || '';
-            
-            if (!filtro.test(subj) || negativo.test(subj)) continue;
-
-            const body = extractBody(d.data.payload);
-            const adjs = await obtenerAdjuntos(gmail, m.id, d.data.payload);
-            
-            if (!body.trim() && adjs.length === 0) continue;
-
-            try {
-                const ia = await analizarCorreoConGemini(subj, body, adjs);
-                const list = ia.reservas || [];
-                for (const item of list) {
-                    batch.set(db.collection('reservas').doc(), { ...item, origen_dato: 'Gmail Auto', email_id: m.id, estado: { principal: 'Revision', detalle: `Auto: ${subj}`, actualizado_en: new Date() }, creadoEn: new Date() });
-                    total++; count++;
-                }
-                await gmail.users.messages.modify({ userId: 'me', id: m.id, requestBody: { removeLabelIds: ['UNREAD'] } });
-                if (count >= 400) { await batch.commit(); batch = db.batch(); count = 0; }
-            } catch (e) { console.error(`Error en cron email ${m.id}`, e); }
-        }
-        if (count > 0) await batch.commit();
-        console.log(`🚀 Cron Fin: ${total} reservas.`);
-    } catch (e) { console.error("Error Cron", e); }
+    console.log("⏰ Cron Gmail Iniciado...");
+    await procesarBandejaEntrada("Auto");
 });
 
 // --- INTERPRETACIÓN EXCEL (ESTANDARIZADA) ---
