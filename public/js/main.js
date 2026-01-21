@@ -52,7 +52,9 @@ import {
     confirmarReservaImportada,
     ejecutarAccionMasiva,
     handleConfirmarDesdeModal,
-    generarInformeProductividad
+    generarInformeProductividad,
+    postularChofer,
+    despacharPostulados
 } from './reservas.js';
 
 
@@ -72,6 +74,8 @@ let filtroHoras = null;
 
 window.isTableMultiSelectMode = false;
 let selectedTableIds = new Set();
+
+window.filtroPostuladosActivo = false;
 
 
 // 3. LÓGICA DE AUTENTICACIÓN
@@ -547,6 +551,8 @@ function initApp() {
         limpiarSeleccion,
         confirmarReservaImportada,
         generarInformeProductividad,
+        postularChofer: (id, chId) => postularChofer(id, chId),
+        despacharPostulados: () => despacharPostulados(),
         cargarHistorial,
         abrirModalEditarHistorico,
         guardarEdicionHistorico,
@@ -554,21 +560,25 @@ function initApp() {
         cargarFacturasEmitidas,        
         verFactura,
         anularFactura,
-        exportarExcelFactura,        
+        exportarExcelFactura,
+        toggleFiltroPostulados: (val) => {
+             window.filtroPostuladosActivo = val; 
+            if (lastReservasSnapshot) {
+                 renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
+            }
+        },  
         mostrarSubTabFact: (tipo, e) => {
             document.querySelectorAll('.fact-section').forEach(s => s.style.display = 'none');
-            document.querySelectorAll('.sub-tab-fact').forEach(b => b.classList.remove('active'));
-            
-            if (e && e.currentTarget) e.currentTarget.classList.add('active');
-
-            if (tipo === 'generar') {
-                document.getElementById('sub-fact-generar').style.display = 'block';
-            } else {
-                document.getElementById('sub-fact-emitidas').style.display = 'block';
-                window.app.cargarFacturasEmitidas();
-            }
-        },
-    }
+        document.querySelectorAll('.sub-tab-fact').forEach(b => b.classList.remove('active'));
+        if (e && e.currentTarget) e.currentTarget.classList.add('active');
+        if (tipo === 'generar') {
+            document.getElementById('sub-fact-generar').style.display = 'block';
+        } else {
+            document.getElementById('sub-fact-emitidas').style.display = 'block';
+            window.app.cargarFacturasEmitidas();
+        }
+    },
+}
         
     
     window.openTab = (e, n) => openTab(e, n, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });

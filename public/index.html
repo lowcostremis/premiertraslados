@@ -102,7 +102,16 @@
                     <button class="map-filter-btn" onclick="window.app.filtrarPorHoras(8)">Próximas 8hs</button>
                     <button class="map-filter-btn" onclick="window.app.filtrarPorHoras(12)">Próximas 12hs</button>
                 </div>
-
+                <div class="dispatch-toolbar" style="margin: 10px 0; padding: 10px; background: #fff3cd; border-radius: 8px; display: flex; align-items: center; gap: 15px;">
+                        <span style="font-weight: bold; color: #856404;">📝 Modo Borrador Activo</span>
+                        <button id="btn-despachar-lote" class="btn-success" onclick="window.app.despacharPostulados()" style="background-color: #198754; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                         🚀 Confirmar y Enviar Hojas de Ruta
+                        </button>
+                        <label style="margin-left: 20px; color: #856404; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; background: #fff; padding: 5px 10px; border-radius: 5px; border: 1px solid #ffeeba;">
+                            <input type="checkbox" id="check-ocultar-postulados" onchange="window.app.toggleFiltroPostulados(this.checked)" style="width: 18px; height: 18px; cursor: pointer;"> 
+                            Ocultar ya postulados
+                        </label>
+                    </div>
                 <div id="reservas-importadas" class="reservas-container" style="display: none; border: 2px solid #d63384; border-radius: 8px;">
                     <h2 style="color: #d63384;">Reservas Importadas (Requieren Confirmación)</h2>
     
@@ -121,8 +130,10 @@
                              <thead>
                                  <tr>
                                  <th style="width: 40px; text-align: center;"><input type="checkbox" id="check-all-revision"></th>
-                                 <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>KM</th><th>Hora Fin</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
-                             </tr>
+                                <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th>
+                                <th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th>KM</th>
+                                <th>Hora Fin</th><th>Cliente</th><th>Postulante</th><th>Estado</th><th>Acciones</th>
+                                 </tr>
                           </thead>
                           <tbody></tbody>
                       </table>
@@ -135,7 +146,7 @@
                         <table id="tabla-en-curso">
                             <thead>
                                 <tr>
-                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Postulante</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -149,7 +160,7 @@
                         <table id="tabla-pendientes">
                             <thead>
                                 <tr>
-                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Postulante</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -177,7 +188,7 @@
                                 <th>Destino</th>
                                 <th>Pax</th>
                                 <th style="display:none">Zona</th> <th>KM</th>
-                                <th>Hora Fin Est.</th> <th>Cliente</th>
+                                <th>Hora Fin Est.</th> <th>Cliente</th><th>Postulante</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
                                 </tr>
@@ -193,7 +204,7 @@
                         <table id="tabla-resultados-busqueda">
                             <thead>
                                 <tr>
-                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Estado</th><th>Acciones</th>
+                                    <th>Aut.</th><th>Sin.</th><th>Fecha</th><th>Hora Turno</th><th>Hora Pickup</th><th>Pasajero</th><th>Origen</th><th>Destino</th><th>Cant.</th><th style="display:none">Zona</th><th>Distancia</th><th>Hora Fin Est.</th><th>Cliente</th><th>Postulante</th><th>Estado</th><th>Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>

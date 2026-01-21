@@ -103,9 +103,14 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
 
     reservas.forEach(reserva => {
         try {
+            if (typeof filtroPostuladosActivo !== 'undefined' && filtroPostuladosActivo && reserva.chofer_postulado_id) {
+            return; 
+        }
             let targetTableId = '';
             const fechaTurno = reserva.fecha_turno ? new Date(`${reserva.fecha_turno}T${reserva.hora_turno || '00:00'}`) : null;
             const estadoPrincipal = typeof reserva.estado === 'object' ? reserva.estado.principal : reserva.estado;
+
+           
 
             if (estadoPrincipal === 'Finalizado' || estadoPrincipal === 'Anulado') {
                  return;
@@ -138,104 +143,161 @@ export function renderAllReservas(snapshot, caches, filtroChoferAsignadosId, fil
         }
     });
 }
+
 function renderFilaReserva(tbody, reserva, caches) {
     const cliente = caches.clientes[reserva.cliente] || { nombre: '⚠️ ASIGNAR CLIENTE', color: '#ffcccc' };
     const row = tbody.insertRow();
     row.dataset.id = reserva.id;
 
+    // 1. Lógica de Colores (Borrador y Exclusivo)
+    if (reserva.chofer_postulado_id) row.style.backgroundColor = '#fff9db'; // Amarillo suave para borrador
+    if (reserva.es_exclusivo) row.style.backgroundColor = '#51ED8D';
+
+    // 2. Variables de Estado y Tiempos
     const isRev = (reserva.estado?.principal === 'Revision');
     const isAsig = ['Asignado', 'En Origen', 'Viaje Iniciado'].includes(reserva.estado?.principal);
     const e = (typeof reserva.estado === 'object') ? reserva.estado.principal : reserva.estado;
     const det = (typeof reserva.estado === 'object') ? reserva.estado.detalle : '';
+    const fT = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
     
-    // --- LÓGICA DE CÁLCULO HORA FIN ESTIMADA ---
+    // Cálculo de Hora de Finalización Estimada
     let horaFinEst = "--:--";
     const horaBase = reserva.hora_pickup || reserva.hora_turno; 
     const duracionMins = parseInt(reserva.duracion_estimada_minutos);
-
     if (horaBase && !isNaN(duracionMins) && duracionMins > 0) {
         const [hrs, mins] = horaBase.split(':').map(Number);
         const fechaCalc = new Date();
         fechaCalc.setHours(hrs, mins + duracionMins); 
-        
-        const hrsFin = fechaCalc.getHours().toString().padStart(2, '0');
-        const minsFin = fechaCalc.getMinutes().toString().padStart(2, '0');
-        horaFinEst = `${hrsFin}:${minsFin}`;
+        horaFinEst = `${fechaCalc.getHours().toString().padStart(2, '0')}:${fechaCalc.getMinutes().toString().padStart(2, '0')}`;
     }
-    
-    if (reserva.es_exclusivo) row.style.backgroundColor = '#51ED8D';
-    
-    const fT = reserva.fecha_turno ? new Date(reserva.fecha_turno + 'T00:00:00').toLocaleDateString('es-AR') : '';
-    const checkHTML = isRev ? `<td style="text-align:center;"><input type="checkbox" class="check-reserva-revision" value="${reserva.id}"></td>` : '';
 
-    // Click para selección múltiple
-    row.addEventListener('click', (ev) => {
-        if (!window.isTableMultiSelectMode) return;
-        if (!ev.target.closest('button') && !ev.target.closest('select') && !ev.target.closest('input') && !ev.target.closest('a')) {
-            window.app.toggleTableSelection(reserva.id, row);
+    // 3. Constructor del Selector de Postulante (Borrador sin notificación)
+    let optsPostulantes = `<option value="">-- Postular --</option>`;
+    caches.choferes.forEach(ch => {
+        const m = caches.moviles.find(mov => mov.id === ch.movil_actual_id);
+        if(m) {
+            const seleccionado = (reserva.chofer_postulado_id === ch.id) ? 'selected' : '';
+            optsPostulantes += `<option value="${ch.id}" ${seleccionado}>Móvil ${m.numero} (${ch.nombre})</option>`;
         }
     });
+    
 
+    // 4. Menú de Acciones Dinámico
     let menuItems = `<a onclick="window.app.openEditReservaModal('${reserva.id}')">Editar</a>`;
     if(isRev) {
         menuItems += `<hr><a style="color:green" onclick="window.app.confirmarReservaImportada('${reserva.id}')">Confirmar</a><a style="color:red" onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Descartar</a>`;
     } else if (isAsig) {
-        // AGREGADO: Opción 'Debitado'
         menuItems += `<a onclick="window.app.finalizarReserva('${reserva.id}')">Finalizar</a><a onclick="window.app.quitarAsignacion('${reserva.id}')">Quitar Móvil</a><a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Debitado')">Debitado</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
     } else {
         let opts = caches.moviles.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('');
-        // AGREGADO: Opción 'Debitado'
         menuItems += `<select onchange="window.app.asignarMovil('${reserva.id}',this.value)"><option value="">Asignar...</option>${opts}</select>`;
         menuItems += `<a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Debitado')">Debitado</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
     }
 
+    // Etiqueta de Estado
     let estHTML = `<strong>${e}</strong> <span onclick="alert(this.dataset.log)" data-log="${reserva.log || 'Sin registros'}" style="cursor:pointer; color:#1877f2; font-size:14px; font-weight:bold;">ⓘ</span><br><small>${det}</small>`;
     if (reserva.movil_asignado_id) {
         const m = caches.moviles.find(mo => mo.id === reserva.movil_asignado_id);
         if(m) estHTML += `<br><small>Móvil ${m.numero}</small>`;
     }
 
-   row.innerHTML = `
-       ${checkHTML}
-       <td>${reserva.autorizacion || ''}</td>
-       <td>${reserva.siniestro || ''}</td>
-       <td>${fT}</td>
-       <td>${reserva.hora_turno || ''}</td>
-       <td class="editable-cell pickup-cell">${reserva.hora_pickup || ''}</td>
-       <td>${reserva.nombre_pasajero || ''}</td>
-       <td>${reserva.origen || ''}</td>
-       <td>${reserva.destino || ''}</td>
-       <td>${reserva.cantidad_pasajeros || 1}</td>
-       
-       <td class="editable-cell zona-cell" style="display:none">${reserva.zona || ''}</td>
+    const clasePostulante = reserva.chofer_postulado_id ? 'select-postulante-lleno' : 'select-postulante-vacio';
 
-       <td style="font-weight:bold; color:#1877f2;">${reserva.distancia || '--'}</td>
-       
-       <td style="color: #666; font-weight: bold;">${horaFinEst}</td>
-       <td style="background-color: ${cliente.color || '#ffffff'}; color: #000; font-weight:bold;">
-       ${cliente.nombre}
-       </td>
+    // 5. INNER HTML ÚNICO (Estructura de columnas unificada)
+    row.innerHTML = `
+    ${isRev ? `<td style="text-align:center;"><input type="checkbox" class="check-reserva-revision" value="${reserva.id}"></td>` : ''}
+    <td>${reserva.autorizacion || ''}</td>
+    <td>${reserva.siniestro || ''}</td>
+    <td>${fT}</td>
+    <td>${reserva.hora_turno || ''}</td>
+    <td class="editable-cell pickup-cell">${reserva.hora_pickup || ''}</td>
+    <td>${reserva.nombre_pasajero || ''}</td>
+    <td>${reserva.origen || ''}</td>
+    <td>${reserva.destino || ''}</td>
+    <td>${reserva.cantidad_pasajeros || 1}</td>
+    <td style="font-weight:bold; color:#1877f2;">${reserva.distancia || '--'}</td>
+    <td style="color: #666; font-weight: bold;">${horaFinEst}</td>
+    <td style="background-color: ${cliente.color || '#ffffff'}; color: #000; font-weight:bold;">${cliente.nombre}</td>
+    
+    <td>
+        <select 
+            class="${clasePostulante}" 
+            onchange="window.app.postularChofer('${reserva.id}', this.value)" 
+            style="background: transparent; font-size: 11px; cursor: pointer; width: 100%; padding: 4px; border-radius: 4px;">
+            ${optsPostulantes}
+        </select>
+    </td>
 
-       <td>${estHTML}</td>
-       <td class="acciones">
-           <div class="acciones-dropdown">
-               <button class="icono-tres-puntos" onclick="window.app.toggleMenu(event)">⋮</button>
-               <div class="menu-contenido">${menuItems}</div>
-           </div>
-       </td>
-    `;
+    <td>${estHTML}</td>
+    <td class="acciones">
+        <div class="acciones-dropdown">
+            <button class="icono-tres-puntos" onclick="window.app.toggleMenu(event)">⋮</button>
+            <div class="menu-contenido">${menuItems}</div>
+        </div>
+    </td>
+`;
 
+    // 6. Listeners Finales (Pickup editable e Interacción)
     if (!isRev && e !== 'Finalizado') {
         const pC = row.querySelector('.pickup-cell');
-        const zC = row.querySelector('.zona-cell');
         if (pC) pC.innerHTML = `<input type="time" value="${reserva.hora_pickup || ''}" onchange="window.app.updateHoraPickup(event,'${reserva.id}')">`;
-        if (zC) {
-            let zS = `<select onchange="window.app.updateZona(event,'${reserva.id}')"><option value="">..</option>`;
-            caches.zonas.forEach(z => zS += `<option value="${z.descripcion}" ${reserva.zona === z.descripcion ? 'selected' : ''}>${z.descripcion}</option>`);
-            zC.innerHTML = zS + `</select>`;
-        }
     }
+
+    row.addEventListener('click', (ev) => {
+        if (!window.isTableMultiSelectMode) return;
+        // Evitamos disparar selección si el click es en el select de postulante o menú
+        if (!ev.target.closest('button') && !ev.target.closest('select') && !ev.target.closest('input')) {
+            window.app.toggleTableSelection(reserva.id, row);
+        }
+    });
 }
+
+// 2. Función para guardar el borrador en DB
+export async function postularChofer(reservaId, choferId) {
+    try {
+        await db.collection('reservas').doc(reservaId).update({
+            chofer_postulado_id: choferId || db.app.firebase_.firestore.FieldValue.delete()
+        });
+        // El renderizado automático de Firestore actualizará el color de la fila
+    } catch (e) { console.error("Error al postular:", e); }
+}
+
+// 3. El "Disparo" Masivo
+export async function despacharPostulados() {
+    const confirmacion = confirm("¿Enviar todas las hojas de ruta planificadas a los choferes?");
+    if (!confirmacion) return;
+
+    const snapshot = await db.collection('reservas').where('chofer_postulado_id', '!=', null).get();
+    if (snapshot.empty) return alert("No hay viajes con postulantes para enviar.");
+
+    const batch = db.batch();
+    const operador = window.currentUserEmail || 'Operador';
+    const ahora = new Date().toLocaleString('es-AR');
+
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        const choferId = data.chofer_postulado_id;
+        // Buscamos el móvil para el log
+        const chofer = window.appCaches.choferes.find(c => c.id === choferId);
+        
+        batch.update(doc.ref, {
+            chofer_asignado_id: choferId,
+            movil_asignado_id: chofer.movil_actual_id,
+            chofer_postulado_id: db.app.firebase_.firestore.FieldValue.delete(),
+            estado: { principal: 'Asignado', detalle: 'Enviada', actualizado_en: new Date() },
+            log: (data.log || '') + `\n🚀 Despacho Masivo por: ${operador} (${ahora})`
+        });
+        
+        // Agregar a viajes activos del chofer
+        batch.update(db.collection('choferes').doc(choferId), {
+            viajes_activos: db.app.firebase_.firestore.FieldValue.arrayUnion(doc.id)
+        });
+    });
+
+    await batch.commit();
+    alert("¡Hojas de ruta enviadas con éxito!");
+}
+
 
 export async function buscarEnReservas(texto, caches) {
     const resultadosContainer = document.getElementById('resultados-busqueda-reservas');
@@ -258,12 +320,12 @@ export async function buscarEnReservas(texto, caches) {
         subNav.style.display = 'none';
         containersOriginales.forEach(c => c.style.display = 'none');
         resultadosContainer.style.display = 'block';
-        resultadosTbody.innerHTML = '<tr><td colspan="13">Buscando...</td></tr>';
+        resultadosTbody.innerHTML = '<tr><td colspan="15">Buscando...</td></tr>';
         const { hits } = await reservasSearchIndex.search(texto);
         resultadosTbody.innerHTML = '';
 
         if (hits.length === 0) {
-            resultadosTbody.innerHTML = '<tr><td colspan="13">No se encontraron reservas.</td></tr>';
+            resultadosTbody.innerHTML = '<tr><td colspan="15">No se encontraron reservas.</td></tr>';
             return;
         }
         hits.forEach(reserva => {
@@ -271,7 +333,7 @@ export async function buscarEnReservas(texto, caches) {
         });
     } catch (error) {
         console.error("Error buscando reservas:", error);
-        resultadosTbody.innerHTML = '<tr><td colspan="13">Error al realizar la búsqueda.</td></tr>';
+        resultadosTbody.innerHTML = '<tr><td colspan="15">Error al realizar la búsqueda.</td></tr>';
     }
 }
 

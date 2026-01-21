@@ -646,3 +646,25 @@ td button, td select {
     background-color: #6f42c1 !important; /* Púrpura (Bootstrap indigo) */
     color: white;
 }
+
+/* --- Estilos para el Selector de Postulante --- */
+.select-postulante-vacio {
+    border: 2px dashed #dc3545 !important;
+    background-color: #fff5f5 !important;
+    animation: pulso-alerta 2s infinite;
+    font-weight: bold;
+    color: #dc3545;
+}
+
+.select-postulante-lleno {
+    border: 2px solid #28a745 !important;
+    background-color: #f0fff4 !important;
+    color: #28a745;
+    font-weight: bold;
+}
+
+@keyframes pulso-alerta {
+    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
