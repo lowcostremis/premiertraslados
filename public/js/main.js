@@ -70,7 +70,7 @@ window.appCaches = caches;
 let lastReservasSnapshot = null;
 let appInitialized = false; 
 let filtroChoferAsignadosId = null;
-let filtroHoras = null;
+let filtroHoras = 24;
 
 window.isTableMultiSelectMode = false;
 let selectedTableIds = new Set();
@@ -143,61 +143,79 @@ document.getElementById('btn-confirmar-lote')?.addEventListener('click', async (
 // 4. FUNCIONES PRINCIPALES
 
 function loadAuxData() {
+    // 1. Clientes
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
-        const clienteSelect = document.getElementById('cliente');
-        const factClienteSelect = document.getElementById('fact-cliente-select');
-        const importClienteSelect = document.getElementById('select-cliente-importacion'); // <--- NUEVO
-
         caches.clientes = {};
+        const clienteSelect = document.getElementById('cliente');
         if (clienteSelect) clienteSelect.innerHTML = '<option value="null">-- Seleccionar Cliente --</option>';
-        if (factClienteSelect) factClienteSelect.innerHTML = '<option value="">Seleccionar Cliente...</option>';
-        // Limpiamos el select de importación pero dejamos la opción por defecto
-        if (importClienteSelect) importClienteSelect.innerHTML = '<option value="">📂 Elegir Cliente para Importar...</option>'; // <--- NUEVO
-
+        
         snapshot.forEach(doc => {
-            const data = doc.data();
-            caches.clientes[doc.id] = data;
-            if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
-            if (factClienteSelect) factClienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`;
-            // Agregamos al select de importación
-            if (importClienteSelect) importClienteSelect.innerHTML += `<option value="${doc.id}">${data.nombre}</option>`; // <--- NUEVO
+            caches.clientes[doc.id] = doc.data();
+            if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${doc.data().nombre}</option>`;
         });
-               
-        actualizarFiltrosDeMoviles();     
+        actualizarFiltrosDeMoviles();
         poblarFiltroClientes(caches.clientes);
-
-       
-        const tabReservas = document.getElementById('reservas-tab');
-        if (tabReservas && tabReservas.style.display === 'block' && window.cargarReservas) {
-             console.log("🔄 Clientes cargados tarde: Actualizando tabla de reservas...");
-             window.cargarReservas();
-        }
     });
 
-    db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
-       caches.choferes = [];
-       snapshot.forEach(doc => caches.choferes.push({ id: doc.id, ...doc.data() }));
-       actualizarFiltrosDeMoviles();
-       poblarFiltroClientes(caches.clientes);
-    });
-
-    db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
-        const zonaSelect = document.getElementById('zona');
-        caches.zonas = [];
-        if (zonaSelect) zonaSelect.innerHTML = '<option value="">Seleccionar Zona...</option>';
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            caches.zonas.push({ id: doc.id, ...data });
-            if (zonaSelect) zonaSelect.innerHTML += `<option value="${data.descripcion}">${data.numero} - ${data.descripcion}</option>`;
-        });
-    });
-
+    // 2. Móviles (Con ordenación numérica corregida)
     db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
         caches.moviles = [];
         snapshot.forEach(doc => caches.moviles.push({ id: doc.id, ...doc.data() }));
+        
+        // Orden numérico: 1, 2, 10... en lugar de 1, 10, 2
+        caches.moviles.sort((a, b) => parseInt(a.numero) - parseInt(b.numero));
         actualizarFiltrosDeMoviles();
     });
+
+    // 3. Choferes (Unificado y ordenado por Móvil)
+    db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
+        caches.choferes = [];
+        snapshot.forEach(doc => caches.choferes.push({ id: doc.id, ...doc.data() }));
+        
+        caches.choferes.sort((a, b) => {
+            const movA = caches.moviles.find(m => m.id === a.movil_actual_id);
+            const movB = caches.moviles.find(m => m.id === b.movil_actual_id);
+            return (movA ? parseInt(movA.numero) : 999) - (movB ? parseInt(movB.numero) : 999);
+        });
+        actualizarFiltrosDeMoviles();
+    });
+
+    // 4. Zonas
+    db.collection('zonas').orderBy('numero').onSnapshot(snapshot => {
+        caches.zonas = [];
+        snapshot.forEach(doc => caches.zonas.push({ id: doc.id, ...doc.data() }));
+    });
 }
+
+
+
+// --- Ordenar Móviles Numéricamente ---
+db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
+    caches.moviles = [];
+    snapshot.forEach(doc => caches.moviles.push({ id: doc.id, ...doc.data() }));
+    
+    // ORDENACIÓN NUMÉRICA EXPLICITA
+    caches.moviles.sort((a, b) => parseInt(a.numero) - parseInt(b.numero));
+    
+    actualizarFiltrosDeMoviles();
+});
+
+// --- Ordenar Choferes por número de Móvil ---
+db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
+    caches.choferes = [];
+    snapshot.forEach(doc => caches.choferes.push({ id: doc.id, ...doc.data() }));
+    
+    // OPCIONAL: Si querés que los choferes también sigan el orden del móvil asignado
+    caches.choferes.sort((a, b) => {
+        const movilA = caches.moviles.find(m => m.id === a.movil_actual_id);
+        const movilB = caches.moviles.find(m => m.id === b.movil_actual_id);
+        const numA = movilA ? parseInt(movilA.numero) : 999;
+        const numB = movilB ? parseInt(movilB.numero) : 999;
+        return numA - numB;
+    });
+    
+    actualizarFiltrosDeMoviles();
+});
 
 function hideTableMenus() {
     document.querySelectorAll('.menu-contenido.visible').forEach(menu => menu.classList.remove('visible'));
@@ -302,14 +320,24 @@ function filtrarReservasAsignadasPorChofer(choferId) {
     if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
 }
 
-function filtrarPorHoras(horas) {
+function filtrarPorHoras(horas, propagar = true) {
     filtroHoras = horas;
-    document.querySelectorAll('.time-filters .map-filter-btn').forEach(btn => btn.classList.remove('active'));
-    let btnActivo;
-    if (horas === null) btnActivo = document.querySelector('.time-filters button:nth-child(1)');
-    else btnActivo = document.querySelector(`.time-filters .map-filter-btn[onclick="window.app.filtrarPorHoras(${horas})"]`);
-    if (btnActivo) btnActivo.classList.add('active');
-    if (lastReservasSnapshot) renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
+    
+    // 1. Actualización visual de los botones de la TABLA
+    document.querySelectorAll('.time-filters .map-filter-btn').forEach(btn => {
+        const textoBuscado = (horas === null) ? 'Todas' : horas + 'hs';
+        btn.classList.toggle('active', btn.innerText.trim().includes(textoBuscado));
+    });
+
+    // 2. Renderizado de la tabla
+    if (lastReservasSnapshot) {
+        renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
+    }
+
+    // 3. NUEVO: Si propagar es true, avisamos al MAPA
+    if (propagar && window.app && window.app.filtrarMapaPorHoras) {
+        window.app.filtrarMapaPorHoras(horas, false); 
+    }
 }
 
 function openNuevaReservaConDatos(datos, initMapaModalCallback) {
@@ -356,35 +384,6 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
 }
 
 
-// 5. INICIALIZACIÓN CENTRAL
-function initApp() {
-    if (appInitialized) return;
-    appInitialized = true;
-    
-    const btnImportar = document.getElementById('btn-importar-excel');
-    const inputExcel = document.getElementById('input-excel');
-
-   if (btnImportar && inputExcel) {
-    btnImportar.addEventListener('click', () => {
-        // VALIDACIÓN DE SEGURIDAD
-        const clienteId = document.getElementById('select-cliente-importacion').value;
-        if (!clienteId) return alert("⚠️ ATENCIÓN: Primero seleccioná el CLIENTE en el menú desplegable al lado del botón.");
-        
-        inputExcel.click(); // Recién ahora abrimos el archivo
-    });
-
-    inputExcel.addEventListener('change', async (e) => {
-        if (e.target.files.length > 0) {
-            try {
-                const clienteId = document.getElementById('select-cliente-importacion').value; // Capturamos el ID
-                const { manejarImportacionExcel } = await import('./reservas.js');
-                // Pasamos el clienteId como segundo parámetro
-                manejarImportacionExcel(e, clienteId); 
-            } catch (err) { alert("Error al cargar módulo importación."); }
-        }
-    });
-}
-
 // --- LÓGICA PDF ---
     const btnImportarPDF = document.getElementById('btn-importar-pdf');
     const inputPDF = document.getElementById('input-pdf');
@@ -405,8 +404,9 @@ function initApp() {
                 manejarImportacionPDF(e, clienteId);
             }
         });
-    }
-}
+    } 
+
+
     initFacturacion();
 
     // --- LÓGICA MULTI-ORIGEN CONECTADA AL MAPA ---
@@ -530,102 +530,19 @@ function initApp() {
     }
 });
 
-    // --- WINDOW.APP DEFINITIVO ---
-        window.app = { 
-        editItem, deleteItem, openResetPasswordModal,
-        openEditReservaModal: (id) => openEditReservaModal(id, caches, initMapaModal),
-        asignarMovil: (id, mId) => asignarMovil(id, mId, caches),
-        changeReservaState: (id, st) => changeReservaState(id, st, caches),
-        finalizarReserva: (id) => finalizarReserva(id, caches),
-        quitarAsignacion, updateHoraPickup, updateZona,
-        toggleMenu, hideTableMenus,
-        toggleMultiSelectMode,
-        filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
-        filtrarReservasAsignadasPorChofer, filtrarPorHoras,
-        getSelectedReservasIds: () => {
-            return Array.from(selectedTableIds);
-        },
-        toggleTableSelection, handleConfirmarDesdeModal,
-        activarAutocomplete,
-        calcularYMostrarRuta,
-        limpiarSeleccion,
-        confirmarReservaImportada,
-        generarInformeProductividad,
-        postularChofer: (id, chId) => postularChofer(id, chId),
-        despacharPostulados: () => despacharPostulados(),
-        cargarHistorial,
-        abrirModalEditarHistorico,
-        guardarEdicionHistorico,
-        recalcularDistanciaHistorico,
-        cargarFacturasEmitidas,        
-        verFactura,
-        anularFactura,
-        exportarExcelFactura,
-        toggleFiltroPostulados: (val) => {
-             window.filtroPostuladosActivo = val; 
-            if (lastReservasSnapshot) {
-                 renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
-            }
-        },  
-        mostrarSubTabFact: (tipo, e) => {
-            document.querySelectorAll('.fact-section').forEach(s => s.style.display = 'none');
-        document.querySelectorAll('.sub-tab-fact').forEach(b => b.classList.remove('active'));
-        if (e && e.currentTarget) e.currentTarget.classList.add('active');
-        if (tipo === 'generar') {
-            document.getElementById('sub-fact-generar').style.display = 'block';
-        } else {
-            document.getElementById('sub-fact-emitidas').style.display = 'block';
-            window.app.cargarFacturasEmitidas();
-        }
-    },
-}
-        
-    
-    window.openTab = (e, n) => openTab(e, n, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
-    window.showReservasTab = showReservasTab;
-    window.openAdminTab = openAdminTab;
-    
-    document.getElementById('reserva-form').addEventListener('submit', async (e) => {
-        const datosRegreso = await handleSaveReserva(e, caches);
-        if (datosRegreso) openNuevaReservaConDatos(datosRegreso, initMapaModal);
-    });
-    
-    document.getElementById('btn-confirmar-modal')?.addEventListener('click', (e) => handleConfirmarDesdeModal(e, caches));
-    document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
-    document.getElementById('logout-btn')?.addEventListener('click', () => {
-        auth.signOut().then(() => {
-            window.location.reload();
-        });
-    });
-
-    // Cargar datos iniciales
-    loadAuxData();
-    initHistorial(caches);
-    initPasajeros();
-    initAdmin(caches);
-    initMapa(caches, () => lastReservasSnapshot);
-    listenToReservas(snapshot => {
-        lastReservasSnapshot = snapshot;
-        renderAllReservas(snapshot, caches, filtroChoferAsignadosId, filtroHoras);
-        cargarMarcadoresDeReservas();
-    });
-
-    openTab(null, 'Reservas');
 
 
 
 window.printReport = () => {
     const contenido = document.getElementById('reporte-body-print').innerHTML;
     const ventanaPrenta = window.open('', '', 'height=600,width=800');
-    ventanaPrenta.document.write('<html><head><title>Informe de Productividad - Premier Traslados</title>');
-    ventanaPrenta.document.write('<style>table { width: 100%; border-collapse: collapse; font-family: sans-serif; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background: #eee; } h3 { background: #6f42c1; color: white; padding: 10px; }</style>');
-    ventanaPrenta.document.write('</head><body>');
-    ventanaPrenta.document.write('<h1>Premier Traslados - Informe de Productividad</h1>');
+    ventanaPrenta.document.write('<html><head><title>Informe</title></head><body>');
     ventanaPrenta.document.write(contenido);
     ventanaPrenta.document.write('</body></html>');
     ventanaPrenta.document.close();
     ventanaPrenta.print();
 };
+
 
 function actualizarFiltrosDeMoviles() {
     const selectReservas = document.getElementById('filtro-chofer-asignados');
@@ -696,12 +613,132 @@ function actualizarFiltrosDeMoviles() {
     
 }
 
+
+// 5. INICIALIZACIÓN CENTRAL
+function initApp() {
+    if (appInitialized) return;
+    appInitialized = true;
+    
+    const btnImportar = document.getElementById('btn-importar-excel');
+    const inputExcel = document.getElementById('input-excel');
+
+   if (btnImportar && inputExcel) {
+    btnImportar.addEventListener('click', () => {
+        // VALIDACIÓN DE SEGURIDAD
+        const clienteId = document.getElementById('select-cliente-importacion').value;
+        if (!clienteId) return alert("⚠️ ATENCIÓN: Primero seleccioná el CLIENTE en el menú desplegable al lado del botón.");
+        
+        inputExcel.click(); // Recién ahora abrimos el archivo
+    });
+
+    inputExcel.addEventListener('change', async (e) => {
+        if (e.target.files.length > 0) {
+            try {
+                const clienteId = document.getElementById('select-cliente-importacion').value; // Capturamos el ID
+                const { manejarImportacionExcel } = await import('./reservas.js');
+                // Pasamos el clienteId como segundo parámetro
+                manejarImportacionExcel(e, clienteId); 
+            } catch (err) { alert("Error al cargar módulo importación."); }
+        }
+    });
+
+    
+    // --- WINDOW.APP DEFINITIVO ---
+    window.app = { 
+        editItem, deleteItem, openResetPasswordModal,
+        openEditReservaModal: (id) => openEditReservaModal(id, caches, initMapaModal),
+        asignarMovil: (id, mId) => asignarMovil(id, mId, caches),
+        changeReservaState: (id, st) => changeReservaState(id, st, caches),
+        finalizarReserva: (id) => finalizarReserva(id, caches),
+        quitarAsignacion, updateHoraPickup, updateZona,
+        toggleMenu, hideTableMenus,
+        toggleMultiSelectMode,
+        filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
+        filtrarReservasAsignadasPorChofer, filtrarPorHoras,
+        getSelectedReservasIds: () => {
+            return Array.from(selectedTableIds);
+        },
+        toggleTableSelection, handleConfirmarDesdeModal,
+        activarAutocomplete,
+        calcularYMostrarRuta,
+        limpiarSeleccion,
+        confirmarReservaImportada,
+        generarInformeProductividad,
+        postularChofer: (id, chId) => postularChofer(id, chId),
+        despacharPostulados: () => despacharPostulados(),
+        cargarHistorial,
+        abrirModalEditarHistorico,
+        guardarEdicionHistorico,
+        recalcularDistanciaHistorico,
+        cargarFacturasEmitidas,        
+        verFactura,
+        anularFactura,
+        exportarExcelFactura,
+        toggleFiltroPostulados: (val) => {
+             window.filtroPostuladosActivo = val; 
+            if (lastReservasSnapshot) {
+                 renderAllReservas(lastReservasSnapshot, caches, filtroChoferAsignadosId, filtroHoras);
+            }
+        },  
+        mostrarSubTabFact: (tipo, e) => {
+             document.querySelectorAll('.fact-section').forEach(s => s.style.display = 'none');
+             document.querySelectorAll('.sub-tab-fact').forEach(b => b.classList.remove('active'));
+             if (e && e.currentTarget) e.currentTarget.classList.add('active');
+        
+            if (tipo === 'generar') {
+                   document.getElementById('sub-fact-generar').style.display = 'block';
+            } else {
+                    document.getElementById('sub-fact-emitidas').style.display = 'block';
+                    window.app.cargarFacturasEmitidas();
+            }       
+        }  
+    };       
+    
+
+        
+    
+    window.openTab = (e, n) => openTab(e, n, { initMapInstance, escucharUbicacionChoferes, cargarMarcadoresDeReservas, cargarHistorial, cargarPasajeros });
+    window.showReservasTab = showReservasTab;
+    window.openAdminTab = openAdminTab;
+    
+    document.getElementById('reserva-form').addEventListener('submit', async (e) => {
+        const datosRegreso = await handleSaveReserva(e, caches);
+        if (datosRegreso) openNuevaReservaConDatos(datosRegreso, initMapaModal);
+    });
+    
+    document.getElementById('btn-confirmar-modal')?.addEventListener('click', (e) => handleConfirmarDesdeModal(e, caches));
+    document.getElementById('dni_pasajero').addEventListener('blur', handleDniBlur);
+    document.getElementById('logout-btn')?.addEventListener('click', () => {
+        auth.signOut().then(() => {
+            window.location.reload();
+        });
+    });
+
+    // Cargar datos iniciales
+    loadAuxData();
+    initHistorial(caches);
+    initPasajeros();
+    initAdmin(caches);
+    initMapa(caches, () => lastReservasSnapshot);
+    listenToReservas(snapshot => {
+        lastReservasSnapshot = snapshot;
+        renderAllReservas(snapshot, caches, filtroChoferAsignadosId, filtroHoras);
+        cargarMarcadoresDeReservas();
+    });
+
+    filtrarPorHoras(24);
+
+    openTab(null, 'Reservas');
+
+        
+}
+
 // Función para mostrar/ocultar el panel de confirmación masiva
 window.actualizarPanelLote = function() {
     const checkboxes = document.querySelectorAll('.check-reserva-revision:checked');
     const panel = document.getElementById('panel-acciones-lote');
     const contador = document.getElementById('contador-check-revision');
-    
+
     if (checkboxes.length > 0) {
         panel.style.display = 'inline-flex'; 
         if(contador) contador.textContent = checkboxes.length;
@@ -709,3 +746,4 @@ window.actualizarPanelLote = function() {
         panel.style.display = 'none';
     }
 };
+}

@@ -16,7 +16,11 @@ export function poblarSelectDeMoviles(caches) {
     movilSelect.innerHTML = '<option value="">No asignar móvil aún</option>';
 
     if (caches.moviles) {
-        caches.moviles.forEach(movil => {
+        // 1. Ordenamos la lista una sola vez numéricamente
+        const movilesOrdenados = [...caches.moviles].sort((a, b) => parseInt(a.numero) - parseInt(b.numero));
+        
+        // 2. Recorremos la lista ordenada UNA sola vez
+        movilesOrdenados.forEach(movil => {
             const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
             const choferInfo = choferAsignado ? ` - ${choferAsignado.nombre}` : ' - (Sin chofer)';
             const option = document.createElement('option');
@@ -189,7 +193,10 @@ function renderFilaReserva(tbody, reserva, caches) {
     } else if (isAsig) {
         menuItems += `<a onclick="window.app.finalizarReserva('${reserva.id}')">Finalizar</a><a onclick="window.app.quitarAsignacion('${reserva.id}')">Quitar Móvil</a><a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Debitado')">Debitado</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
     } else {
-        let opts = caches.moviles.map(m => `<option value="${m.id}">N°${m.numero}</option>`).join('');
+       let opts = [...caches.moviles]
+        .sort((a, b) => parseInt(a.numero) - parseInt(b.numero))
+        .map(m => `<option value="${m.id}">N°${m.numero}</option>`)
+        .join('');
         menuItems += `<select onchange="window.app.asignarMovil('${reserva.id}',this.value)"><option value="">Asignar...</option>${opts}</select>`;
         menuItems += `<a onclick="window.app.changeReservaState('${reserva.id}','Negativo')">Negativo</a><a onclick="window.app.changeReservaState('${reserva.id}','Debitado')">Debitado</a><a onclick="window.app.changeReservaState('${reserva.id}','Anulado')">Anular</a>`;
     }
