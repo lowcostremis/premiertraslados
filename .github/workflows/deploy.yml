@@ -20,13 +20,11 @@ jobs:
       - name: Install Dependencies for Functions
         run: npm --prefix ./functions ci
 
-      # 🚀 Eliminamos el paso de "Install Firebase Tools" porque la acción de abajo ya lo incluye.
-      # Esto ahorra tiempo y evita conflictos de versiones.
-
       - name: Deploy to Firebase
-        uses: w9jds/firebase-action@v15.5.0 # 🚀 Usamos una versión específica en lugar de @master para mayor estabilidad.
+        uses: w9jds/firebase-action@v15.5.0
         with:
-          args: deploy --only functions,hosting --project premiertraslados-31ee2 # 🚀 Forzamos el ID del proyecto aquí.
+          # 🚀 QUITAMOS el flag --project de aquí para que use el del archivo .firebaserc
+          args: deploy --only functions,hosting
         env:
           GCP_SA_KEY: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          PROJECT_ID: premiertraslados-31ee2 # 🚀 Definimos explícitamente el ID para evitar la duplicación automática.
+          # 🚀 NUNCA agregues PROJECT_ID aquí si usas una Service Account Key
