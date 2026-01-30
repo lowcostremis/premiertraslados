@@ -815,3 +815,4 @@ window.actualizarPanelLote = function() {
         panel.style.display = 'none';
     }
 };
+// pruba de github
