@@ -57,7 +57,15 @@
                 </div>
                 <ul id="multi-select-list" style="display: none;"></ul>
              </div>
-
+             <div id="asistente-carpooling" class="floating-panel" style="display:none; right: 20px; top: 100px; width: 350px; background: #fff; border: 2px solid #1877f2; z-index: 2100;">
+                    <div class="panel-header" style="background: #1877f2; color: white; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                        <strong>🧲 Asistente de Combinación</strong>
+                        <span onclick="document.getElementById('asistente-carpooling').style.display='none'" style="cursor:pointer; font-size: 20px;">&times;</span>
+                    </div>
+                    <div id="lista-sugerencias" style="padding: 10px; max-height: 400px; overflow-y: auto;">
+                         <p style="color: #666; font-size: 12px; text-align: center;">Seleccioná un pasajero para buscar combinaciones compatibles.</p>
+                    </div>
+             </div>
              <div id="Reservas" class="tab-content">    
             
                 <div class="reservas-header">
@@ -737,7 +745,7 @@
     
                             <div id="origenes-container" style="width: 100%; display: flex; flex-direction: column; gap: 8px;">
                                 <div class="input-group-origen" style="display: flex; gap: 5px;">
-                                     <input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;">
+                                     <input type="text" name="origen_dinamico" class="origen-input" autocomplete="off" placeholder="Origen Principal" required>
                                      <div style="width: 30px;"></div>
                                   </div>
                              </div>
@@ -750,7 +758,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="destino">Destino</label>
-                            <input type="text" id="destino" name="destino">
+                            <input type="text" id="destino" name="destino" autocomplete="off">
                         </div>
                     </div>
                    

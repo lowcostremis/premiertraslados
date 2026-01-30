@@ -218,7 +218,15 @@ function renderFilaReserva(tbody, reserva, caches) {
     <td>${fT}</td>
     <td>${reserva.hora_turno || ''}</td>
     <td class="editable-cell pickup-cell">${reserva.hora_pickup || ''}</td>
-    <td>${reserva.nombre_pasajero || ''}</td>
+    <td>
+    ${reserva.nombre_pasajero || ''} 
+    <span 
+        onclick="window.app.abrirAsistenteCarpooling('${reserva.id}')" 
+        title="Buscar combinaciones" 
+        style="cursor:pointer; margin-left:5px; font-size: 16px;">
+        🧲
+    </span>
+    </td>
     <td>${reserva.origen || ''}</td>
     <td>${reserva.destino || ''}</td>
     <td>${reserva.cantidad_pasajeros || 1}</td>
@@ -589,22 +597,38 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     const distInput = document.getElementById('distancia_total_input');
     if (distInput) distInput.value = data.distancia || '';
 
+    // --- CÓDIGO CORREGIDO PARA RESERVAS.JS ---
     const container = document.getElementById('origenes-container');
-    container.innerHTML = `<div class=\"input-group-origen\" style=\"display: flex; gap: 5px;\"><input type=\"text\" name=\"origen_dinamico\" class=\"origen-input\" placeholder=\"Origen Principal\" required style=\"flex: 1;\"><div style=\"width: 30px;\"></div></div>`;
-    
-    const partesOrigen = (data.origen || "").split(' + ');
-    const primerInput = container.querySelector('.origen-input');
-    if (primerInput) {
-        primerInput.value = partesOrigen[0] || "";
-        if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(primerInput);
-    }
+    container.innerHTML = ''; // Limpiamos el contenedor antes de empezar
 
+    const partesOrigen = (data.origen || "").split(' + ');
+    
+    // 1. Creamos el Origen Principal
+    const divPrincipal = document.createElement('div');
+    divPrincipal.className = 'input-group-origen';
+    divPrincipal.style.cssText = "display: flex; gap: 5px; align-items: center;";
+    divPrincipal.innerHTML = `
+        <input type="text" name="origen_dinamico" class="origen-input" autocomplete="off" value="${partesOrigen[0] || ''}" placeholder="Origen Principal" required style="flex: 1;">
+        <div style="width: 30px;"></div>
+    `;
+    container.appendChild(divPrincipal);
+    const primerInput = divPrincipal.querySelector('input');
+    if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(primerInput);
+
+    // 2. Creamos las paradas adicionales (si existen)
     for (let i = 1; i < partesOrigen.length; i++) {
         const div = document.createElement('div');
         div.className = 'input-group-origen';
         div.style.cssText = "display: flex; gap: 5px; align-items: center;";
-        div.innerHTML = `<span style=\"font-size:18px;color:#6c757d;\">↳</span><input type=\"text\" class=\"origen-input\" value=\"${partesOrigen[i]}\" style=\"flex:1;\"><button type=\"button\" class=\"btn-remove-origen\" style=\"color:red;border:none;background:none;font-weight:bold;cursor:pointer;\">✕</button>`;
-        div.querySelector('.btn-remove-origen').addEventListener('click', () => { div.remove(); if(window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta(); });
+        div.innerHTML = `
+            <span style="font-size:18px;color:#6c757d;">↳</span>
+            <input type="text" class="origen-input" autocomplete="off" value="${partesOrigen[i]}" style="flex:1;">
+            <button type="button" class="btn-remove-origen" style="color:red;border:none;background:none;font-weight:bold;cursor:pointer;">✕</button>
+        `;
+        div.querySelector('.btn-remove-origen').addEventListener('click', () => { 
+            div.remove(); 
+            if(window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta(); 
+        });
         container.appendChild(div);
         const inputNuevo = div.querySelector('input');
         if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(inputNuevo);
@@ -612,6 +636,9 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     
     document.getElementById('reserva-id').value = reservaId;
     document.getElementById('modal-title').textContent = 'Editar Reserva';
+    document.getElementById('reserva-form').style.display = 'block'; 
+    document.getElementById('reserva-modal').style.display = 'block';
+    
     const btnConfirmar = document.getElementById('btn-confirmar-modal');
     if (btnConfirmar) btnConfirmar.style.display = (data.estado?.principal === 'Revision') ? 'block' : 'none';
     document.getElementById('reserva-modal').style.display = 'block';

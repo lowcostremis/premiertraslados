@@ -17,9 +17,11 @@ firebase.initializeApp(firebaseConfig);
 export const auth = firebase.auth();
 export const db = firebase.firestore();
 export const functions = firebase.functions();
-// Si estamos trabajando en la PC local, conectamos al emulador en vez de a la nube
+
+// Solo el emulador de Functions si es necesario, 
+// Auth y DB quedan apuntando a la nube (Real).
 if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-    console.log("🔧 Modo Local: Conectando a Emulador de Functions (Puerto 5001)");
+    console.log("🔧 Modo Desarrollo: Usando Base de Datos REAL + Functions Local");
     functions.useEmulator("127.0.0.1", 5001);
 }
 

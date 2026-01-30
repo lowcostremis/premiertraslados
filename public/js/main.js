@@ -15,6 +15,7 @@ import {
 import { initPasajeros, cargarPasajeros } from './pasajeros.js';
 import { initAdmin, editItem, deleteItem, openResetPasswordModal } from './admin.js';
 import { initFacturacion, cargarFacturasEmitidas, verFactura, anularFactura, exportarExcelFactura } from './facturas.js';
+import { calcularSugerenciaPickUp, buscarCompatibles, validarHolgura } from './carpooling.js';
 
 // --- IMPORTACIÓN UNIFICADA: MAPA ---
 import { 
@@ -30,7 +31,8 @@ import {
     getSelectedReservasIds,
     activarAutocomplete,    
     calcularYMostrarRuta,
-    actualizarMarcadorMapa    
+    actualizarMarcadorMapa,
+    mostrarRutaConsolidada   
 } from './mapa.js';
 
 // --- IMPORTACIÓN UNIFICADA: RESERVAS ---
@@ -146,15 +148,16 @@ function loadAuxData() {
     // 1. Clientes
     db.collection('clientes').orderBy('nombre').onSnapshot(snapshot => {
         caches.clientes = {};
-        const clienteSelect = document.getElementById('cliente');
-        if (clienteSelect) clienteSelect.innerHTML = '<option value="null">-- Seleccionar Cliente --</option>';
-        
         snapshot.forEach(doc => {
             caches.clientes[doc.id] = doc.data();
-            if (clienteSelect) clienteSelect.innerHTML += `<option value="${doc.id}">${doc.data().nombre}</option>`;
         });
-        actualizarFiltrosDeMoviles();
-        poblarFiltroClientes(caches.clientes);
+        
+    // Ejecutamos la unificación
+    actualizarTodosLosSelectoresClientes(); 
+    
+    // Mantenemos las funciones de otros módulos
+    poblarFiltroClientes(caches.clientes);
+    actualizarFiltrosDeMoviles();
     });
 
     // 2. Móviles (Con ordenación numérica corregida)
@@ -187,36 +190,6 @@ function loadAuxData() {
     });
 }
 
-
-
-// --- Ordenar Móviles Numéricamente ---
-db.collection('moviles').orderBy('numero').onSnapshot(snapshot => {
-    caches.moviles = [];
-    snapshot.forEach(doc => caches.moviles.push({ id: doc.id, ...doc.data() }));
-    
-    // ORDENACIÓN NUMÉRICA EXPLICITA
-    caches.moviles.sort((a, b) => parseInt(a.numero) - parseInt(b.numero));
-    
-    actualizarFiltrosDeMoviles();
-});
-
-// --- Ordenar Choferes por número de Móvil ---
-db.collection('choferes').orderBy('nombre').onSnapshot(snapshot => {
-    caches.choferes = [];
-    snapshot.forEach(doc => caches.choferes.push({ id: doc.id, ...doc.data() }));
-    
-    // OPCIONAL: Si querés que los choferes también sigan el orden del móvil asignado
-    caches.choferes.sort((a, b) => {
-        const movilA = caches.moviles.find(m => m.id === a.movil_actual_id);
-        const movilB = caches.moviles.find(m => m.id === b.movil_actual_id);
-        const numA = movilA ? parseInt(movilA.numero) : 999;
-        const numB = movilB ? parseInt(movilB.numero) : 999;
-        return numA - numB;
-    });
-    
-    actualizarFiltrosDeMoviles();
-});
-
 function hideTableMenus() {
     document.querySelectorAll('.menu-contenido.visible').forEach(menu => menu.classList.remove('visible'));
 }
@@ -240,7 +213,7 @@ function updateTablePanelVisibility() {
         panel.style.display = 'block';
         if(contador) contador.textContent = selectedTableIds.size;
         
-        
+        // Limpieza y carga de lista del panel lateral
         lista.innerHTML = '';
         selectedTableIds.forEach(id => {
             const li = document.createElement('li');
@@ -251,20 +224,31 @@ function updateTablePanelVisibility() {
 
         const mensaje = document.createElement('li');
         mensaje.style.padding = '10px';
-        mensaje.textContent = `Has seleccionado ${selectedTableIds.size} viajes de la lista.`;
+        mensaje.textContent = `Has seleccionado ${selectedTableIds.size} viajes.`;
         lista.appendChild(mensaje);
-        
 
+        // Carga de móviles en el panel si no están
         if (selectMovil.options.length <= 1 && caches.moviles) {
              let opts = '<option value="">Seleccionar móvil...</option>';
              caches.moviles.forEach(m => {
                  const ch = caches.choferes.find(c => c.movil_actual_id === m.id);
-                 const nm = ch ? `(${ch.nombre})` : '';
-                 opts += `<option value="${m.id}">Móvil ${m.numero} ${nm}</option>`;
+                 opts += `<option value="${m.id}">Móvil ${m.numero} ${ch ? `(${ch.nombre})` : ''}</option>`;
              });
              selectMovil.innerHTML = opts;
         }
         btnAsignar.disabled = false;
+
+        // 🚀 MEJORA: Previsualizamos la ruta pero MANTENEMOS la ficha visible
+        if (selectedTableIds.size >= 1) {
+            document.getElementById('reserva-modal').style.display = 'block';
+            document.getElementById('reserva-form').style.display = 'block'; // 🟢 SIEMPRE VISIBLE
+            document.getElementById('modal-title').textContent = selectedTableIds.size > 1 ? 'Previsualización Carpooling' : 'Reserva';
+            
+            // Ajustamos el tamaño relativo para que ambos quepan bien
+            document.getElementById('mapa-modal-container').style.flex = '1.2'; 
+            
+            mostrarRutaConsolidada(Array.from(selectedTableIds));
+        }
     } else {
         panel.style.display = 'none';
     }
@@ -384,6 +368,115 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
 }
 
 
+
+
+
+
+window.printReport = () => {
+    const contenido = document.getElementById('reporte-body-print').innerHTML;
+    const ventanaPrenta = window.open('', '', 'height=600,width=800');
+    ventanaPrenta.document.write('<html><head><title>Informe</title></head><body>');
+    ventanaPrenta.document.write(contenido);
+    ventanaPrenta.document.write('</body></html>');
+    ventanaPrenta.document.close();
+    ventanaPrenta.print();
+};
+
+
+function actualizarFiltrosDeMoviles() {
+    const selectReservas = document.getElementById('filtro-chofer-asignados');
+    const selectMapa = document.getElementById('filtro-chofer-mapa');
+    const selectAdmin = document.getElementById('chofer-movil-select');
+    const repChoferSelect = document.getElementById('rep-chofer-select');
+
+    // 1. Filtros de Choferes (Reservas, Mapa y Reportes)
+    if (selectReservas || selectMapa || repChoferSelect) {
+        let options = '<option value="">Todos los móviles</option>';
+        const movilesConChofer = caches.choferes
+            .filter(ch => ch.movil_actual_id)
+            .map(ch => {
+                const mov = caches.moviles.find(m => m.id === ch.movil_actual_id);
+                return mov ? { id: ch.id, nombre: ch.nombre, num: mov.numero } : null;
+            })
+            .filter(i => i)
+            .sort((a, b) => a.num - b.num);
+
+        movilesConChofer.forEach(i => {
+            options += `<option value="${i.id}">Móvil ${i.num} - ${i.nombre}</option>`;
+        });
+
+        [selectReservas, selectMapa, repChoferSelect].forEach(sel => {
+            if (sel) {
+                const val = sel.value;
+                sel.innerHTML = options;
+                sel.value = val;
+            }
+        });
+    }
+
+    // 2. Selector de Admin (Móviles libres/ocupados)
+    if (selectAdmin) {
+        let optsAdmin = '<option value="">(Opcional) Asignar Móvil</option>';
+        caches.moviles.forEach(m => {
+            const ocupado = caches.choferes.find(c => c.movil_actual_id === m.id);
+            optsAdmin += `<option value="${m.id}">N° ${m.numero} ${ocupado ? `(Asignado a ${ocupado.nombre})` : '(Libre)'}</option>`;
+        });
+        selectAdmin.innerHTML = optsAdmin;
+    }
+}
+
+// Función central para actualizar todos los desplegables de clientes
+function actualizarTodosLosSelectoresClientes() {
+    const clientes = window.appCaches.clientes;
+    const selectores = [
+        { id: 'cliente', default: '-- Seleccionar Cliente --' },
+        { id: 'select-cliente-importacion', default: 'Elegir Cliente para Importar...' },
+        { id: 'rep-empresa-select', default: 'Seleccionar Empresa...' }
+    ];
+
+    selectores.forEach(sel => {
+        const el = document.getElementById(sel.id);
+        if (el) {
+            const valorPrevio = el.value;
+            let options = `<option value="">${sel.default}</option>`;
+            
+            Object.entries(clientes).forEach(([id, data]) => {
+                options += `<option value="${id}">${data.nombre}</option>`;
+            });
+            
+            el.innerHTML = options;
+            if (valorPrevio) el.value = valorPrevio;
+        }
+    });
+}
+
+// 5. INICIALIZACIÓN CENTRAL
+function initApp() {
+    if (appInitialized) return;
+    appInitialized = true;
+    
+    const btnImportar = document.getElementById('btn-importar-excel');
+    const inputExcel = document.getElementById('input-excel');
+
+   if (btnImportar && inputExcel) {
+        btnImportar.addEventListener('click', () => {
+            const clienteId = document.getElementById('select-cliente-importacion').value;
+            if (!clienteId) return alert("⚠️ ATENCIÓN: Primero seleccioná el CLIENTE.");
+            inputExcel.click();
+        });
+
+    inputExcel.addEventListener('change', async (e) => {
+        if (e.target.files.length > 0) {
+            try {
+                const clienteId = document.getElementById('select-cliente-importacion').value; // Capturamos el ID
+                const { manejarImportacionExcel } = await import('./reservas.js');
+                // Pasamos el clienteId como segundo parámetro
+                manejarImportacionExcel(e, clienteId); 
+            } catch (err) { alert("Error al cargar módulo importación."); }
+        }
+    });
+   } 
+    
 // --- LÓGICA PDF ---
     const btnImportarPDF = document.getElementById('btn-importar-pdf');
     const inputPDF = document.getElementById('input-pdf');
@@ -433,8 +526,8 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
             div.style.cssText = "display: flex; gap: 5px; align-items: center;";
             div.innerHTML = `
                 <span style="font-size: 18px; color: #6c757d;">↳</span>
-                <input type="text" name="origen_dinamico" class="origen-input" placeholder="Parada adicional..." style="flex: 1;">
-                <button type="button" class="btn-remove-origen" style="background: none; border: none; color: red; font-weight: bold; cursor: pointer; width: 30px;">✕</button>
+                <input type="text" name="origen_dinamico" class="origen-input" autocomplete="off" placeholder="Parada adicional..." style="flex: 1;">
+                <button type="button" class="btn-remove-origen" ...>✕</button>
             `;
             container.appendChild(div);
 
@@ -483,7 +576,9 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
         
         
         const container = document.getElementById('origenes-container');
-        container.innerHTML = `<div class="input-group-origen" style="display: flex; gap: 5px;"><input type="text" name="origen_dinamico" class="origen-input" placeholder="Origen Principal" required style="flex: 1;"><div style="width: 30px;"></div></div>`;
+        container.innerHTML = `<div class="input-group-origen" ...>
+        <input type="text" name="origen_dinamico" class="origen-input" autocomplete="off" ...>
+        </div>`;
         const inp = container.querySelector('.origen-input');
         activarAutocomplete(inp);
         inp.addEventListener('change', calcularYMostrarRuta);
@@ -523,124 +618,42 @@ function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     if (ids.length === 0) return alert("No hay viajes seleccionados.");
 
     if (await asignarMultiplesReservas(ids, movilId, caches)) {
-        // --- LA CLAVE: LIMPIEZA TOTAL ---
+       
         limpiarSeleccion(); 
         document.getElementById('select-movil-multi').value = "";
         alert(`Éxito: Se asignaron ${ids.length} viajes.`);
     }
+
+
+    
+
 });
+    
 
+    const ejecutarSugerencia = () => {
+    const duracion = document.getElementById('duracion_estimada_minutos').value;
+    const turno = document.getElementById('hora_turno').value;
+    const inputHoraPickUp = document.getElementById('hora_pickup');
 
-
-
-window.printReport = () => {
-    const contenido = document.getElementById('reporte-body-print').innerHTML;
-    const ventanaPrenta = window.open('', '', 'height=600,width=800');
-    ventanaPrenta.document.write('<html><head><title>Informe</title></head><body>');
-    ventanaPrenta.document.write(contenido);
-    ventanaPrenta.document.write('</body></html>');
-    ventanaPrenta.document.close();
-    ventanaPrenta.print();
+    if (duracion && turno) {
+        const sugerencia = calcularSugerenciaPickUp(turno, duracion);
+        inputHoraPickUp.value = sugerencia;
+        
+        // Feedback visual para el operador
+        inputHoraPickUp.style.transition = "background-color 0.5s";
+        inputHoraPickUp.style.backgroundColor = "#e8f0fe";
+        setTimeout(() => inputHoraPickUp.style.backgroundColor = "", 1000);
+    }
 };
 
+const inputDuracion = document.getElementById('duracion_estimada_minutos');
+const inputHoraTurno = document.getElementById('hora_turno');
 
-function actualizarFiltrosDeMoviles() {
-    const selectReservas = document.getElementById('filtro-chofer-asignados');
-    const selectMapa = document.getElementById('filtro-chofer-mapa');
-    const selectAdmin = document.getElementById('chofer-movil-select');
-
-    if (selectReservas || selectMapa) {
-        let optionsHTMLFiltro = '<option value="">Todos los choferes</option>';
-        const movilesConChofer = caches.choferes
-            .filter(chofer => chofer.movil_actual_id)
-            .map(chofer => {
-                const movilAsignado = caches.moviles.find(m => m.id === chofer.movil_actual_id);
-                return movilAsignado ? { choferId: chofer.id, choferNombre: chofer.nombre, movilNumero: movilAsignado.numero } : null;
-            })
-            .filter(item => item !== null)
-            .sort((a, b) => a.movilNumero - b.movilNumero);
-
-        movilesConChofer.forEach(item => {
-            optionsHTMLFiltro += `<option value="${item.choferId}">Móvil ${item.movilNumero} - ${item.choferNombre}</option>`;
-        });
-
-        
-        [selectReservas, selectMapa].forEach(select => {
-            if (select) {
-                const valorActual = select.value;
-                select.innerHTML = optionsHTMLFiltro;
-                select.value = valorActual;
-            }
-        });
-    }
-
-    if (selectAdmin) {
-        let optionsHTMLAdmin = '<option value="">(Opcional) Asignar Móvil</option>';
-        caches.moviles.forEach(movil => {
-            const choferAsignado = caches.choferes.find(c => c.movil_actual_id === movil.id);
-            const infoChofer = choferAsignado ? `(Asignado a ${choferAsignado.nombre})` : '(Libre)';
-            optionsHTMLAdmin += `<option value="${movil.id}">N° ${movil.numero} ${infoChofer}</option>`;
-        });
-        selectAdmin.innerHTML = optionsHTMLAdmin;
-    }
-
-    // Actualizar selectores de reportes
-   const repEmpresaSelect = document.getElementById('rep-empresa-select');
-    if (repEmpresaSelect && window.appCaches.clientes) {
-        const valorActual = repEmpresaSelect.value; // Guardar selección
-        let opts = '<option value="">Seleccionar Empresa...</option>';
-        Object.entries(window.appCaches.clientes).forEach(([id, data]) => {
-            opts += `<option value="${id}">${data.nombre}</option>`;
-        });
-        repEmpresaSelect.innerHTML = opts;
-        repEmpresaSelect.value = valorActual; // Restaurar selección
-    }
-
-    // Actualizar selectores de reportes (Chofer)
-    const repChoferSelect = document.getElementById('rep-chofer-select');
-    if (repChoferSelect && window.appCaches.choferes) {
-        const valorActualChofer = repChoferSelect.value; // Guardar selección
-        let optsChofer = '<option value="">Todos los móviles</option>';
-        window.appCaches.choferes.forEach(ch => {
-            const movil = window.appCaches.moviles.find(m => m.id === ch.movil_actual_id);
-            if (movil) {
-                optsChofer += `<option value="${ch.id}">Móvil ${movil.numero} - ${ch.nombre}</option>`;
-            }
-        });
-        repChoferSelect.innerHTML = optsChofer;
-        repChoferSelect.value = valorActualChofer; 
-        }
-    
+if (inputDuracion && inputHoraTurno) {
+    inputDuracion.addEventListener('change', ejecutarSugerencia);
+    // 🚀 'input' hace que calcule mientras escribís la hora
+    inputHoraTurno.addEventListener('input', ejecutarSugerencia);
 }
-
-
-// 5. INICIALIZACIÓN CENTRAL
-function initApp() {
-    if (appInitialized) return;
-    appInitialized = true;
-    
-    const btnImportar = document.getElementById('btn-importar-excel');
-    const inputExcel = document.getElementById('input-excel');
-
-   if (btnImportar && inputExcel) {
-    btnImportar.addEventListener('click', () => {
-        // VALIDACIÓN DE SEGURIDAD
-        const clienteId = document.getElementById('select-cliente-importacion').value;
-        if (!clienteId) return alert("⚠️ ATENCIÓN: Primero seleccioná el CLIENTE en el menú desplegable al lado del botón.");
-        
-        inputExcel.click(); // Recién ahora abrimos el archivo
-    });
-
-    inputExcel.addEventListener('change', async (e) => {
-        if (e.target.files.length > 0) {
-            try {
-                const clienteId = document.getElementById('select-cliente-importacion').value; // Capturamos el ID
-                const { manejarImportacionExcel } = await import('./reservas.js');
-                // Pasamos el clienteId como segundo parámetro
-                manejarImportacionExcel(e, clienteId); 
-            } catch (err) { alert("Error al cargar módulo importación."); }
-        }
-    });
 
     
     // --- WINDOW.APP DEFINITIVO ---
@@ -691,8 +704,64 @@ function initApp() {
                     document.getElementById('sub-fact-emitidas').style.display = 'block';
                     window.app.cargarFacturasEmitidas();
             }       
-        }  
-    };       
+        },
+        
+        abrirAsistenteCarpooling: (reservaId) => {
+            const panel = document.getElementById('asistente-carpooling');
+            const lista = document.getElementById('lista-sugerencias');
+            
+            // Buscamos la reserva base en el snapshot global
+            const docBase = lastReservasSnapshot.docs.find(d => d.id === reservaId);
+            if (!docBase) return;
+
+            const base = { id: docBase.id, ...docBase.data() };
+            const pool = lastReservasSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // 🚀 Búsqueda directa (ya no es necesario el .then)
+            const compatibles = buscarCompatibles(base, pool);
+            
+            lista.innerHTML = '';
+            if (compatibles.length === 0) {
+                lista.innerHTML = '<p style="text-align:center; color:#999; font-size:12px;">No se encontraron viajes compatibles.</p>';
+            } else {
+                compatibles.forEach(c => {
+                    const div = document.createElement('div');
+                    div.className = "sugerencia-item";
+                    div.style.cssText = "padding:10px; border-bottom:1px solid #eee; background: #fff; margin-bottom:5px; border-radius:4px; border-left: 5px solid #1877f2;";
+
+                    const horaBase = c.hora_pickup || c.hora_turno;
+                    const [h, m] = horaBase.split(':').map(Number);
+                    const calc = new Date();
+                    calc.setHours(h, m + (parseInt(c.duracion_estimada_minutos) || 0));
+                    const llegadaEst = `${calc.getHours().toString().padStart(2,'0')}:${calc.getMinutes().toString().padStart(2,'0')}`;
+
+                    // 🚀 Validación de holgura directa
+                    const holgura = validarHolgura(c.hora_turno, llegadaEst);
+                    
+                    div.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <strong>${c.nombre_pasajero}</strong>
+                            <span style="background:${holgura.color}; color:white; padding:2px 6px; border-radius:10px; font-size:10px; font-weight:bold;">
+                                ${holgura.texto} (${holgura.minutos}m)
+                            </span>
+                        </div>
+                        <div style="margin-top:4px; font-size:12px;">
+                            📍 Origen a: <strong>${c.distanciaAprox} km</strong><br>
+                            ⏱️ Llegada est: <strong>${llegadaEst}</strong> (Turno: ${c.hora_turno})
+                        </div>
+                        <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+                            <button onclick="window.app.toggleTableSelection('${c.id}', document.querySelector('tr[data-id=\\'${c.id}\\']'))" 
+                                    style="background:#1877f2; color:white; border:none; padding:5px 12px; border-radius:4px; cursor:pointer; font-size:11px;">
+                                Unir a este viaje
+                            </button>
+                        </div>
+                    `;
+                    lista.appendChild(div);
+                });
+            }
+            panel.style.display = 'block';
+        }
+    };
     
 
         
@@ -746,4 +815,3 @@ window.actualizarPanelLote = function() {
         panel.style.display = 'none';
     }
 };
-}

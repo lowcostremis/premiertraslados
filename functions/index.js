@@ -18,6 +18,11 @@ const { PDFDocument } = require("pdf-lib");
 admin.initializeApp();
 const db = admin.firestore();
 
+//if (process.env.FUNCTIONS_EMULATOR) {
+//    process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
+//    process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+//}
+
 // --- INICIALIZACIÓN DIFERIDA ---
 let algoliaClient, mapsClient;
 let pasajerosIndex, historicoIndex, reservasIndex, choferesIndex;
@@ -171,15 +176,28 @@ exports.agregarNombreClienteAReserva = onDocumentWritten("reservas/{id}", async 
 // ===================================================================================
 // 4. ADMIN USUARIOS Y EXPORTACIÓN
 // ===================================================================================
-exports.crearUsuario = onCall(async (r) => {
+// Agregamos { cors: true } para evitar el error que ves en consola
+exports.crearUsuario = onCall({ cors: true }, async (r) => {
     const { email, password, nombre } = r.data;
     const user = await admin.auth().createUser({ email, password, displayName: nombre });
     await db.collection('users').doc(user.uid).set({ nombre, email, rol: 'operador' });
     return { result: "OK" };
 });
-exports.listUsers = onCall(async () => {
-    const s = await db.collection('users').get();
-    return { users: s.docs.map(d => ({ uid: d.id, ...d.data() })) };
+
+// Corregido CORS y cambiada la lógica para listar desde Auth (más seguro)
+exports.listUsers = onCall({ cors: true }, async (request) => {
+    try {
+        const listUsersResult = await admin.auth().listUsers();
+        const users = listUsersResult.users.map(user => ({
+            uid: user.uid,
+            email: user.email,
+            nombre: user.displayName || 'Sin nombre'
+        }));
+        return { users };
+    } catch (error) {
+        console.error("ERROR DETALLADO:", error); // Esto aparecerá en la terminal del emulador
+        throw new HttpsError('internal', error.message);
+    }
 });
 
 exports.exportarHistorico = onCall({ cors: true, timeoutSeconds: 300, memory: "1GiB" }, async (r) => {
@@ -683,7 +701,7 @@ async function procesarBandejaEntrada(origen) {
 
 // 3. Trigger MANUAL (Para tu botón en la web)
 // IMPORTANTE: Asegúrate de que tu botón en el frontend llame a 'escanearCorreosGmail'
-exports.escanearCorreosGmail = onCall({ timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
+exports.escanearCorreosGmail = onCall({ cors: true, timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
     try {
         console.log("👆 Escaneo Manual Iniciado...");
         const resultado = await procesarBandejaEntrada("Manual");
@@ -693,7 +711,6 @@ exports.escanearCorreosGmail = onCall({ timeoutSeconds: 540, memory: "1GiB" }, a
         throw new HttpsError('internal', error.message);
     }
 });
-
 // 4. Trigger AUTOMÁTICO (Cada 15 min)
 exports.chequearCorreosCron = onSchedule("every 15 minutes", async (event) => {
     if (!process.env.GMAIL_CLIENT_ID) return;
