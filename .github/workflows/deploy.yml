@@ -21,10 +21,9 @@ jobs:
         run: npm --prefix ./functions ci
 
       - name: Deploy to Firebase
-        uses: w9jds/firebase-action@v15.5.0
+        uses: w9jds/firebase-action@v15.5.0 # Versión estable
         with:
-          # 🚀 QUITAMOS el flag --project de aquí para que use el del archivo .firebaserc
-          args: deploy --only functions,hosting
+          # 🚀 Forzamos el proyecto aquí para corregir la ruta duplicada
+          args: deploy --only functions,hosting --project premiertraslados-31ee2
         env:
           GCP_SA_KEY: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          # 🚀 NUNCA agregues PROJECT_ID aquí si usas una Service Account Key
