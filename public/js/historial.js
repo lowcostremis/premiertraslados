@@ -186,56 +186,65 @@ function mostrarDatosHistorialEnTabla(documentos) {
 
     documentos.forEach(item => {
         const viaje = typeof item.data === 'function' ? item.data() : item;
-        const id = item.id || (typeof item.data === 'function' ? item.ref.id : item.objectID); // Asegurar ID
+        const id = item.id || (typeof item.data === 'function' ? item.ref.id : item.objectID);
+        
         const estado = (typeof viaje.estado === 'object' ? viaje.estado.principal : viaje.estado) || 'N/A';
         const estadoStr = estado.toUpperCase();
-        let colorEstado = '#003cff'; // Azul por defecto (Finalizado)
+        
+        let colorEstado = '#003cff'; 
         if (estadoStr === 'ANULADO' || estadoStr === 'NEGATIVO') {
             colorEstado = 'red';
         } else if (estadoStr === 'DEBITADO') {
-            colorEstado = '#6f42c1'; // Púrpura para coincidir con CSS
+            colorEstado = '#6f42c1'; 
         }
+
         const clienteObj = window.appCaches?.clientes?.[viaje.cliente] || { nombre: viaje.cliente_nombre || 'N/A' };
-        const choferObj = window.appCaches?.choferes?.find(c => c.id === (viaje.chofer_asignado_id || viaje.asignado_a)) || { nombre: 'N/A' };
+        
+        // --- LÓGICA DE AUDITORÍA (SOLUCIÓN A) ---
+        // Priorizamos los datos fijos guardados en el viaje. 
+        // Si no existen (viajes antiguos), buscamos en el caché.
+        const nombreChofer = viaje.chofer_nombre || 
+                             window.appCaches?.choferes?.find(c => c.id === (viaje.chofer_asignado_id || viaje.asignado_a))?.nombre || 
+                             'N/A';
+        
+        const numeroMovil = viaje.movil_numero ? `Móvil ${viaje.movil_numero}` : 
+                            (viaje.movil_asignado_id ? `Móvil ${window.appCaches?.moviles?.find(m => m.id === viaje.movil_asignado_id)?.numero || '?'}` : 'S/N');
+        
+        const patenteDisplay = viaje.movil_patente ? ` [${viaje.movil_patente}]` : '';
+        // ---------------------------------------
+
         const logLimpio = viaje.log ? viaje.log.replace(/\n/g, '\\n').replace(/"/g, '&quot;') : 'Sin registros';
 
         const filaHTML = `
             <tr>
                 <td style="font-size: 12px; vertical-align: middle;">${viaje.autorizacion || '---'}</td>
-                
                 <td style="font-size: 12px; vertical-align: middle;">${viaje.siniestro || '---'}</td>
-                
                 <td style="vertical-align: middle;">${viaje.fecha_turno || '--/--'}</td>
-                
                 <td style="vertical-align: middle;">${viaje.hora_turno || '--:--'}</td>
-                
                 <td style="vertical-align: middle;">
                     <div style="font-weight:bold; font-size: 13px;">${viaje.nombre_pasajero || 'N/A'}</div>
                     <div style="font-size: 11px; color: #1877f2; margin-top:2px;">🏢 ${clienteObj.nombre || 'Sin cliente'}</div>
                 </td>
-                
                 <td style="font-size: 11px; vertical-align: middle; max-width: 150px; overflow:hidden; text-overflow:ellipsis;" title="${viaje.origen}">
                     ${viaje.origen || 'N/A'}
                 </td>
-                
                 <td style="font-size: 11px; vertical-align: middle; max-width: 150px; overflow:hidden; text-overflow:ellipsis;" title="${viaje.destino}">
                     ${viaje.destino || 'N/A'}
                 </td>
-                
                 <td style="text-align: center; vertical-align: middle;">
                     <div style="font-weight:bold;">${viaje.distancia || '--'}</div>
                     ${viaje.espera_total && viaje.espera_total != '0' 
                         ? `<div style="font-size: 10px; color: #d63384; margin-top:2px;">⏳ ${viaje.espera_total}hs</div>` 
                         : ''}
                 </td>
-                
-                <td style="font-size: 12px; vertical-align: middle;">${choferObj.nombre}</td>
-                
+                <td style="font-size: 11px; vertical-align: middle;">
+                    <div style="font-weight:bold;">${nombreChofer}</div>
+                    <div style="color:#666;">${numeroMovil}${patenteDisplay}</div>
+                </td>
                 <td style="text-align: center; vertical-align: middle;">
                     <span style="font-size: 10px; font-weight: bold; color: ${colorEstado}; display:block; margin-bottom:5px;">
                         ${estadoStr}
                     </span>
-                    
                     <div style="display: flex; gap: 5px; justify-content: center;">
                         <button onclick="window.app.abrirModalEditarHistorico('${id}')" 
                                 title="Editar"

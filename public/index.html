@@ -756,9 +756,13 @@
                          </div>
                    </div>
                     <div class="form-row">
-                        <div class="form-group">
-                            <label for="destino">Destino</label>
-                            <input type="text" id="destino" name="destino" autocomplete="off">
+                        <div class="form-group" style="align-items: flex-start;">
+                            <label>Destino(s)</label>
+                            <div id="destinos-container" style="width: 100%; display: flex; flex-direction: column; gap: 8px;"></div>
+                            
+                            <button type="button" id="btn-add-destino" style="margin-top: 8px; background: transparent; border: 1px dashed #dc3545; color: #dc3545; padding: 5px; width: 100%; cursor: pointer;">
+                                + Agregar parada de destino
+                            </button>
                         </div>
                     </div>
                    

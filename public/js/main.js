@@ -49,6 +49,7 @@ import {
     finalizarReserva,
     quitarAsignacion,
     updateHoraPickup,
+    updateHoraTurno,
     updateZona,
     handleDniBlur,
     confirmarReservaImportada,
@@ -202,73 +203,120 @@ function toggleMenu(event) {
     event.currentTarget.nextElementSibling.classList.toggle('visible');
 }
 
+function toggleTableSelection(id, row) {
+    const docReserva = lastReservasSnapshot.docs.find(d => d.id === id);
+    const dataReserva = docReserva ? docReserva.data() : null;
+
+    if (!selectedTableIds.has(id)) {
+        // Bloqueo si el nuevo es exclusivo
+        if (dataReserva?.es_exclusivo && selectedTableIds.size > 0) {
+            alert("⚠️ Un 'Viaje Exclusivo' no puede combinarse con otros servicios.");
+            return;
+        }
+        // Bloqueo si ya hay un exclusivo seleccionado
+        const tieneExclusivoYa = Array.from(selectedTableIds).some(sid => {
+            const d = lastReservasSnapshot.docs.find(doc => doc.id === sid);
+            return d?.data()?.es_exclusivo;
+        });
+        if (tieneExclusivoYa) {
+            alert("⚠️ Ya tienes seleccionado un 'Viaje Exclusivo'. No puedes sumar más pasajeros.");
+            return;
+        }
+
+        selectedTableIds.add(id);
+        if (row) row.classList.add('selected-row');
+    } else {
+        selectedTableIds.delete(id);
+        if (row) row.classList.remove('selected-row');
+    }
+    updateTablePanelVisibility();
+}
+
 function updateTablePanelVisibility() {
     const panel = document.getElementById('multi-select-panel');
-    const contador = document.getElementById('contador-seleccion');
-    const lista = document.getElementById('multi-select-list');
-    const selectMovil = document.getElementById('select-movil-multi');
-    const btnAsignar = document.getElementById('btn-assign-multi');
+    const form = document.getElementById('reserva-form');
+    const btnGuardar = form ? form.querySelector('button[type="submit"]') : null;
+    const modalTitle = document.getElementById('modal-title');
+    const modalEl = document.getElementById('reserva-modal');
 
     if (selectedTableIds.size > 0) {
         panel.style.display = 'block';
-        if(contador) contador.textContent = selectedTableIds.size;
-        
-        // Limpieza y carga de lista del panel lateral
-        lista.innerHTML = '';
-        selectedTableIds.forEach(id => {
-            const li = document.createElement('li');
-            li.dataset.id = id; 
-            li.style.display = 'none'; 
-            lista.appendChild(li);
-        });
 
-        const mensaje = document.createElement('li');
-        mensaje.style.padding = '10px';
-        mensaje.textContent = `Has seleccionado ${selectedTableIds.size} viajes.`;
-        lista.appendChild(mensaje);
-
-        // Carga de móviles en el panel si no están
-        if (selectMovil.options.length <= 1 && caches.moviles) {
-             let opts = '<option value="">Seleccionar móvil...</option>';
-             caches.moviles.forEach(m => {
-                 const ch = caches.choferes.find(c => c.movil_actual_id === m.id);
-                 opts += `<option value="${m.id}">Móvil ${m.numero} ${ch ? `(${ch.nombre})` : ''}</option>`;
-             });
-             selectMovil.innerHTML = opts;
-        }
-        btnAsignar.disabled = false;
-
-        // 🚀 MEJORA: Previsualizamos la ruta pero MANTENEMOS la ficha visible
-        if (selectedTableIds.size >= 1) {
-            document.getElementById('reserva-modal').style.display = 'block';
-            document.getElementById('reserva-form').style.display = 'block'; // 🟢 SIEMPRE VISIBLE
-            document.getElementById('modal-title').textContent = selectedTableIds.size > 1 ? 'Previsualización Carpooling' : 'Reserva';
+        // 🚀 MEJORA: Solo operamos el modal si hay más de 1 reserva (Carpooling)
+        if (selectedTableIds.size > 1) {
+            if (form) form.reset(); // Limpieza preventiva para Carpooling
             
-            // Ajustamos el tamaño relativo para que ambos quepan bien
-            document.getElementById('mapa-modal-container').style.flex = '1.2'; 
+            const ids = Array.from(selectedTableIds);
+            const seleccionadas = ids.map(id => {
+                const doc = lastReservasSnapshot.docs.find(d => d.id === id);
+                return doc ? { id: doc.id, ...doc.data() } : null;
+            }).filter(r => r !== null);
+
+            if (form) {
+                const containerO = document.getElementById('origenes-container');
+                const containerD = document.getElementById('destinos-container');
+                
+                // 🛠️ FIX: Verificación de existencia de contenedores
+                if (containerO) containerO.innerHTML = '';
+                if (containerD) containerD.innerHTML = '';
+
+                seleccionadas.forEach((r, idx) => {
+                    const letra = String.fromCharCode(65 + idx);
+                    
+                    if (containerO) {
+                        const divO = document.createElement('div');
+                        divO.style.cssText = "display: flex; gap: 8px; align-items: center;";
+                        divO.innerHTML = `<span style="font-weight:bold; color:#28a745; width:15px;">${letra}</span>
+                                          <input type="text" value="${r.origen}" readonly style="flex:1; background:#f8f9fa;">`;
+                        containerO.appendChild(divO);
+                    }
+
+                    if (containerD) {
+                        const divD = document.createElement('div');
+                        divD.style.cssText = "display: flex; gap: 8px; align-items: center;";
+                        divD.innerHTML = `<span style="font-weight:bold; color:#dc3545; width:15px;">${letra}</span>
+                                          <input type="text" value="${r.destino}" readonly style="flex:1; background:#fff5f5;">`;
+                        containerD.appendChild(divD);
+                    }
+                });
+
+                // 🚀 FIX: Cálculo de pasajeros FUERA del bucle
+                let totalPax = seleccionadas.reduce((acc, r) => acc + (parseInt(r.cantidad_pasajeros) || 1), 0);
+                form.cantidad_pasajeros.value = totalPax;
+
+                // Validación de capacidad
+                if (totalPax > 4) {
+                    form.cantidad_pasajeros.style.cssText = "background:#fff5f5; border:2px solid #dc3545; color:#dc3545; font-weight:bold;";
+                } else {
+                    form.cantidad_pasajeros.style.cssText = "background:#f8f9fa; border:1px solid #ccc; color:#333;";
+                }
+
+                form.nombre_pasajero.value = `VIAJE COMPARTIDO (${seleccionadas.length} PASAJEROS)`;
+                form.dni_pasajero.value = "";
+                form.telefono_pasajero.value = "";
+                form.siniestro.value = "";
+                form.autorizacion.value = "";
+                
+                if (btnGuardar) btnGuardar.style.display = 'none';
+                if (modalTitle) modalTitle.textContent = "Previsualización Carpooling";
+            }
+
+            modalEl.style.display = 'block';
+            initMapaModal().then(() => { mostrarRutaConsolidada(ids); });
             
-            mostrarRutaConsolidada(Array.from(selectedTableIds));
+        } else {
+            // 🛡️ IMPORTANTE: Si bajamos a 1 o 0, solo cerramos el modal si era un Carpooling
+            if (modalTitle && modalTitle.textContent === "Previsualización Carpooling") {
+                modalEl.style.display = 'none';
+            }
+            if (btnGuardar) btnGuardar.style.display = 'block';
         }
     } else {
         panel.style.display = 'none';
+        if (modalTitle && modalTitle.textContent === "Previsualización Carpooling") {
+            modalEl.style.display = 'none';
+        }
     }
-}
-
-function toggleTableSelection(reservaId, rowElement) {
-    if (selectedTableIds.has(reservaId)) {
-        selectedTableIds.delete(reservaId);
-        if(rowElement) rowElement.classList.remove('selected-row');
-    } else {
-        selectedTableIds.add(reservaId);
-        if(rowElement) rowElement.classList.add('selected-row');
-    }
-    
-    // Sincronizar con el marcador del mapa si existe
-    if (window.app.actualizarMarcadorMapa) {
-        window.app.actualizarMarcadorMapa(reservaId, selectedTableIds.has(reservaId));
-    }
-    
-    updateTablePanelVisibility();
 }
 
 function limpiarSeleccion() {
@@ -327,50 +375,51 @@ function filtrarPorHoras(horas, propagar = true) {
 function openNuevaReservaConDatos(datos, initMapaModalCallback) {
     const form = document.getElementById('reserva-form');
     form.reset();
+    
+    // Población de datos básicos
     form.cliente.value = datos.cliente || 'Default';
     form.dni_pasajero.value = datos.dni_pasajero || '';
     form.nombre_pasajero.value = datos.nombre_pasajero || '';
     form.telefono_pasajero.value = datos.telefono_pasajero || '';
-    form.espera_total.value = '';
-    form.espera_sin_cargo.value = '';
     form.siniestro.value = datos.siniestro || '';
     form.autorizacion.value = datos.autorizacion || '';
-    const duracionOculta = document.getElementById('duracion_estimada_minutos');
-    if (duracionOculta) duracionOculta.value = '';
-    
-    // Configurar orígenes (simple para regreso)
-    const container = document.getElementById('origenes-container');
-    const inputOrigen = container.querySelector('.origen-input');
-    if(inputOrigen) {
-        inputOrigen.value = datos.origen || '';
-        activarAutocomplete(inputOrigen); 
-    }
-    
-    const inputDestino = document.getElementById('destino');
-    if(inputDestino) {
-        inputDestino.value = datos.destino || '';
-        activarAutocomplete(inputDestino);
-    }
-    
+
+    // Limpieza y reconstrucción de contenedores
+    const containerO = document.getElementById('origenes-container');
+    const containerD = document.getElementById('destinos-container');
+    containerO.innerHTML = '';
+    containerD.innerHTML = '';
+
+    // 🚀 LÓGICA DE SPLIT: Crea un input por cada parada detectada en el string
+    const paradasO = (datos.origen || "").split(' + ');
+    paradasO.forEach((dir, idx) => {
+        const div = document.createElement('div');
+        div.className = 'input-group-origen';
+        div.innerHTML = `<input type="text" name="origen_dinamico" class="origen-input" value="${dir}" autocomplete="off" placeholder="Origen" required style="width:100%">`;
+        containerO.appendChild(div);
+        activarAutocomplete(div.querySelector('input'));
+    });
+
+    const paradasD = (datos.destino || "").split(' + ');
+    paradasD.forEach((dir, idx) => {
+        const div = document.createElement('div');
+        div.className = 'input-group-destino';
+        div.innerHTML = `<input type="text" class="destino-input" value="${dir}" autocomplete="off" placeholder="Destino" required style="width:100%">`;
+        containerD.appendChild(div);
+        activarAutocomplete(div.querySelector('input'));
+    });
 
     document.getElementById('reserva-id').value = '';
     document.getElementById('modal-title').textContent = 'Nueva Reserva (Regreso)';
     document.getElementById('reserva-modal').style.display = 'block';
     
-
     if(initMapaModalCallback) {
-        
         setTimeout(() => {
             initMapaModalCallback(null, null);
             calcularYMostrarRuta(); 
         }, 100);
     }
 }
-
-
-
-
-
 
 window.printReport = () => {
     const contenido = document.getElementById('reporte-body-print').innerHTML;
@@ -545,12 +594,27 @@ function initApp() {
 
     initMultiOrigenLogic();
 
-    // Activar Destino
-    const inputDestino = document.getElementById('destino');
-    if (inputDestino) {
-        activarAutocomplete(inputDestino);
-        inputDestino.addEventListener('change', calcularYMostrarRuta);
-    }
+
+
+    document.getElementById('btn-add-destino')?.addEventListener('click', () => {
+        const container = document.getElementById('destinos-container');
+        const div = document.createElement('div');
+        div.className = 'input-group-destino';
+        div.style.cssText = "display: flex; gap: 5px; align-items: center;";
+        div.innerHTML = `
+            <span style="font-size: 18px; color: #6c757d;">↳</span>
+            <input type="text" class="destino-input" autocomplete="off" placeholder="Parada de descarga..." style="flex: 1;">
+            <button type="button" class="btn-remove-destino" style="color:red;border:none;background:none;font-weight:bold;cursor:pointer;">✕</button>
+        `;
+        container.appendChild(div);
+        const input = div.querySelector('input');
+        activarAutocomplete(input);
+        input.addEventListener('change', calcularYMostrarRuta);
+        div.querySelector('.btn-remove-destino').addEventListener('click', () => { 
+            div.remove(); 
+            calcularYMostrarRuta(); 
+        });
+    });
 
     // Imports Gmail/PDF
     document.getElementById('btn-importar-gmail')?.addEventListener('click', async () => {
@@ -569,24 +633,37 @@ function initApp() {
     
 
     document.getElementById('btn-nueva-reserva')?.addEventListener('click', () => {
-        document.getElementById('reserva-form').reset();
+        const form = document.getElementById('reserva-form');
+        form.reset();
+        
+        // 1. Limpiamos los contenedores dinámicos por completo
+        document.getElementById('origenes-container').innerHTML = '';
+        document.getElementById('destinos-container').innerHTML = '';
+
+        // 2. Re-creamos el primer input de origen (obligatorio)
+        const divO = document.createElement('div');
+        divO.className = 'input-group-origen';
+        divO.innerHTML = `<input type="text" name="origen_dinamico" class="origen-input" autocomplete="off" placeholder="Origen Principal" required style="width:100%">`;
+        document.getElementById('origenes-container').appendChild(divO);
+        activarAutocomplete(divO.querySelector('input'));
+
+        // 3. Re-creamos el primer input de destino (obligatorio)
+        const divD = document.createElement('div');
+        divD.className = 'input-group-destino';
+        divD.innerHTML = `<input type="text" class="destino-input" autocomplete="off" placeholder="Destino Principal" required style="width:100%">`;
+        document.getElementById('destinos-container').appendChild(divD);
+        activarAutocomplete(divD.querySelector('input'));
+
         poblarSelectDeMoviles(caches);
         document.getElementById('modal-title').textContent = 'Nueva Reserva';
         document.getElementById('reserva-id').value = '';
         
-        
-        const container = document.getElementById('origenes-container');
-        container.innerHTML = `<div class="input-group-origen" ...>
-        <input type="text" name="origen_dinamico" class="origen-input" autocomplete="off" ...>
-        </div>`;
-        const inp = container.querySelector('.origen-input');
-        activarAutocomplete(inp);
-        inp.addEventListener('change', calcularYMostrarRuta);
+        // 4. Limpiamos el estado del mapa
+        if (window.app.limpiarMapaModal) window.app.limpiarMapaModal();
 
         document.getElementById('reserva-modal').style.display = 'block';
-        initMapaModal(null, null); 
+        initMapaModal(); 
     });
-    
     document.getElementById('btn-toggle-select-table')?.addEventListener('click', function() {
         window.isTableMultiSelectMode = !window.isTableMultiSelectMode;
         if (window.isTableMultiSelectMode) {
@@ -663,7 +740,9 @@ if (inputDuracion && inputHoraTurno) {
         asignarMovil: (id, mId) => asignarMovil(id, mId, caches),
         changeReservaState: (id, st) => changeReservaState(id, st, caches),
         finalizarReserva: (id) => finalizarReserva(id, caches),
-        quitarAsignacion, updateHoraPickup, updateZona,
+        quitarAsignacion,
+        updateHoraTurno: (e, id) => updateHoraTurno(e, id),
+        updateZona,
         toggleMenu, hideTableMenus,
         toggleMultiSelectMode,
         filtrarMapa, filtrarMapaPorHoras, filtrarMapaPorChofer,
@@ -814,5 +893,5 @@ window.actualizarPanelLote = function() {
     } else {
         panel.style.display = 'none';
     }
-};
-// pruba de github
+}; // pruba de github
+// 🚩 BORRÉ LA LLAVE QUE SOBRABA 

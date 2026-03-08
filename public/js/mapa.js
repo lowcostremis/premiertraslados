@@ -100,7 +100,6 @@ export async function cargarMarcadoresDeReservas() {
         if (['Anulado', 'Finalizado', 'Cancelado', 'Debitado', 'Negativo'].includes(e)) return;
         if (filtroChoferMapaId && r.chofer_asignado_id !== filtroChoferMapaId) return;
 
-        // Lógica de filtros de estado y tiempo
         if (filtroMapaActual === 'Pendientes' && e !== 'Pendiente') return;
         if (filtroMapaActual === 'Asignados' && !['Asignado', 'En Origen', 'Viaje Iniciado'].includes(e)) return;
         if (filtroMapaActual === 'En Curso' && e !== 'En Curso') return;
@@ -140,7 +139,7 @@ export async function cargarMarcadoresDeReservas() {
     });
 }
 
-// --- 4. UBICACIÓN DE CHOFERES (ACTUALIZADO A ADVANCED MARKERS) ---
+// --- 4. UBICACIÓN DE CHOFERES ---
 export async function escucharUbicacionChoferes() {
     const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
     if (unsubscribeChoferes) unsubscribeChoferes();
@@ -193,15 +192,14 @@ function handleMarkerSelection(reserva) {
     window.app.toggleTableSelection(reserva.id, fila);
 }
 
-// --- 6. AUTOCOMPLETE (CORREGIDO) ---
+// --- 6. AUTOCOMPLETE ---
 export async function activarAutocomplete(inputElement) {
     if (!inputElement) return;
     const { Autocomplete } = await google.maps.importLibrary("places");
     
     const autocomplete = new Autocomplete(inputElement, {
         componentRestrictions: { country: "ar" },
-        fields: ["geometry", "formatted_address"],
-        //types: ["address"]
+        fields: ["geometry", "formatted_address"]
     });
 
     autocomplete.addListener("place_changed", () => {
@@ -213,26 +211,47 @@ export async function activarAutocomplete(inputElement) {
     });
 }
 
-// --- 7. MODAL Y RUTAS ---
+// --- 7. LIMPIEZA Y MODAL ---
+export function limpiarMapaModal() {
+    // 🛠️ FIX: Solo quitamos el mapa, no reseteamos direcciones con objetos vacíos (evita error travelMode)
+    if (directionsRenderer) {
+        directionsRenderer.setMap(null);
+    }
+    limpiarMarcadoresRutaModal();
+    coordenadasInputs.clear(); 
+}
+
 export async function initMapaModal() {
     const c = document.getElementById("mapa-modal-container");
     if (!c) return;
+
+    limpiarMapaModal();
+
     const { DirectionsService, DirectionsRenderer } = await google.maps.importLibrary("routes");
     const { Map } = await google.maps.importLibrary("maps");
     
     if (!directionsService) directionsService = new DirectionsService();
-    if (!directionsRenderer) directionsRenderer = new DirectionsRenderer({ draggable: true, map: null, suppressMarkers: true, polylineOptions: { strokeColor: "#1877f2", strokeWeight: 5 } });
-    if (!mapaModal) mapaModal = new Map(c, { center: { lat: -32.95, lng: -60.65 }, zoom: 13, mapId: "MODAL_MAP_ID" });
+    if (!directionsRenderer) {
+        directionsRenderer = new DirectionsRenderer({ 
+            draggable: true, 
+            polylineOptions: { strokeColor: "#1877f2", strokeWeight: 5 },
+            suppressMarkers: true // Usamos nuestros propios pines A, B, C
+        });
+    }
+    if (!mapaModal) {
+        mapaModal = new Map(c, { center: { lat: -32.95, lng: -60.65 }, zoom: 13, mapId: "MODAL_MAP_ID" });
+    }
     
-    directionsRenderer.setMap(null); 
-    setTimeout(calcularYMostrarRuta, 500);
+    directionsRenderer.setMap(mapaModal);
 }
 
+// --- 8. CÁLCULO DE RUTA ---
 export async function calcularYMostrarRuta() {
     if (!directionsService || !mapaModal) return;
+    
     const inputsOrigen = Array.from(document.querySelectorAll('.origen-input'));
-    const inputDestino = document.getElementById('destino');
-    let todosLosInputs = [...inputsOrigen]; if (inputDestino) todosLosInputs.push(inputDestino);
+    const inputsDestino = Array.from(document.querySelectorAll('.destino-input'));
+    let todosLosInputs = [...inputsOrigen, ...inputsDestino];
     let puntosValidos = [];
     
     for (const input of todosLosInputs) {
@@ -250,6 +269,7 @@ export async function calcularYMostrarRuta() {
     }
     
     if (puntosValidos.length < 2) return;
+    
     directionsRenderer.setMap(mapaModal);
     directionsService.route({
         origin: puntosValidos[0].location,
@@ -259,41 +279,80 @@ export async function calcularYMostrarRuta() {
     }, (response, status) => {
         if (status === 'OK') {
             directionsRenderer.setDirections(response);
-    
-            // 🚀 CORRECCIÓN: Usamos solo puntosValidos y el flag esCarpooling en false
             renderizarPuntosRuta(puntosValidos, mapaModal, false); 
 
             let dist = 0, dur = 0;
             response.routes[0].legs.forEach(leg => { dist += leg.distance.value; dur += leg.duration.value; });
             const minutosCalculados = Math.ceil(dur / 60);
-            document.getElementById('distancia_total_input').value = (dist / 1000).toFixed(2) + " km";
-            document.getElementById('tiempo_total_input').value = minutosCalculados + " min";
+            
+            if(document.getElementById('distancia_total_input')) document.getElementById('distancia_total_input').value = (dist / 1000).toFixed(2) + " km";
+            if(document.getElementById('tiempo_total_input')) document.getElementById('tiempo_total_input').value = minutosCalculados + " min";
 
-            // 🚀 GUARDAMOS EL NÚMERO Y DISPARAMOS EL EVENTO
             const inputOculto = document.getElementById('duracion_estimada_minutos');
-            if (inputOculto) {
-                inputOculto.value = minutosCalculados; 
-                inputOculto.dispatchEvent(new Event('change')); 
-            }
+            if (inputOculto) { inputOculto.value = minutosCalculados; inputOculto.dispatchEvent(new Event('change')); }
         }
     });
 }
 
-// --- 8. UTILIDADES ---
+// --- 9. RUTA CONSOLIDADA (CARPOOLING) ---
+export async function mostrarRutaConsolidada(ids) {
+    if (!directionsService || !mapaModal || !ids || ids.length === 0) return;
+
+    const snapshot = lastReservasSnapshotRef();
+    const seleccionadas = ids.map(id => {
+        const doc = snapshot.docs.find(d => d.id === id);
+        return doc ? { id: doc.id, ...doc.data() } : null;
+    }).filter(r => r && r.origen_coords && r.destino_coords);
+
+    if (seleccionadas.length < 1) return;
+
+    const puntosRuta = [];
+    seleccionadas.forEach(r => puntosRuta.push(r.origen_coords));
+    seleccionadas.forEach(r => puntosRuta.push(r.destino_coords));
+
+    const waypoints = puntosRuta.slice(1, -1).map(p => ({
+        location: new google.maps.LatLng(p.latitude, p.longitude),
+        stopover: true
+    }));
+
+    directionsRenderer.setMap(mapaModal);
+    directionsService.route({
+        origin: new google.maps.LatLng(puntosRuta[0].latitude, puntosRuta[0].longitude),
+        destination: new google.maps.LatLng(puntosRuta[puntosRuta.length-1].latitude, puntosRuta[puntosRuta.length-1].longitude),
+        waypoints: waypoints,
+        optimizeWaypoints: false,
+        travelMode: 'DRIVING'
+    }, (response, status) => {
+        if (status === 'OK') {
+            directionsRenderer.setDirections(response);
+            
+            const puntosParaMarker = puntosRuta.map(p => ({ location: { lat: p.latitude, lng: p.longitude } }));
+            renderizarPuntosRuta(puntosParaMarker, mapaModal, true);
+            
+            let distTotal = 0, tiempoTotal = 0;
+            response.routes[0].legs.forEach(leg => { distTotal += leg.distance.value; tiempoTotal += leg.duration.value; });
+            const durTotalMinutos = Math.ceil(tiempoTotal / 60);
+
+            if (document.getElementById('distancia_total_input')) document.getElementById('distancia_total_input').value = (distTotal / 1000).toFixed(2) + " km";
+            if (document.getElementById('tiempo_total_input')) document.getElementById('tiempo_total_input').value = durTotalMinutos + " min";
+        }
+    });
+}
+
+// --- UTILS ---
 export function getModalMarkerCoords() { 
-    const inputs = Array.from(document.querySelectorAll('.origen-input')); 
-    const inputDestino = document.getElementById('destino');
+    const inputsO = document.querySelectorAll('.origen-input'); 
+    const inputsD = document.querySelectorAll('.destino-input');
     const limpiar = (i) => {
+        if (!i) return null;
         const c = coordenadasInputs.get(i);
         if (!c) return null;
         return { latitude: typeof c.lat === 'function' ? c.lat() : c.lat, longitude: typeof c.lng === 'function' ? c.lng() : c.lng };
     };
-    return { origen: limpiar(inputs[0]), destino: limpiar(inputDestino) }; 
+    return { origen: limpiar(inputsO[0]), destino: limpiar(inputsD[inputsD.length - 1]) }; 
 }
 
-export function hideMapContextMenu() { 
-    if (mapContextMenu) mapContextMenu.style.display = 'none'; 
-}
+export function hideMapContextMenu() { if (mapContextMenu) mapContextMenu.style.display = 'none'; }
 
 function mostrarMenuContextualReserva(event, reserva, estado) {
     if (!mapContextMenu) return;
@@ -330,79 +389,6 @@ function geocodificar(address) {
     return new Promise(resolve => geocoder.geocode({ address: full }, (res, status) => resolve(status === 'OK' ? res : null)));
 }
 
-/**
- * Traza una ruta consolidada en el mapa del modal para múltiples viajes.
- * @param {Array} ids - Array de IDs de reservas seleccionadas
- */
-export async function mostrarRutaConsolidada(ids) {
-    if (!directionsService || !mapaModal || !ids || ids.length === 0) return;
-
-    // 1. Obtener los datos completos de las reservas seleccionadas
-    const snapshot = lastReservasSnapshotRef();
-    const seleccionadas = ids.map(id => {
-        const doc = snapshot.docs.find(d => d.id === id);
-        return doc ? { id: doc.id, ...doc.data() } : null;
-    }).filter(r => r && r.origen_coords && r.destino_coords);
-
-    if (seleccionadas.length < 1) return;
-
-    // 2. Organizar puntos: [Origen 1, Origen 2... Destino 1, Destino 2...]
-    // Esto asegura que el chofer busque a todos antes de empezar las descargas.
-    const puntosRuta = [];
-    seleccionadas.forEach(r => puntosRuta.push(r.origen_coords));
-    seleccionadas.forEach(r => puntosRuta.push(r.destino_coords));
-
-    const origenRuta = new google.maps.LatLng(puntosRuta[0].latitude, puntosRuta[0].longitude);
-    const destinoFinalRuta = new google.maps.LatLng(puntosRuta[puntosRuta.length - 1].latitude, puntosRuta[puntosRuta.length - 1].longitude);
-    
-    const waypoints = puntosRuta.slice(1, -1).map(p => ({
-        location: new google.maps.LatLng(p.latitude, p.longitude),
-        stopover: true
-    }));
-
-    // 3. Solicitar y renderizar la ruta
-    directionsRenderer.setMap(mapaModal);
-    directionsService.route({
-        origin: origenRuta,
-        destination: destinoFinalRuta,
-        waypoints: waypoints,
-        optimizeWaypoints: false, // Mantenemos NUESTRO orden (Pickups -> Drop-offs)
-        travelMode: 'DRIVING'
-    }, (response, status) => {
-        if (status === 'OK') {
-            directionsRenderer.setDirections(response);
-    
-             // 🚀 AGREGAR ESTO: Convierte las coordenadas y dibuja los pines A,B (Verde) y 1,2 (Rojo)
-            const puntosParaMarker = puntosRuta.map(p => ({ 
-               location: { lat: p.latitude, lng: p.longitude } 
-         }));
-             renderizarPuntosRuta(puntosParaMarker, mapaModal, true);
-            
-            // Actualizamos los totales del panel para que el operador vea el impacto
-            let distTotal = 0;
-            let tiempoTotal = 0;
-            response.routes[0].legs.forEach(leg => {
-                distTotal += leg.distance.value;
-                tiempoTotal += leg.duration.value;
-            });
-
-            const distInput = document.getElementById('distancia_total_input');
-            const tiempoInput = document.getElementById('tiempo_total_input');
-            const durTotalMinutos = Math.ceil(tiempoTotal / 60);
-
-            if (distInput) distInput.value = (distTotal / 1000).toFixed(2) + " km";
-            if (tiempoInput) tiempoInput.value = durTotalMinutos + " min";
-
-            // 🚀 ACTUALIZAMOS EL CAMPO OCULTO AQUÍ TAMBIÉN
-            const inputOculto = document.getElementById('duracion_estimada_minutos');
-            if (inputOculto) {
-                inputOculto.value = durTotalMinutos;
-                inputOculto.dispatchEvent(new Event('change'));
-            }
-        }
-    });
-}
-
 function limpiarMarcadoresRutaModal() {
     marcadoresRutaModal.forEach(m => m.map = null);
     marcadoresRutaModal = [];
@@ -411,7 +397,6 @@ function limpiarMarcadoresRutaModal() {
 async function renderizarPuntosRuta(puntos, mapa, esCarpooling = false) {
     const { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
     limpiarMarcadoresRutaModal();
-
     const letras = ['A', 'B', 'C', 'D'];
     const numOrigenes = esCarpooling ? puntos.length / 2 : puntos.length - 1;
 
@@ -421,20 +406,14 @@ async function renderizarPuntosRuta(puntos, mapa, esCarpooling = false) {
             lat: typeof p.location.lat === 'function' ? p.location.lat() : p.location.lat,
             lng: typeof p.location.lng === 'function' ? p.location.lng() : p.location.lng
         };
-
         if (index < numOrigenes) {
-            color = '#28a745'; // 🟢 Verde para Orígenes
+            color = '#28a745'; // 🟢 Verde
             texto = letras[index] || (index + 1).toString();
         } else {
-            color = '#dc3545'; // 🔴 Rojo para Destinos
-            texto = esCarpooling ? (index - numOrigenes + 1).toString() : '🏁';
+            color = '#dc3545'; // 🔴 Rojo
+            texto = esCarpooling ? letras[index - numOrigenes] : '🏁';
         }
-
-        const marker = new AdvancedMarkerElement({
-            position: pos,
-            map: mapa,
-            content: crearIconoDePin(color, texto)
-        });
+        const marker = new AdvancedMarkerElement({ position: pos, map: mapa, content: crearIconoDePin(color, texto) });
         marcadoresRutaModal.push(marker);
     });
 }

@@ -216,7 +216,12 @@ function renderFilaReserva(tbody, reserva, caches) {
     <td>${reserva.autorizacion || ''}</td>
     <td>${reserva.siniestro || ''}</td>
     <td>${fT}</td>
-    <td>${reserva.hora_turno || ''}</td>
+    <td class="editable-cell turno-cell">
+    ${(e !== 'Finalizado' && e !== 'Anulado') 
+        ? `<input type="time" value="${reserva.hora_turno || ''}" onchange="window.app.updateHoraTurno(event,'${reserva.id}')">`
+        : (reserva.hora_turno || '--:--')
+    }
+    </td>
     <td class="editable-cell pickup-cell">${reserva.hora_pickup || ''}</td>
     <td>
     ${reserva.nombre_pasajero || ''} 
@@ -292,18 +297,22 @@ export async function despacharPostulados() {
     snapshot.forEach(doc => {
         const data = doc.data();
         const choferId = data.chofer_postulado_id;
-        // Buscamos el móvil para el log
         const chofer = window.appCaches.choferes.find(c => c.id === choferId);
+        const movil = window.appCaches.moviles.find(m => m.id === chofer.movil_actual_id);
         
         batch.update(doc.ref, {
             chofer_asignado_id: choferId,
             movil_asignado_id: chofer.movil_actual_id,
+            // --- TRAZABILIDAD ---
+            chofer_nombre: chofer.nombre,
+            movil_numero: movil ? movil.numero : 'S/N',
+            movil_patente: movil ? movil.patente : '---',
+            // --------------------
             chofer_postulado_id: db.app.firebase_.firestore.FieldValue.delete(),
             estado: { principal: 'Asignado', detalle: 'Enviada', actualizado_en: new Date() },
             log: (data.log || '') + `\n🚀 Despacho Masivo por: ${operador} (${ahora})`
         });
         
-        // Agregar a viajes activos del chofer
         batch.update(db.collection('choferes').doc(choferId), {
             viajes_activos: db.app.firebase_.firestore.FieldValue.arrayUnion(doc.id)
         });
@@ -353,40 +362,51 @@ export async function buscarEnReservas(texto, caches) {
 }
 
 export async function handleSaveReserva(e, caches) {
-   e.preventDefault();
+    e.preventDefault();
     const f = e.target; 
     const submitBtn = f.querySelector('button[type="submit"]');    
     const operador = window.currentUserEmail || 'Sistema';
     const ahora = new Date().toLocaleString('es-AR');
 
+    // Validación de Cliente
     if (f.cliente.value === "null" || !f.cliente.value) {
         alert("⚠️ Error: Debes asignar un Cliente antes de guardar o confirmar la reserva.");
         return; 
     }
-
     
-    
-    // 1. Validaciones Previas
+    // Validación de Fecha (obligatoria si no es revisión)
     const estadoActual = document.getElementById('reserva-estado-principal')?.value || '';
     if (estadoActual !== 'Revision' && !f.fecha_turno.value) {
         alert("Atención!!: La fecha es obligatoria para confirmar la reserva.");
         return; 
     }
 
+    // 🚀 1. RECOLECCIÓN DE MÚLTIPLES ORÍGENES
     const inputsOrigen = document.querySelectorAll('.origen-input');
     let origenesArray = [];
     inputsOrigen.forEach(input => {
         if (input.value?.trim()) origenesArray.push(input.value.trim());
     });
-
     const origenFinal = origenesArray.join(' + ');
+
+    // 🚀 2. RECOLECCIÓN DE MÚLTIPLES DESTINOS (NUEVA LÓGICA)
+    const inputsDestino = document.querySelectorAll('.destino-input');
+    let destinosArray = [];
+    inputsDestino.forEach(input => {
+        if (input.value?.trim()) destinosArray.push(input.value.trim());
+    });
+    const destinoFinal = destinosArray.join(' + ');
+
+    // Validamos que haya al menos una dirección en cada lado
     if (!origenFinal) return alert("Debes ingresar al menos una dirección de origen.");
+    if (!destinoFinal) return alert("Debes ingresar al menos una dirección de destino.");
 
     const rId = f['reserva-id'].value;
     const distanciaTotal = document.getElementById('distancia_total_input')?.value || '';
     const esX = f.viaje_exclusivo.checked;
     const cP = esX ? '4' : f.cantidad_pasajeros.value;
     
+    // Obtener coordenadas de los marcadores del modal
     let coords = (typeof getModalMarkerCoords === 'function') ? getModalMarkerCoords() : { origen: null, destino: null };
 
     const clienteIdSel = f.cliente.value;
@@ -394,6 +414,7 @@ export async function handleSaveReserva(e, caches) {
                             ? caches.clientes[clienteIdSel].nombre 
                             : "Cliente Desconocido";
 
+    // 🚀 3. ARMADO DEL OBJETO DE DATOS
     const datosBase = {
         cliente: f.cliente.value,
         cliente_nombre: nombreClienteTexto,
@@ -406,7 +427,7 @@ export async function handleSaveReserva(e, caches) {
         hora_turno: f.hora_turno.value || "",
         hora_pickup: f.hora_pickup.value || "",
         origen: origenFinal,  
-        destino: f.destino.value,
+        destino: destinoFinal, // Guardamos la cadena combinada
         origen_coords: coords.origen,
         destino_coords: coords.destino,
         cantidad_pasajeros: cP,
@@ -424,7 +445,7 @@ export async function handleSaveReserva(e, caches) {
 
         let reservaGuardadaId = rId;
 
-        
+        // Actualización o Creación en Firestore
         if (rId) {
             const docRef = db.collection('reservas').doc(rId);
             await db.runTransaction(async (transaction) => {
@@ -437,57 +458,48 @@ export async function handleSaveReserva(e, caches) {
                 transaction.update(docRef, { ...datosBase, log: nuevoLog });
             });
         } else {
-            
             const dNueva = {
                 ...datosBase,
                 log: `✅ Creado por: ${operador}, via manual, (${ahora})`,
                 estado: { principal: 'Pendiente', detalle: 'Recién creada', actualizado_en: new Date() },
-                creadoEn: new Date() // Usar Date() si serverTimestamp te da problemas de consistencia inmediata
+                creadoEn: new Date()
             };
             const nuevaRef = await db.collection('reservas').add(dNueva);
             reservaGuardadaId = nuevaRef.id;
         }
 
-        
+        // Asignación de móvil opcional
         if (f.asignar_movil.value && reservaGuardadaId) {
             await asignarMovil(reservaGuardadaId, f.asignar_movil.value, caches);
         }
 
+        // Actualización de datos del Pasajero
         if (datosBase.dni_pasajero) {
             const pRef = db.collection('pasajeros').doc(datosBase.dni_pasajero);
-            
             try {
-                // 1. Leemos el pasajero primero para ver qué tiene
                 const pSnap = await pRef.get();
                 const pData = pSnap.exists ? pSnap.data() : {};
                 const domiciliosExistentes = pData.domicilios || [];
 
-                // 2. Preparamos datos básicos (Nombre y Tel siempre se actualizan)
                 let updateData = {
                     nombre_apellido: datosBase.nombre_pasajero,
                     telefono: datosBase.telefono_pasajero
                 };
 
-                // 3. LA REGLA DE ORO: 
-                // Solo guardamos el domicilio SI la lista está vacía.
-                // Si ya tiene algo (cargado por Admin o viaje anterior), NO lo tocamos.
-                if (origenesArray.length > 0) {
-                    if (domiciliosExistentes.length === 0) {
-                        // Está vacío, así que ESTE será su domicilio principal
-                        updateData.domicilios = [origenesArray[0]];
-                    }
-                    // ELSE: Ya tiene domicilio, así que no hacemos nada (no acumulamos).
+                if (origenesArray.length > 0 && domiciliosExistentes.length === 0) {
+                    updateData.domicilios = [origenesArray[0]];
                 }
-
                 await pRef.set(updateData, { merge: true });
-
             } catch (errPas) {
-                console.error("Error actualizando pasajero (silencioso):", errPas);
+                console.error("Error actualizando pasajero:", errPas);
             }
         }
 
         document.getElementById('reserva-modal').style.display = 'none';
-        return f.tiene_regreso?.checked ? { ...datosBase, origen: datosBase.destino, destino: datosBase.origen } : null;
+        
+        // 🚀 4. LÓGICA DE REGRESO ADAPTADA
+        // Invertimos el string completo de origen y destino para el viaje de vuelta
+        return f.tiene_regreso?.checked ? { ...datosBase, origen: destinoFinal, destino: origenFinal } : null;
 
     } catch (error) {
         console.error("Error saving:", error);
@@ -498,7 +510,7 @@ export async function handleSaveReserva(e, caches) {
 }
 
 export async function handleConfirmarDesdeModal(e, caches) {
-   e.preventDefault();
+    e.preventDefault();
     const f = document.getElementById('reserva-form');
 
     if (f.cliente.value === "null" || !f.cliente.value) {
@@ -506,8 +518,6 @@ export async function handleConfirmarDesdeModal(e, caches) {
         return;
     }
 
-    if (!f.checkValidity()) { f.reportValidity(); return; }
-    
     const btn = document.getElementById('btn-confirmar-modal');
     const operador = window.currentUserEmail || 'Operador';
     const ahora = new Date().toLocaleString('es-AR');
@@ -515,8 +525,16 @@ export async function handleConfirmarDesdeModal(e, caches) {
 
     try {
         btn.disabled = true; btn.textContent = 'Procesando...';
+        
+        // 🚀 RECOLECCIÓN DINÁMICA DE DESTINOS
+        const inputsDestino = document.querySelectorAll('.destino-input');
+        let destinosArray = [];
+        inputsDestino.forEach(i => { if(i.value.trim()) destinosArray.push(i.value.trim()); });
+        
         const inputsOrigen = document.querySelectorAll('.origen-input');
-        let origenes = []; inputsOrigen.forEach(i => { if(i.value.trim()) origenes.push(i.value.trim()); });
+        let origenes = []; 
+        inputsOrigen.forEach(i => { if(i.value.trim()) origenes.push(i.value.trim()); });
+
         const clienteId = f.cliente.value;
         const nombreClienteTexto = (caches.clientes && caches.clientes[clienteId]) 
                                     ? caches.clientes[clienteId].nombre 
@@ -539,15 +557,12 @@ export async function handleConfirmarDesdeModal(e, caches) {
                 hora_turno: f.hora_turno.value,
                 hora_pickup: f.hora_pickup.value,
                 origen: origenes.join(' + '),
-                destino: f.destino.value,
+                destino: destinosArray.join(' + '), // 👈 CAMBIADO: Ahora usa el array dinámico
                 cantidad_pasajeros: f.viaje_exclusivo.checked ? '4' : f.cantidad_pasajeros.value,
                 zona: f.zona.value,
                 observaciones: f.observaciones.value,
                 es_exclusivo: f.viaje_exclusivo.checked,
                 distancia: document.getElementById('distancia_total_input').value,
-                espera_total: f.espera_total.value || 0,
-                espera_sin_cargo: f.espera_sin_cargo.value || 0,
-                duracion_estimada_minutos: f.duracion_estimada_minutos.value || 0,
                 estado: { principal: 'Pendiente', detalle: 'Confirmado por operador', actualizado_en: new Date() },
                 log: logActual + `\n✅ Confirmado (Modal) por: ${operador} (${ahora})`
             };
@@ -568,11 +583,14 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     if (!doc.exists) { alert("Error: No se encontró la reserva."); return; }
     const data = doc.data();
     const form = document.getElementById('reserva-form');
+    
     form.reset();
     poblarSelectDeMoviles(caches);
+
     const inputEstado = document.getElementById('reserva-estado-principal');
     if (inputEstado) inputEstado.value = data.estado?.principal || data.estado || '';
     
+    // Población de campos básicos
     form.viaje_exclusivo.checked = data.es_exclusivo || false;
     form.cantidad_pasajeros.disabled = data.es_exclusivo || false;
     form.cliente.value = data.cliente || 'Default';
@@ -584,65 +602,102 @@ export async function openEditReservaModal(reservaId, caches, initMapaModalCallb
     form.fecha_turno.value = data.fecha_turno || '';
     form.hora_turno.value = data.hora_turno || '';
     form.hora_pickup.value = data.hora_pickup || '';
-    form.destino.value = data.destino || '';
     form.cantidad_pasajeros.value = data.cantidad_pasajeros || '1';
     form.zona.value = data.zona || '';
     form.observaciones.value = data.observaciones || '';
     form.asignar_movil.value = data.movil_asignado_id || '';
     form.espera_total.value = data.espera_total || '';
     form.espera_sin_cargo.value = data.espera_sin_cargo || '';
+    
     const duracionOculta = document.getElementById('duracion_estimada_minutos');
     if (duracionOculta) duracionOculta.value = data.duracion_estimada_minutos || '';
     
     const distInput = document.getElementById('distancia_total_input');
     if (distInput) distInput.value = data.distancia || '';
 
-    // --- CÓDIGO CORREGIDO PARA RESERVAS.JS ---
-    const container = document.getElementById('origenes-container');
-    container.innerHTML = ''; // Limpiamos el contenedor antes de empezar
-
+    // --- RECONSTRUCCIÓN DINÁMICA DE ORÍGENES ---
+    const containerO = document.getElementById('origenes-container');
+    containerO.innerHTML = ''; 
     const partesOrigen = (data.origen || "").split(' + ');
     
-    // 1. Creamos el Origen Principal
-    const divPrincipal = document.createElement('div');
-    divPrincipal.className = 'input-group-origen';
-    divPrincipal.style.cssText = "display: flex; gap: 5px; align-items: center;";
-    divPrincipal.innerHTML = `
-        <input type="text" name="origen_dinamico" class="origen-input" autocomplete="off" value="${partesOrigen[0] || ''}" placeholder="Origen Principal" required style="flex: 1;">
-        <div style="width: 30px;"></div>
-    `;
-    container.appendChild(divPrincipal);
-    const primerInput = divPrincipal.querySelector('input');
-    if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(primerInput);
-
-    // 2. Creamos las paradas adicionales (si existen)
-    for (let i = 1; i < partesOrigen.length; i++) {
+    partesOrigen.forEach((dir, idx) => {
         const div = document.createElement('div');
         div.className = 'input-group-origen';
         div.style.cssText = "display: flex; gap: 5px; align-items: center;";
+        const esPrimero = (idx === 0);
         div.innerHTML = `
-            <span style="font-size:18px;color:#6c757d;">↳</span>
-            <input type="text" class="origen-input" autocomplete="off" value="${partesOrigen[i]}" style="flex:1;">
-            <button type="button" class="btn-remove-origen" style="color:red;border:none;background:none;font-weight:bold;cursor:pointer;">✕</button>
+            ${!esPrimero ? '<span style="font-size:18px;color:#6c757d;">↳</span>' : ''}
+            <input type="text" name="origen_dinamico" class="origen-input" autocomplete="off" value="${dir}" 
+                   placeholder="${esPrimero ? 'Origen Principal' : 'Parada...'}" 
+                   ${esPrimero ? 'required' : ''} style="flex: 1;">
+            ${!esPrimero ? '<button type="button" class="btn-remove-origen" style="color:red;border:none;background:none;font-weight:bold;cursor:pointer;">✕</button>' : '<div style="width:30px;"></div>'}
         `;
-        div.querySelector('.btn-remove-origen').addEventListener('click', () => { 
-            div.remove(); 
-            if(window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta(); 
+        
+        if (!esPrimero) {
+            div.querySelector('.btn-remove-origen').addEventListener('click', () => { 
+                div.remove(); 
+                if(window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta(); 
+            });
+        }
+        containerO.appendChild(div);
+        const input = div.querySelector('input');
+        if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(input);
+        input.addEventListener('change', () => { if(window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta(); });
+    });
+
+    // --- RECONSTRUCCIÓN DINÁMICA DE DESTINOS ---
+    const containerD = document.getElementById('destinos-container');
+    if (containerD) {
+        containerD.innerHTML = ''; 
+        const partesDestino = (data.destino || "").split(' + ');
+        
+        partesDestino.forEach((dir, idx) => {
+            const div = document.createElement('div');
+            div.className = 'input-group-destino';
+            div.style.cssText = "display: flex; gap: 5px; align-items: center;";
+            const esPrimero = (idx === 0);
+            div.innerHTML = `
+                ${!esPrimero ? '<span style="font-size:18px;color:#6c757d;">↳</span>' : ''}
+                <input type="text" class="destino-input" autocomplete="off" value="${dir}" 
+                       placeholder="${esPrimero ? 'Destino Principal' : 'Parada de descarga...'}" 
+                       ${esPrimero ? 'required' : ''} style="flex: 1;">
+                ${!esPrimero ? '<button type="button" class="btn-remove-destino" style="color:red;border:none;background:none;font-weight:bold;cursor:pointer;">✕</button>' : '<div style="width:30px;"></div>'}
+            `;
+            
+            if (!esPrimero) {
+                div.querySelector('.btn-remove-destino').addEventListener('click', () => { 
+                    div.remove(); 
+                    if(window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta(); 
+                });
+            }
+            containerD.appendChild(div);
+            const input = div.querySelector('input');
+            if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(input);
+            input.addEventListener('change', () => { if(window.app.calcularYMostrarRuta) window.app.calcularYMostrarRuta(); });
         });
-        container.appendChild(div);
-        const inputNuevo = div.querySelector('input');
-        if (window.app && window.app.activarAutocomplete) window.app.activarAutocomplete(inputNuevo);
     }
-    
+
+    // Configuración final del modal
     document.getElementById('reserva-id').value = reservaId;
     document.getElementById('modal-title').textContent = 'Editar Reserva';
     document.getElementById('reserva-form').style.display = 'block'; 
     document.getElementById('reserva-modal').style.display = 'block';
     
-    const btnConfirmar = document.getElementById('btn-confirmar-modal');
-    if (btnConfirmar) btnConfirmar.style.display = (data.estado?.principal === 'Revision') ? 'block' : 'none';
-    document.getElementById('reserva-modal').style.display = 'block';
-    if(initMapaModalCallback) setTimeout(() => initMapaModalCallback(data.origen_coords, data.destino_coords), 100);
+    // 🚀 FIX DEFINITIVO DE SINCRO:
+    if(initMapaModalCallback) {
+        setTimeout(async () => {
+            // 1. Inicializa el mapa (esto limpia todo)
+            await initMapaModalCallback(); 
+            
+            // 2. Le damos 200ms adicionales para que el objeto mapa esté listo
+            setTimeout(() => {
+                if (window.app && window.app.calcularYMostrarRuta) {
+                    // 3. Dispara la geocodificación de los inputs que creamos arriba
+                    window.app.calcularYMostrarRuta();
+                }
+            }, 200);
+        }, 300); 
+    }
 }
 
 export async function confirmarReservaImportada(reservaId) {
@@ -679,8 +734,8 @@ export async function asignarMovil(id, movilId, caches) {
     const operador = window.currentUserEmail || 'Operador';
     const ahora = new Date().toLocaleString('es-AR');
     try {
+        // Buscamos los objetos completos en el caché
         const chofer = caches.choferes.find(c => c.movil_actual_id === movilId);
-        // BUSCAMOS EL MÓVIL PARA OBTENER EL NÚMERO
         const movil = caches.moviles.find(m => m.id === movilId); 
         
         if (!chofer) { alert("Error: Móvil sin chofer."); return; }
@@ -690,13 +745,18 @@ export async function asignarMovil(id, movilId, caches) {
         const logActual = snap.data().log || '';
         const esReasig = snap.data().movil_asignado_id ? 'Reasignado' : 'Asignado';
         
-        const numMovil = movil ? movil.numero : 'S/N'; // Obtenemos el número real
-        
+        const numMovil = movil ? movil.numero : 'S/N';
+        const patenteMovil = movil ? (movil.patente || 'Sin Patente') : '---';
+
         const b = db.batch();
         b.update(ref, { 
             movil_asignado_id: movilId, 
-            chofer_asignado_id: chofer.id, 
-            
+            chofer_asignado_id: chofer.id,
+            // --- NUEVOS CAMPOS DE TRAZABILIDAD ---
+            chofer_nombre: chofer.nombre,
+            movil_numero: numMovil,
+            movil_patente: patenteMovil,
+            // -------------------------------------
             log: logActual + `\n🚖 ${esReasig} por: ${operador} (Móvil ${numMovil} - ${chofer.nombre}) (${ahora})`,
             estado: { principal: 'Asignado', detalle: 'Enviada', actualizado_en: new Date() } 
         });
@@ -766,6 +826,30 @@ export async function quitarAsignacion(id) {
 export async function updateHoraPickup(e, id) { await db.collection('reservas').doc(id).update({ hora_pickup: e.target.value }); }
 export async function updateZona(e, id) { await db.collection('reservas').doc(id).update({ zona: e.target.value }); }
 
+export async function updateHoraTurno(e, id) { 
+    const nuevaHoraTurno = e.target.value;
+    const ref = db.collection('reservas').doc(id);
+    const snap = await ref.get();
+    const data = snap.data();
+
+    let actualizaciones = { hora_turno: nuevaHoraTurno };
+
+    // Si la reserva tiene una duración estimada, recalculamos el pickup
+    if (data.duracion_estimada_minutos) {
+        const [h, m] = nuevaHoraTurno.split(':').map(Number);
+        const fechaCalc = new Date();
+        // Restamos la duración al turno para obtener el pickup sugerido
+        fechaCalc.setHours(h, m - parseInt(data.duracion_estimada_minutos));
+        
+        actualizaciones.hora_pickup = `${fechaCalc.getHours().toString().padStart(2, '0')}:${fechaCalc.getMinutes().toString().padStart(2, '0')}`;
+        
+        // Opcional: Feedback visual en la consola o log
+        console.log(`Auto-ajuste de Pickup para ${id}: ${actualizaciones.hora_pickup}`);
+    }
+
+    await ref.update(actualizaciones); 
+}
+
 export async function handleDniBlur(e) { 
     const dni = e.target.value; if(!dni) return;
     const d = await db.collection('pasajeros').doc(dni).get();
@@ -784,12 +868,12 @@ export async function asignarMultiplesReservas(ids, mId, caches) {
     const ahora = new Date().toLocaleString('es-AR');
     
     const ch = caches.choferes.find(c => c.movil_actual_id === mId);
-    // BUSCAMOS EL MÓVIL PARA EL LOG MASIVO
     const mov = caches.moviles.find(m => m.id === mId); 
     
     if(!ch) return alert("Móvil sin chofer");
 
     const numMovil = mov ? mov.numero : 'S/N';
+    const patenteMovil = mov ? (mov.patente || 'Sin Patente') : '---';
 
     try {
         await Promise.all(ids.map(async (id) => {
@@ -799,12 +883,16 @@ export async function asignarMultiplesReservas(ids, mId, caches) {
                 if (!docSnap.exists) return;
 
                 const logPrevio = docSnap.data().log || '';
-                
                 const nuevoLog = logPrevio + `\n🚖 Asignado por: ${operador} (Móvil ${numMovil} - ${ch.nombre}) (${ahora})`;
 
                 transaction.update(ref, { 
                     movil_asignado_id: mId, 
-                    chofer_asignado_id: ch.id, 
+                    chofer_asignado_id: ch.id,
+                    // --- NUEVOS CAMPOS DE TRAZABILIDAD ---
+                    chofer_nombre: ch.nombre,
+                    movil_numero: numMovil,
+                    movil_patente: patenteMovil,
+                    // -------------------------------------
                     log: nuevoLog,
                     estado: { principal: 'Asignado', detalle: 'Enviada', actualizado_en: new Date() } 
                 });
@@ -817,7 +905,6 @@ export async function asignarMultiplesReservas(ids, mId, caches) {
         return true;
     } catch (error) {
         console.error("Error en asignación múltiple:", error);
-        alert("Hubo un error al asignar algunas reservas.");
         return false;
     }
 }
